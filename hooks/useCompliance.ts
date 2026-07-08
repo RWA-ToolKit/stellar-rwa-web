@@ -1,0 +1,57 @@
+"use client";
+
+import { compliance } from "@/lib/contracts";
+import { useWallet } from "@/hooks/useWallet";
+import { useAsync } from "@/hooks/useAsync";
+import type { ComplianceStatus, KycRecord } from "@/types";
+
+export interface ComplianceInfo {
+  /** Passes the on-chain gate: approved, unexpired, not in a blocked jurisdiction. */
+  allowed: boolean;
+  status: ComplianceStatus | "None";
+  record: KycRecord | null;
+}
+
+/**
+ * The compliance status of `address` against a specific compliance contract.
+ * Combines the authoritative `is_allowed` gate with the raw KYC record so the
+ * UI can explain *why* an address is or isn't permitted.
+ */
+export function useCompliance(complianceId: string | null, address: string | null) {
+  const { network } = useWallet();
+  return useAsync<ComplianceInfo>(
+    async () => {
+      if (!complianceId || !address) {
+        return { allowed: false, status: "None", record: null };
+      }
+      const [allowed, record] = await Promise.all([
+        compliance.isAllowed(network, complianceId, address),
+        compliance.getRecord(network, complianceId, address),
+      ]);
+      return {
+        allowed,
+        status: record?.status ?? "None",
+        record,
+      };
+    },
+    [complianceId, address, network],
+    Boolean(complianceId && address),
+  );
+}
+
+/** Full KYC allowlist (with records) for a compliance contract — issuer views. */
+export function useAllowlist(complianceId: string | null) {
+  const { network } = useWallet();
+  return useAsync<KycRecord[]>(
+    async () => {
+      if (!complianceId) return [];
+      const addresses = await compliance.getAllowlist(network, complianceId);
+      const records = await Promise.all(
+        addresses.map((a) => compliance.getRecord(network, complianceId, a)),
+      );
+      return records.filter((r): r is KycRecord => r !== null);
+    },
+    [complianceId, network],
+    Boolean(complianceId),
+  );
+}
