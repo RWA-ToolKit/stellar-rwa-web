@@ -75,6 +75,12 @@ export function networkPassphrase(network: Network): string {
   return NETWORKS[network].passphrase;
 }
 
+/** Current ledger sequence, used to date ledger-based timestamps. */
+export async function getLatestLedger(network: Network): Promise<number> {
+  const res = await getServer(network).getLatestLedger();
+  return res.sequence;
+}
+
 export function explorerBase(network: Network): string {
   return NETWORKS[network].explorerBase;
 }
@@ -97,7 +103,7 @@ export const arg = {
   address: (v: string): xdr.ScVal => new Address(v).toScVal(),
   string: (v: string): xdr.ScVal => nativeToScVal(v, { type: "string" }),
   symbol: (v: string): xdr.ScVal => nativeToScVal(v, { type: "symbol" }),
-  bool: (v: boolean): xdr.ScVal => nativeToScVal(v, { type: "bool" }),
+  bool: (v: boolean): xdr.ScVal => nativeToScVal(v),
   u32: (v: number): xdr.ScVal => nativeToScVal(v, { type: "u32" }),
   u64: (v: bigint | number): xdr.ScVal => nativeToScVal(BigInt(v), { type: "u64" }),
   i128: (v: bigint): xdr.ScVal => nativeToScVal(v, { type: "i128" }),

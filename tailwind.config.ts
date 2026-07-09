@@ -10,8 +10,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Surface scale — near-black slate, tuned for a dark-first product.
+        // Surface + foreground scale — near-black slate for a dark-first product.
         base: {
+          50: "#f6f8fb",
+          100: "#e5e7eb",
+          200: "#c7cbd4",
+          300: "#a5abba",
           950: "#08090c",
           900: "#0c0e13",
           850: "#11141b",
