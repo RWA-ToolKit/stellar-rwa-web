@@ -19,17 +19,61 @@ contract on each transfer.
 
 ## Sister repositories
 
-- **Contracts:** https://github.com/your-org/stellar-rwa-contracts
-- **API + Docs:** https://github.com/your-org/stellar-rwa-api-docs
+- **Contracts:** https://github.com/RWA-ToolKit/stellar-rwa-contracts
+- **API + Docs:** https://github.com/RWA-ToolKit/stellar-rwa-api-docs
 
-The four Soroban contracts this app talks to:
+## Stellar integration
 
-| Contract    | Role                                             |
-|-------------|--------------------------------------------------|
-| registry    | Index of tokenized assets + total value locked   |
+The app is a pure client of Soroban smart contracts — there is no backend of its
+own. It talks to Stellar in two ways:
+
+- **Reads** are Soroban RPC `simulateTransaction` calls against deployed contract
+  methods (`get_all_assets`, `get_metadata`, `balance`, `is_allowed`, …). No
+  wallet, no fees, no signing — see `lib/stellar.ts` → `readContract`.
+- **Writes** are real transactions: build → simulate → assemble footprint & fees
+  → **sign with Freighter** → submit → poll to confirmation. See
+  `lib/stellar.ts` → `invokeContract` and `hooks/useTx.ts`.
+
+The four Soroban contracts it invokes:
+
+| Contract    | Role                                               |
+|-------------|----------------------------------------------------|
+| registry    | Index of tokenized assets + total value locked     |
 | asset-token | Compliant RWA token; transfers gated by compliance |
-| compliance  | KYC allowlist + jurisdiction rules (the gate)    |
-| dividend    | Proportional yield/dividend distribution         |
+| compliance  | KYC allowlist + jurisdiction rules (the gate)      |
+| dividend    | Proportional yield/dividend distribution           |
+
+### The on-chain compliance gate
+
+Asset transfers are enforced by the contract, not the UI. On every `transfer`,
+the asset-token contract makes cross-contract calls into the compliance contract
+for **both** parties:
+
+```
+transfer(from, to, amount)
+  ├─ compliance.is_allowed(from)   ── cross-contract call ──▶ compliance contract
+  ├─ compliance.is_allowed(to)     ── cross-contract call ──▶ compliance contract
+  └─ move balances
+```
+
+If either party isn't KYC-approved the transaction reverts. The transfer form in
+`/asset/[id]` reads this status up front and disables the action with a clear
+reason when the connected wallet can't transfer.
+
+### Network & deployed contracts (Testnet)
+
+Network passphrase: `Test SDF Network ; September 2015` · RPC:
+`https://soroban-testnet.stellar.org`
+
+| Contract    | Contract ID | Explorer |
+|-------------|-------------|----------|
+| registry    | `CBX5SMLTXX6JP4HA5GQIO2V6QM7WCUGL2GZ6D4U773HMRI6RXISKPUR3` | [view](https://stellar.expert/explorer/testnet/contract/CBX5SMLTXX6JP4HA5GQIO2V6QM7WCUGL2GZ6D4U773HMRI6RXISKPUR3) |
+| compliance  | `CBUERYDM7DXTZLLKDBRJKUBPFJ7M4OSUN4T7XKUARU345RLXNAIQD2IU` | [view](https://stellar.expert/explorer/testnet/contract/CBUERYDM7DXTZLLKDBRJKUBPFJ7M4OSUN4T7XKUARU345RLXNAIQD2IU) |
+| dividend    | `CAR4XY3CEBQWFOL27JEWFW34KXSIZA7RFKDQMEIV7ZU723RWY37I2SYX` | [view](https://stellar.expert/explorer/testnet/contract/CAR4XY3CEBQWFOL27JEWFW34KXSIZA7RFKDQMEIV7ZU723RWY37I2SYX) |
+| asset-token (sample) | `CBMCWLSQSWUTLUJFCNBHNBSXMUM3XU7NAQ5TSNERW4HA4ZZBYHLG4ECZ` | [view](https://stellar.expert/explorer/testnet/contract/CBMCWLSQSWUTLUJFCNBHNBSXMUM3XU7NAQ5TSNERW4HA4ZZBYHLG4ECZ) |
+
+Registry, compliance and dividend ids are configured via `NEXT_PUBLIC_*` env vars;
+per-asset token ids are discovered at runtime from the registry.
 
 ## Getting started
 
