@@ -58,7 +58,7 @@ export function SiteHeader() {
             aria-label="Toggle navigation"
             aria-expanded={mobileOpen}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
               {mobileOpen ? (
                 <path d="M18 6 6 18M6 6l12 12" strokeLinecap="round" />
               ) : (
@@ -95,7 +95,7 @@ export function SiteHeader() {
 function Logo() {
   return (
     <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-400 to-brand-600 text-base-950">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
         <path d="m12 2 8 4.5v9L12 20l-8-4.5v-9L12 2Z" strokeLinejoin="round" />
         <path d="M12 8v8M8 10v4M16 10v4" strokeLinecap="round" />
       </svg>

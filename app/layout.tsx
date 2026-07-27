@@ -3,6 +3,9 @@ import "./globals.css";
 import { WalletProvider } from "@/hooks/useWallet";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
+import { validateEnv } from "@/lib/env";
+
+validateEnv();
 
 export const metadata: Metadata = {
   title: {
@@ -29,9 +32,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="dark">
       <body className="flex min-h-screen flex-col">
+        <a href="#main-content" className="skip-link">
+          Skip to content
+        </a>
         <WalletProvider>
           <SiteHeader />
-          <main className="flex-1">{children}</main>
+          <main id="main-content" className="flex-1">{children}</main>
           <SiteFooter />
         </WalletProvider>
       </body>

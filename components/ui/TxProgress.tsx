@@ -60,7 +60,7 @@ export function TxProgress({
         className="flex items-start justify-between gap-3 rounded-xl border border-red-500/25 bg-red-500/5 px-4 py-3 text-sm"
       >
         <div className="flex items-start gap-2.5 text-red-300">
-          <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
           </svg>
@@ -79,7 +79,7 @@ export function TxProgress({
   return (
     <div className="flex items-start justify-between gap-3 rounded-xl border border-brand-500/25 bg-brand-500/5 px-4 py-3 text-sm">
       <div className="flex items-start gap-2.5 text-brand-300">
-        <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+        <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
           <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
         <div>

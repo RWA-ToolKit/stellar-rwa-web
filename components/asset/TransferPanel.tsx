@@ -32,6 +32,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [amountTouched, setAmountTouched] = useState(false);
 
   if (!address) {
     return (
@@ -46,9 +47,35 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   const paused = metadata.paused;
   const canTransfer = approved && !paused && balance > 0n;
 
+  // Only digits, with at most one decimal point and no more fractional digits
+  // than the token supports — keeps the field from ever holding text the
+  // parser would reject.
+  const decimalPattern = new RegExp(`^\\d*(\\.\\d{0,${metadata.decimals}})?$`);
+
+  function onAmountChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const next = e.target.value;
+    if (next !== "" && !decimalPattern.test(next)) return;
+    setAmountTouched(true);
+    setAmount(next);
+  }
+
+  const amountError = (() => {
+    if (!amountTouched || amount === "") return null;
+    let raw: bigint;
+    try {
+      raw = parseTokenAmount(amount, metadata.decimals);
+    } catch (err) {
+      return err instanceof Error ? err.message : "Invalid amount.";
+    }
+    if (raw <= 0n) return "Amount must be greater than zero.";
+    if (raw > balance) return "Amount exceeds your balance.";
+    return null;
+  })();
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+    setAmountTouched(true);
 
     const recipient = to.trim();
     if (!StrKey.isValidEd25519PublicKey(recipient) && !StrKey.isValidContract(recipient)) {
@@ -59,21 +86,13 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
       setFormError("You can't transfer to your own address.");
       return;
     }
-    let raw: bigint;
-    try {
-      raw = parseTokenAmount(amount, metadata.decimals);
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Invalid amount.");
+    if (amount === "") {
+      setFormError("Enter an amount.");
       return;
     }
-    if (raw <= 0n) {
-      setFormError("Amount must be greater than zero.");
-      return;
-    }
-    if (raw > balance) {
-      setFormError("Amount exceeds your balance.");
-      return;
-    }
+    // Already surfaced inline under the amount field via `amountError`.
+    if (amountError) return;
+    const raw = parseTokenAmount(amount, metadata.decimals);
 
     const res = await tx.run((ctx) =>
       assetToken.transfer(ctx, asset.tokenContract, recipient, raw),
@@ -139,7 +158,10 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             {canTransfer && (
               <button
                 type="button"
-                onClick={() => setAmount(formatTokenAmount(balance, metadata.decimals).replace(/,/g, ""))}
+                onClick={() => {
+                  setAmountTouched(true);
+                  setAmount(formatTokenAmount(balance, metadata.decimals).replace(/,/g, ""));
+                }}
                 className="mb-1.5 text-xs text-brand-400 hover:text-brand-300"
               >
                 Max
@@ -150,16 +172,24 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             <input
               id="transfer-amount"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={onAmountChange}
+              onBlur={() => setAmountTouched(true)}
               placeholder="0.00"
               inputMode="decimal"
               disabled={!canTransfer || tx.pending}
+              aria-invalid={amountError ? true : undefined}
+              aria-describedby={amountError ? "transfer-amount-error" : undefined}
               className="input pr-16"
             />
             <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
               {metadata.symbol}
             </span>
           </div>
+          {amountError && (
+            <p id="transfer-amount-error" className="mt-1.5 text-xs text-red-400">
+              {amountError}
+            </p>
+          )}
         </div>
 
         {formError && <p className="text-xs text-red-400">{formError}</p>}

@@ -52,10 +52,14 @@ export const DEFAULT_NETWORK: Network =
 
 /**
  * A valid, funded account used solely as the source for read simulations.
- * Simulations don't spend anything; the source only needs to be a real account.
- * This is the contracts repo admin/issuer account.
+ * Simulations don't spend anything and never leave the client, so this
+ * carries no keys and isn't a secret — but it's shipped to every client
+ * bundle, so it's configurable per network/env rather than hardcoded.
+ * Defaults to the contracts repo admin/issuer account on testnet.
  */
-const READ_SOURCE = "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA";
+const READ_SOURCE =
+  process.env.NEXT_PUBLIC_READ_SOURCE_ACCOUNT ??
+  "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA";
 
 const serverCache = new Map<Network, rpc.Server>();
 

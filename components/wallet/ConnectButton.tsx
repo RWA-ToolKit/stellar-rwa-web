@@ -39,7 +39,7 @@ export function ConnectButton() {
       >
         <span className="h-2 w-2 rounded-full bg-brand-400" />
         <span className="font-mono text-xs">{truncateAddress(address)}</span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={open ? "rotate-180 transition" : "transition"}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={open ? "rotate-180 transition" : "transition"} aria-hidden="true">
           <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       </button>
@@ -86,7 +86,7 @@ export function ConnectButton() {
 
 function WalletIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <path d="M3 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v1" />
       <path d="M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H5" />
       <circle cx="16" cy="13" r="1.3" fill="currentColor" stroke="none" />

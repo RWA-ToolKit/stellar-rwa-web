@@ -89,7 +89,7 @@ export default function HomePage() {
           {STEPS.map((step, i) => (
             <li key={step.title} className="card card-hover relative p-6">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
                   {step.icon}
                 </svg>
               </div>
