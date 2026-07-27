@@ -1,6 +1,7 @@
 "use client";
 
 import { useWallet } from "@/hooks/useWallet";
+import { isNetworkConfigured } from "@/lib/contracts";
 import type { Network } from "@/types";
 
 const NETWORKS: { value: Network; label: string }[] = [
@@ -31,20 +32,27 @@ export function NetworkSelector() {
 
   return (
     <div className="inline-flex rounded-xl border border-white/10 bg-base-900/60 p-0.5">
-      {NETWORKS.map((n) => (
-        <button
-          key={n.value}
-          onClick={() => setNetwork(n.value)}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-            network === n.value
-              ? "bg-white/10 text-base-100"
-              : "text-base-100/50 hover:text-base-100/80"
-          }`}
-          aria-pressed={network === n.value}
-        >
-          {n.label}
-        </button>
-      ))}
+      {NETWORKS.map((n) => {
+        const available = isNetworkConfigured(n.value);
+        return (
+          <button
+            key={n.value}
+            onClick={() => available && setNetwork(n.value)}
+            disabled={!available}
+            title={available ? undefined : `${n.label} isn't available yet`}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              !available
+                ? "cursor-not-allowed text-base-100/25"
+                : network === n.value
+                  ? "bg-white/10 text-base-100"
+                  : "text-base-100/50 hover:text-base-100/80"
+            }`}
+            aria-pressed={network === n.value}
+          >
+            {n.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

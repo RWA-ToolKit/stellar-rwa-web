@@ -8,16 +8,37 @@ import { ASSET_TYPE_LABELS } from "@/types";
 
 /** Format USD cents (bigint) as a currency string, e.g. 500000000n -> "$5,000,000". */
 export function formatUsdCents(cents: bigint, opts?: { compact?: boolean }): string {
-  const dollars = Number(cents) / 100;
-  if (opts?.compact && Math.abs(dollars) >= 1_000_000) {
-    return "$" + compactNumber(dollars);
+  const negative = cents < 0n;
+  const abs = negative ? -cents : cents;
+  const dollars = abs / 100n;
+  const remainderCents = abs % 100n;
+  const sign = negative ? "-$" : "$";
+
+  if (opts?.compact && dollars >= 1_000_000n) {
+    return sign + compactBigint(dollars);
   }
-  return dollars.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: dollars % 1 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
+
+  const dollarsStr = dollars.toLocaleString("en-US");
+  if (remainderCents === 0n) return sign + dollarsStr;
+  return sign + dollarsStr + "." + remainderCents.toString().padStart(2, "0");
+}
+
+/** Compact a large whole-number bigint: 5_000_000n -> "5M", 12_300n -> "12.3K". */
+function compactBigint(n: bigint): string {
+  const abs = n < 0n ? -n : n;
+  const units: [bigint, string][] = [
+    [1_000_000_000n, "B"],
+    [1_000_000n, "M"],
+    [1_000n, "K"],
+  ];
+  for (const [threshold, suffix] of units) {
+    if (abs >= threshold) {
+      const whole = abs / threshold;
+      const tenths = ((abs % threshold) * 10n) / threshold;
+      return (tenths === 0n ? whole.toString() : `${whole}.${tenths}`) + suffix;
+    }
+  }
+  return abs.toString();
 }
 
 /** Compact large numbers: 5_000_000 -> "5M", 12_300 -> "12.3K". */
