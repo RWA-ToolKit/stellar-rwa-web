@@ -9,6 +9,7 @@ import {
   arg,
   invokeContract,
   readContract,
+  type ContractKind,
   type Signer,
 } from "@/lib/stellar";
 import type {
@@ -65,6 +66,7 @@ function write(
   contractId: string,
   method: string,
   args: Parameters<typeof invokeContract>[4],
+  kind: ContractKind,
 ): Promise<TxResult> {
   return invokeContract(
     ctx.network,
@@ -74,6 +76,7 @@ function write(
     args,
     ctx.sign,
     ctx.onPhase,
+    kind,
   );
 }
 
@@ -187,6 +190,8 @@ export const registry = {
       network,
       contractIds(network).registry,
       "get_all_assets",
+      [],
+      "registry",
     );
     return (raw ?? []).map(toAssetEntry);
   },
@@ -197,6 +202,7 @@ export const registry = {
       contractIds(network).registry,
       "get_asset",
       [arg.u64(id)],
+      "registry",
     );
     return toAssetEntry(raw);
   },
@@ -207,6 +213,7 @@ export const registry = {
       contractIds(network).registry,
       "get_assets_by_issuer",
       [arg.address(issuer)],
+      "registry",
     );
     return (raw ?? []).map(toAssetEntry);
   },
@@ -217,6 +224,7 @@ export const registry = {
       contractIds(network).registry,
       "get_assets_by_type",
       [arg.string(assetType)],
+      "registry",
     );
     return (raw ?? []).map(toAssetEntry);
   },
@@ -226,6 +234,8 @@ export const registry = {
       network,
       contractIds(network).registry,
       "total_value_locked",
+      [],
+      "registry",
     ).then((v) => BigInt(v ?? 0n));
   },
 
@@ -234,6 +244,8 @@ export const registry = {
       network,
       contractIds(network).registry,
       "asset_count",
+      [],
+      "registry",
     ).then((v) => BigInt(v ?? 0n));
   },
 
@@ -247,13 +259,19 @@ export const registry = {
       valuation: bigint;
     },
   ): Promise<TxResult> {
-    return write(ctx, contractIds(ctx.network).registry, "register_asset", [
-      arg.address(params.issuer),
-      arg.address(params.tokenContract),
-      arg.string(params.name),
-      arg.string(params.assetType),
-      arg.i128(params.valuation),
-    ]);
+    return write(
+      ctx,
+      contractIds(ctx.network).registry,
+      "register_asset",
+      [
+        arg.address(params.issuer),
+        arg.address(params.tokenContract),
+        arg.string(params.name),
+        arg.string(params.assetType),
+        arg.i128(params.valuation),
+      ],
+      "registry",
+    );
   },
 };
 
@@ -261,21 +279,33 @@ export const registry = {
 
 export const assetToken = {
   getMetadata(network: Network, tokenId: string): Promise<AssetMetadata> {
-    return readContract<RawMetadata>(network, tokenId, "get_metadata").then(
-      toMetadata,
-    );
+    return readContract<RawMetadata>(
+      network,
+      tokenId,
+      "get_metadata",
+      [],
+      "assetToken",
+    ).then(toMetadata);
   },
 
   balance(network: Network, tokenId: string, holder: string): Promise<bigint> {
-    return readContract<bigint>(network, tokenId, "balance", [
-      arg.address(holder),
-    ]).then((v) => BigInt(v ?? 0n));
+    return readContract<bigint>(
+      network,
+      tokenId,
+      "balance",
+      [arg.address(holder)],
+      "assetToken",
+    ).then((v) => BigInt(v ?? 0n));
   },
 
   totalSupply(network: Network, tokenId: string): Promise<bigint> {
-    return readContract<bigint>(network, tokenId, "total_supply").then((v) =>
-      BigInt(v ?? 0n),
-    );
+    return readContract<bigint>(
+      network,
+      tokenId,
+      "total_supply",
+      [],
+      "assetToken",
+    ).then((v) => BigInt(v ?? 0n));
   },
 
   transfer(
@@ -284,11 +314,13 @@ export const assetToken = {
     to: string,
     amount: bigint,
   ): Promise<TxResult> {
-    return write(ctx, tokenId, "transfer", [
-      arg.address(ctx.source),
-      arg.address(to),
-      arg.i128(amount),
-    ]);
+    return write(
+      ctx,
+      tokenId,
+      "transfer",
+      [arg.address(ctx.source), arg.address(to), arg.i128(amount)],
+      "assetToken",
+    );
   },
 
   mint(
@@ -297,19 +329,21 @@ export const assetToken = {
     to: string,
     amount: bigint,
   ): Promise<TxResult> {
-    return write(ctx, tokenId, "mint", [
-      arg.address(ctx.source),
-      arg.address(to),
-      arg.i128(amount),
-    ]);
+    return write(
+      ctx,
+      tokenId,
+      "mint",
+      [arg.address(ctx.source), arg.address(to), arg.i128(amount)],
+      "assetToken",
+    );
   },
 
   pause(ctx: WriteCtx, tokenId: string): Promise<TxResult> {
-    return write(ctx, tokenId, "pause", [arg.address(ctx.source)]);
+    return write(ctx, tokenId, "pause", [arg.address(ctx.source)], "assetToken");
   },
 
   unpause(ctx: WriteCtx, tokenId: string): Promise<TxResult> {
-    return write(ctx, tokenId, "unpause", [arg.address(ctx.source)]);
+    return write(ctx, tokenId, "unpause", [arg.address(ctx.source)], "assetToken");
   },
 };
 
@@ -317,9 +351,13 @@ export const assetToken = {
 
 export const compliance = {
   isAllowed(network: Network, complianceId: string, address: string): Promise<boolean> {
-    return readContract<boolean>(network, complianceId, "is_allowed", [
-      arg.address(address),
-    ]).then(Boolean);
+    return readContract<boolean>(
+      network,
+      complianceId,
+      "is_allowed",
+      [arg.address(address)],
+      "compliance",
+    ).then(Boolean);
   },
 
   async getRecord(
@@ -332,14 +370,19 @@ export const compliance = {
       complianceId,
       "get_record",
       [arg.address(address)],
+      "compliance",
     );
     return raw ? toKycRecord(raw) : null;
   },
 
   getAllowlist(network: Network, complianceId: string): Promise<string[]> {
-    return readContract<string[]>(network, complianceId, "get_allowlist").then(
-      (v) => v ?? [],
-    );
+    return readContract<string[]>(
+      network,
+      complianceId,
+      "get_allowlist",
+      [],
+      "compliance",
+    ).then((v) => v ?? []);
   },
 
   isJurisdictionBlocked(
@@ -347,9 +390,13 @@ export const compliance = {
     complianceId: string,
     jurisdiction: string,
   ): Promise<boolean> {
-    return readContract<boolean>(network, complianceId, "is_jurisdiction_blocked", [
-      arg.string(jurisdiction),
-    ]).then(Boolean);
+    return readContract<boolean>(
+      network,
+      complianceId,
+      "is_jurisdiction_blocked",
+      [arg.string(jurisdiction)],
+      "compliance",
+    ).then(Boolean);
   },
 
   addToAllowlist(
@@ -359,26 +406,38 @@ export const compliance = {
     jurisdiction: string,
     expiresAt: number,
   ): Promise<TxResult> {
-    return write(ctx, complianceId, "add_to_allowlist", [
-      arg.address(ctx.source),
-      arg.address(address),
-      arg.string(jurisdiction),
-      arg.u32(expiresAt),
-    ]);
+    return write(
+      ctx,
+      complianceId,
+      "add_to_allowlist",
+      [
+        arg.address(ctx.source),
+        arg.address(address),
+        arg.string(jurisdiction),
+        arg.u32(expiresAt),
+      ],
+      "compliance",
+    );
   },
 
   suspend(ctx: WriteCtx, complianceId: string, address: string): Promise<TxResult> {
-    return write(ctx, complianceId, "suspend", [
-      arg.address(ctx.source),
-      arg.address(address),
-    ]);
+    return write(
+      ctx,
+      complianceId,
+      "suspend",
+      [arg.address(ctx.source), arg.address(address)],
+      "compliance",
+    );
   },
 
   remove(ctx: WriteCtx, complianceId: string, address: string): Promise<TxResult> {
-    return write(ctx, complianceId, "remove", [
-      arg.address(ctx.source),
-      arg.address(address),
-    ]);
+    return write(
+      ctx,
+      complianceId,
+      "remove",
+      [arg.address(ctx.source), arg.address(address)],
+      "compliance",
+    );
   },
 
   blockJurisdiction(
@@ -386,10 +445,13 @@ export const compliance = {
     complianceId: string,
     jurisdiction: string,
   ): Promise<TxResult> {
-    return write(ctx, complianceId, "block_jurisdiction", [
-      arg.address(ctx.source),
-      arg.string(jurisdiction),
-    ]);
+    return write(
+      ctx,
+      complianceId,
+      "block_jurisdiction",
+      [arg.address(ctx.source), arg.string(jurisdiction)],
+      "compliance",
+    );
   },
 
   unblockJurisdiction(
@@ -397,10 +459,13 @@ export const compliance = {
     complianceId: string,
     jurisdiction: string,
   ): Promise<TxResult> {
-    return write(ctx, complianceId, "unblock_jurisdiction", [
-      arg.address(ctx.source),
-      arg.string(jurisdiction),
-    ]);
+    return write(
+      ctx,
+      complianceId,
+      "unblock_jurisdiction",
+      [arg.address(ctx.source), arg.string(jurisdiction)],
+      "compliance",
+    );
   },
 };
 
@@ -416,6 +481,7 @@ export const dividend = {
       contractIds(network).dividend,
       "get_distributions_for_asset",
       [arg.address(assetToken)],
+      "dividend",
     ).then((v) => (v ?? []).map(toDistribution));
   },
 
@@ -425,6 +491,7 @@ export const dividend = {
       contractIds(network).dividend,
       "get_distribution",
       [arg.u64(id)],
+      "dividend",
     ).then(toDistribution);
   },
 
@@ -434,6 +501,7 @@ export const dividend = {
       contractIds(network).dividend,
       "claimable",
       [arg.u64(id), arg.address(holder)],
+      "dividend",
     ).then((v) => BigInt(v ?? 0n));
   },
 
@@ -443,6 +511,7 @@ export const dividend = {
       contractIds(network).dividend,
       "has_claimed",
       [arg.u64(id), arg.address(holder)],
+      "dividend",
     ).then(Boolean);
   },
 
@@ -452,18 +521,27 @@ export const dividend = {
     paymentToken: string,
     totalAmount: bigint,
   ): Promise<TxResult> {
-    return write(ctx, contractIds(ctx.network).dividend, "create_distribution", [
-      arg.address(ctx.source),
-      arg.address(assetToken),
-      arg.address(paymentToken),
-      arg.i128(totalAmount),
-    ]);
+    return write(
+      ctx,
+      contractIds(ctx.network).dividend,
+      "create_distribution",
+      [
+        arg.address(ctx.source),
+        arg.address(assetToken),
+        arg.address(paymentToken),
+        arg.i128(totalAmount),
+      ],
+      "dividend",
+    );
   },
 
   claim(ctx: WriteCtx, id: bigint): Promise<TxResult> {
-    return write(ctx, contractIds(ctx.network).dividend, "claim", [
-      arg.u64(id),
-      arg.address(ctx.source),
-    ]);
+    return write(
+      ctx,
+      contractIds(ctx.network).dividend,
+      "claim",
+      [arg.u64(id), arg.address(ctx.source)],
+      "dividend",
+    );
   },
 };

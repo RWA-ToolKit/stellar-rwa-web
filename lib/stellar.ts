@@ -118,6 +118,7 @@ export async function readContract<T = unknown>(
   contractId: string,
   method: string,
   args: xdr.ScVal[] = [],
+  contractKind?: ContractKind,
 ): Promise<T> {
   const server = getServer(network);
   const contract = new Contract(contractId);
@@ -132,7 +133,7 @@ export async function readContract<T = unknown>(
 
   const sim = await server.simulateTransaction(tx);
   if (rpc.Api.isSimulationError(sim)) {
-    throw new ContractError(parseContractError(sim.error), sim.error);
+    throw new ContractError(parseContractError(sim.error, contractKind), sim.error);
   }
   const retval = sim.result?.retval;
   if (!retval) return undefined as T;
@@ -154,6 +155,7 @@ export async function invokeContract(
   args: xdr.ScVal[],
   sign: Signer,
   onPhase?: (phase: "building" | "signing" | "submitting" | "confirming") => void,
+  contractKind?: ContractKind,
 ): Promise<TxResult> {
   const server = getServer(network);
   const passphrase = networkPassphrase(network);
@@ -173,7 +175,7 @@ export async function invokeContract(
   // user to sign, and so the transaction carries the right footprint + fees.
   const sim = await server.simulateTransaction(built);
   if (rpc.Api.isSimulationError(sim)) {
-    throw new ContractError(parseContractError(sim.error), sim.error);
+    throw new ContractError(parseContractError(sim.error, contractKind), sim.error);
   }
   const prepared = rpc.assembleTransaction(built, sim).build();
 
@@ -243,15 +245,27 @@ export class ContractError extends Error {
   }
 }
 
+/** Which of the four contracts an error originated from. */
+export type ContractKind = "registry" | "compliance" | "assetToken" | "dividend";
+
 /**
  * Map a raw Soroban error string to a friendlier message. Contract errors
  * surface as `Error(Contract, #N)`; we translate the codes we know about.
+ *
+ * Codes 1-4 and 9 are common lifecycle/access errors shared by all four
+ * contracts. Codes 5-8 are only meaningful on the asset-token contract
+ * (valuation, pause, KYC checks) — without `contractKind`, applying them
+ * regardless of source mislabels e.g. a registry or dividend rejection as a
+ * "paused" or "KYC" error.
  */
-function parseContractError(raw: string): string {
+export function parseContractError(raw: string, contractKind?: ContractKind): string {
   const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
   if (codeMatch) {
     const code = Number(codeMatch[1]);
-    return KNOWN_CONTRACT_ERRORS[code] ?? `Contract rejected the call (code ${code}).`;
+    const specific = contractKind === "assetToken" ? ASSET_TOKEN_ERRORS[code] : undefined;
+    return (
+      specific ?? SHARED_CONTRACT_ERRORS[code] ?? `Contract rejected the call (code ${code}).`
+    );
   }
   if (/trustline|insufficient/i.test(raw)) {
     return "Insufficient balance or a missing trustline for the payment token.";
@@ -259,18 +273,19 @@ function parseContractError(raw: string): string {
   return "The contract call could not be completed.";
 }
 
-/**
- * Union of the error enums across the four contracts. Codes overlap between
- * contracts, so messages are written to read sensibly regardless of source.
- */
-const KNOWN_CONTRACT_ERRORS: Record<number, string> = {
+/** Lifecycle/access error codes common to all four contracts. */
+const SHARED_CONTRACT_ERRORS: Record<number, string> = {
   1: "Already initialized.",
   2: "Contract is not initialized.",
   3: "You are not authorized to perform this action.",
   4: "The requested record was not found.",
+  9: "Amount overflow.",
+};
+
+/** Error codes specific to the asset-token contract's enum. */
+const ASSET_TOKEN_ERRORS: Record<number, string> = {
   5: "Invalid amount or valuation.",
   6: "This asset is currently paused.",
   7: "The sender is not KYC-approved for this asset.",
   8: "The recipient is not KYC-approved for this asset.",
-  9: "Amount overflow.",
 };
