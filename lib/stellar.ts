@@ -208,7 +208,7 @@ export async function invokeContract(
   return { hash: sent.hash, returnValue };
 }
 
-async function pollTransaction(
+export async function pollTransaction(
   server: rpc.Server,
   hash: string,
   timeoutMs = 30000,
