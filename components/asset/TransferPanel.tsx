@@ -7,7 +7,7 @@ import { assetToken } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useTx } from "@/hooks/useTx";
 import { useCompliance } from "@/hooks/useCompliance";
-import { formatTokenAmount, parseTokenAmount } from "@/lib/format";
+import { formatTokenAmount, formatRawPlain, parseTokenAmount } from "@/lib/format";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 
@@ -139,7 +139,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             {canTransfer && (
               <button
                 type="button"
-                onClick={() => setAmount(formatTokenAmount(balance, metadata.decimals).replace(/,/g, ""))}
+                onClick={() => setAmount(formatRawPlain(balance, metadata.decimals))}
                 className="mb-1.5 text-xs text-brand-400 hover:text-brand-300"
               >
                 Max

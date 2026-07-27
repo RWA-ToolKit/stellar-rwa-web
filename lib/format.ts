@@ -52,6 +52,27 @@ export function formatTokenAmount(raw: bigint, decimals: number): string {
 }
 
 /**
+ * Convert a raw token amount to a plain (un-grouped) decimal string, suitable
+ * for pre-filling an editable input. Unlike `formatTokenAmount`, this never
+ * inserts thousands separators, so it round-trips through `parseTokenAmount`
+ * exactly instead of needing a format → strip-commas → re-parse dance.
+ * 100050n @ 2 decimals -> "1000.5".
+ */
+export function formatRawPlain(raw: bigint, decimals: number): string {
+  const negative = raw < 0n;
+  const abs = negative ? -raw : raw;
+  const base = 10n ** BigInt(decimals);
+  const whole = abs / base;
+  const frac = abs % base;
+  const sign = negative ? "-" : "";
+  if (decimals === 0 || frac === 0n) {
+    return sign + whole.toString();
+  }
+  const fracStr = frac.toString().padStart(decimals, "0").replace(/0+$/, "");
+  return sign + whole.toString() + "." + fracStr;
+}
+
+/**
  * Parse a human-entered decimal string into raw base units for a token.
  * "1,000.5" @ 2 decimals -> 100050n. Throws on malformed input.
  */
@@ -100,8 +121,16 @@ export function percent(part: bigint, whole: bigint): number {
   return Math.max(0, Math.min(100, pct));
 }
 
+/** Average Stellar ledger close time. The network's actual close time drifts
+ * (historically ~5-6s), so this is a best-effort constant, not a guarantee. */
+const AVG_LEDGER_CLOSE_SECONDS = 5.5;
+
 /**
- * Rough wall-clock estimate for a future ledger sequence, assuming ~5s ledgers.
+ * Rough wall-clock estimate for a ledger sequence. Error compounds with the
+ * distance from `currentLedger`, so the result's precision is clamped to
+ * roughly match how much it can be trusted: exact-ish under an hour out,
+ * rounded to the hour under a month out, and to the day beyond that. Callers
+ * should still label the result as approximate in the UI.
  * Returns null when `ledger` is 0 (used to mean "never expires").
  */
 export function ledgerToApproxDate(
@@ -109,6 +138,14 @@ export function ledgerToApproxDate(
   currentLedger: number,
 ): Date | null {
   if (!targetLedger) return null;
-  const deltaSeconds = (targetLedger - currentLedger) * 5;
-  return new Date(Date.now() + deltaSeconds * 1000);
+  const deltaSeconds = (targetLedger - currentLedger) * AVG_LEDGER_CLOSE_SECONDS;
+  const estimateMs = Date.now() + deltaSeconds * 1000;
+  return new Date(clampPrecision(estimateMs, Math.abs(deltaSeconds)));
+}
+
+/** Round `epochMs` so its displayed precision doesn't overstate the estimate's accuracy. */
+function clampPrecision(epochMs: number, horizonSeconds: number): number {
+  if (horizonSeconds < 3600) return epochMs;
+  const roundToMs = horizonSeconds < 30 * 86400 ? 3_600_000 : 86_400_000;
+  return Math.round(epochMs / roundToMs) * roundToMs;
 }

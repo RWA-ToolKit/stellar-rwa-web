@@ -74,9 +74,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!present) return;
       if (typeof window !== "undefined" && localStorage.getItem(STORAGE_KEY)) {
         const existing = await getConnectedAddress();
-        if (!cancelled && existing) {
+        if (cancelled) return;
+        if (existing) {
           setAddress(existing);
           await syncNetwork();
+        } else {
+          // Access was revoked in the wallet since we last connected — drop
+          // the stale flag so we stop silently probing on every load.
+          localStorage.removeItem(STORAGE_KEY);
         }
       }
     })();
@@ -85,15 +90,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
   }, [syncNetwork]);
 
-  // React to account / network switches made inside the extension.
+  // React to account / network switches made inside the extension. Runs
+  // whenever the extension is present, not just while connected, so a
+  // network change made before connecting is still picked up.
   useEffect(() => {
-    if (!address) return;
+    if (!installed) return;
     const stop = watchWallet(({ address: next }) => {
-      if (next && next !== addressRef.current) setAddress(next);
-      void syncNetwork();
+      if (addressRef.current) {
+        if (next && next !== addressRef.current) setAddress(next);
+        void syncNetwork();
+      } else {
+        // Disconnected: just observe the wallet's network without forcing
+        // the freely-chosen read-only browsing network to follow it.
+        void getWalletNetwork().then(setWalletNetwork);
+      }
     });
     return stop;
-  }, [address, syncNetwork]);
+  }, [installed, syncNetwork]);
 
   const connect = useCallback(async () => {
     setConnecting(true);
