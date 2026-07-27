@@ -3,6 +3,7 @@
 import { compliance, assetToken } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
+import { DEFAULT_CONCURRENCY, mapWithConcurrency } from "@/lib/concurrency";
 
 export interface Holder {
   address: string;
@@ -20,11 +21,13 @@ export function useHolders(complianceId: string | null, tokenContract: string | 
     async () => {
       if (!complianceId || !tokenContract) return [];
       const addresses = await compliance.getAllowlist(network, complianceId);
-      const holders = await Promise.all(
-        addresses.map(async (address) => ({
+      const holders = await mapWithConcurrency(
+        addresses,
+        DEFAULT_CONCURRENCY,
+        async (address) => ({
           address,
           balance: await assetToken.balance(network, tokenContract, address),
-        })),
+        }),
       );
       return holders
         .filter((h) => h.balance > 0n)

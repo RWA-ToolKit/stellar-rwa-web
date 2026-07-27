@@ -57,7 +57,7 @@ export interface WriteCtx {
   network: Network;
   source: string;
   sign: Signer;
-  onPhase?: (phase: "building" | "signing" | "submitting" | "confirming") => void;
+  onPhase?: (phase: "building" | "restoring" | "signing" | "submitting" | "confirming") => void;
 }
 
 function write(

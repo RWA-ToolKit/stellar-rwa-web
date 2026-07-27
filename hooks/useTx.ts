@@ -20,9 +20,10 @@ interface RunResult {
 }
 
 /**
- * Drives a single on-chain write: tracks phase (building → signing →
- * submitting → confirming → success/error) so the UI can show progress, and
- * exposes the resulting hash. Errors are captured as friendly messages.
+ * Drives a single on-chain write: tracks phase (building → [restoring] →
+ * signing → submitting → confirming → success/error) so the UI can show
+ * progress, and exposes the resulting hash. Errors are captured as friendly
+ * messages.
  */
 export function useTx(): RunResult {
   const { writeCtx } = useWallet();
@@ -60,7 +61,12 @@ export function useTx(): RunResult {
     phase,
     hash,
     error,
-    pending: phase === "building" || phase === "signing" || phase === "submitting" || phase === "confirming",
+    pending:
+      phase === "building" ||
+      phase === "restoring" ||
+      phase === "signing" ||
+      phase === "submitting" ||
+      phase === "confirming",
     run,
     reset,
   };

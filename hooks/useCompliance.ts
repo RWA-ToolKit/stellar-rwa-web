@@ -3,6 +3,7 @@
 import { compliance } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
+import { DEFAULT_CONCURRENCY, mapWithConcurrency } from "@/lib/concurrency";
 import type { ComplianceStatus, KycRecord } from "@/types";
 
 export interface ComplianceInfo {
@@ -46,8 +47,8 @@ export function useAllowlist(complianceId: string | null) {
     async () => {
       if (!complianceId) return [];
       const addresses = await compliance.getAllowlist(network, complianceId);
-      const records = await Promise.all(
-        addresses.map((a) => compliance.getRecord(network, complianceId, a)),
+      const records = await mapWithConcurrency(addresses, DEFAULT_CONCURRENCY, (a) =>
+        compliance.getRecord(network, complianceId, a),
       );
       return records.filter((r): r is KycRecord => r !== null);
     },

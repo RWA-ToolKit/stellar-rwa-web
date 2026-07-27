@@ -70,15 +70,19 @@ export async function getConnectedAddress(): Promise<string | null> {
   }
 }
 
-/** The network Freighter is currently pointed at, mapped to our union. */
+/**
+ * The network Freighter is currently pointed at, mapped to our union.
+ * Returns `null` for a network we don't support (e.g. a custom/standalone
+ * passphrase) rather than guessing — acting against the wrong contracts on a
+ * silently-assumed network is worse than surfacing an "unsupported" state.
+ */
 export async function getWalletNetwork(): Promise<Network | null> {
   try {
     const res = await fGetNetwork();
     if (res.error) return null;
     if (res.networkPassphrase === Networks.PUBLIC) return "mainnet";
     if (res.networkPassphrase === Networks.TESTNET) return "testnet";
-    // Fall back to the coarse label if the passphrase is unfamiliar.
-    return res.network?.toUpperCase() === "PUBLIC" ? "mainnet" : "testnet";
+    return null;
   } catch {
     return null;
   }

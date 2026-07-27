@@ -94,6 +94,7 @@ export interface TxResult {
 export type TxPhase =
   | "idle"
   | "building"
+  | "restoring"
   | "signing"
   | "submitting"
   | "confirming"

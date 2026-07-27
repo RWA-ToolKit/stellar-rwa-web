@@ -7,6 +7,7 @@ import { Spinner } from "./Spinner";
 
 const PHASE_LABEL: Record<Exclude<TxPhase, "idle">, string> = {
   building: "Preparing transaction…",
+  restoring: "Restoring archived contract data…",
   signing: "Awaiting signature in Freighter…",
   submitting: "Submitting to the network…",
   confirming: "Confirming on-chain…",
@@ -40,6 +41,7 @@ export function TxProgress({
 
   const pending =
     phase === "building" ||
+    phase === "restoring" ||
     phase === "signing" ||
     phase === "submitting" ||
     phase === "confirming";

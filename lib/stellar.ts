@@ -14,6 +14,7 @@ import {
   BASE_FEE,
   Contract,
   Networks,
+  Operation,
   TransactionBuilder,
   nativeToScVal,
   scValToNative,
@@ -56,6 +57,13 @@ export const DEFAULT_NETWORK: Network =
  * This is the contracts repo admin/issuer account.
  */
 const READ_SOURCE = "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA";
+
+/**
+ * Timebounds (seconds) given to submitted transactions. `pollTransaction`'s
+ * timeout is derived from this so we never report "timed out" while the tx
+ * is still within its validity window and could still land.
+ */
+const TX_TIMEOUT_SECONDS = 60;
 
 const serverCache = new Map<Network, rpc.Server>();
 
@@ -134,6 +142,12 @@ export async function readContract<T = unknown>(
   if (rpc.Api.isSimulationError(sim)) {
     throw new ContractError(parseContractError(sim.error), sim.error);
   }
+  if (rpc.Api.isSimulationRestore(sim)) {
+    throw new ContractError(
+      "This data is archived on-chain and needs to be restored before it can be read.",
+      "restore_required",
+    );
+  }
   const retval = sim.result?.retval;
   if (!retval) return undefined as T;
   return scValToNative(retval) as T;
@@ -153,7 +167,7 @@ export async function invokeContract(
   method: string,
   args: xdr.ScVal[],
   sign: Signer,
-  onPhase?: (phase: "building" | "signing" | "submitting" | "confirming") => void,
+  onPhase?: (phase: "building" | "restoring" | "signing" | "submitting" | "confirming") => void,
 ): Promise<TxResult> {
   const server = getServer(network);
   const passphrase = networkPassphrase(network);
@@ -161,20 +175,43 @@ export async function invokeContract(
 
   onPhase?.("building");
   const account = await server.getAccount(source);
-  const built = new TransactionBuilder(account, {
+  let built = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: passphrase,
   })
     .addOperation(contract.call(method, ...args))
-    .setTimeout(60)
+    .setTimeout(TX_TIMEOUT_SECONDS)
     .build();
 
   // Simulate first so we can surface a clean contract error before asking the
   // user to sign, and so the transaction carries the right footprint + fees.
-  const sim = await server.simulateTransaction(built);
+  let sim = await server.simulateTransaction(built);
   if (rpc.Api.isSimulationError(sim)) {
     throw new ContractError(parseContractError(sim.error), sim.error);
   }
+
+  // The invocation touched an archived ledger entry. Restore it first (a
+  // separate signed transaction), then rebuild and re-simulate the original
+  // call against the restored state.
+  if (rpc.Api.isSimulationRestore(sim)) {
+    onPhase?.("restoring");
+    await restoreFootprint(server, passphrase, source, sim.restorePreamble, sign);
+
+    onPhase?.("building");
+    const freshAccount = await server.getAccount(source);
+    built = new TransactionBuilder(freshAccount, {
+      fee: BASE_FEE,
+      networkPassphrase: passphrase,
+    })
+      .addOperation(contract.call(method, ...args))
+      .setTimeout(TX_TIMEOUT_SECONDS)
+      .build();
+    sim = await server.simulateTransaction(built);
+    if (rpc.Api.isSimulationError(sim)) {
+      throw new ContractError(parseContractError(sim.error), sim.error);
+    }
+  }
+
   const prepared = rpc.assembleTransaction(built, sim).build();
 
   onPhase?.("signing");
@@ -191,7 +228,7 @@ export async function invokeContract(
   }
 
   onPhase?.("confirming");
-  const final = await pollTransaction(server, sent.hash);
+  const final = await pollTransaction(server, sent.hash, TX_TIMEOUT_SECONDS * 1000);
   if (final.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
     throw new ContractError(
       "The transaction failed on-chain.",
@@ -206,6 +243,47 @@ export async function invokeContract(
     // A missing/undecodable return value is non-fatal for void methods.
   }
   return { hash: sent.hash, returnValue };
+}
+
+/**
+ * Submit and confirm a `restoreFootprint` operation for the ledger entries
+ * named in `restorePreamble`, using the same signer as the caller's write.
+ */
+async function restoreFootprint(
+  server: rpc.Server,
+  passphrase: string,
+  source: string,
+  restorePreamble: { minResourceFee: string; transactionData: { build(): xdr.SorobanTransactionData } },
+  sign: Signer,
+): Promise<void> {
+  const account = await server.getAccount(source);
+  const restoreTx = new TransactionBuilder(account, {
+    fee: restorePreamble.minResourceFee,
+    networkPassphrase: passphrase,
+  })
+    .setSorobanData(restorePreamble.transactionData.build())
+    .addOperation(Operation.restoreFootprint({}))
+    .setTimeout(TX_TIMEOUT_SECONDS)
+    .build();
+
+  const signedXdr = await sign(restoreTx.toXDR());
+  const signedTx = TransactionBuilder.fromXDR(signedXdr, passphrase);
+
+  const sent = await server.sendTransaction(signedTx);
+  if (sent.status === "ERROR") {
+    throw new ContractError(
+      "Failed to restore archived contract data.",
+      JSON.stringify(sent.errorResult ?? sent),
+    );
+  }
+
+  const final = await pollTransaction(server, sent.hash, TX_TIMEOUT_SECONDS * 1000);
+  if (final.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
+    throw new ContractError(
+      "Failed to restore archived contract data.",
+      JSON.stringify(final),
+    );
+  }
 }
 
 async function pollTransaction(

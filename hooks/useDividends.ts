@@ -3,6 +3,7 @@
 import { dividend } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
+import { DEFAULT_CONCURRENCY, mapWithConcurrency } from "@/lib/concurrency";
 import type { Distribution } from "@/types";
 
 export interface DistributionWithClaim extends Distribution {
@@ -24,15 +25,13 @@ export function useDividends(assetToken: string | null) {
       if (!address) {
         return dists.map((d) => ({ ...d, claimable: 0n, claimed: false }));
       }
-      const annotated = await Promise.all(
-        dists.map(async (d) => {
-          const [claimable, claimed] = await Promise.all([
-            dividend.claimable(network, d.id, address),
-            dividend.hasClaimed(network, d.id, address),
-          ]);
-          return { ...d, claimable, claimed };
-        }),
-      );
+      const annotated = await mapWithConcurrency(dists, DEFAULT_CONCURRENCY, async (d) => {
+        const [claimable, claimed] = await Promise.all([
+          dividend.claimable(network, d.id, address),
+          dividend.hasClaimed(network, d.id, address),
+        ]);
+        return { ...d, claimable, claimed };
+      });
       return annotated;
     },
     [assetToken, address, network],

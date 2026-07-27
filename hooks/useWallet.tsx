@@ -138,9 +138,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const writeCtx = useCallback(
     (onPhase?: WriteCtx["onPhase"]): WriteCtx => {
       if (!addressRef.current) throw new Error("Connect your wallet first.");
+      if (!walletNetwork) {
+        throw new Error(
+          "Your wallet is on an unsupported network. Switch Freighter to Testnet or Mainnet to continue.",
+        );
+      }
       return { network, source: addressRef.current, sign, onPhase };
     },
-    [network, sign],
+    [network, sign, walletNetwork],
   );
 
   const value = useMemo<WalletContextValue>(

@@ -18,13 +18,24 @@ export function NetworkSelector() {
   const locked = Boolean(address);
 
   if (locked) {
+    if (!walletNetwork) {
+      return (
+        <span
+          title="Freighter is pointed at a network this app doesn't support"
+          className="chip border border-red-500/30 bg-red-500/10 text-red-300"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+          Unsupported network
+        </span>
+      );
+    }
     return (
       <span
         title="Network follows your connected wallet"
         className="chip border border-white/10 bg-white/5 text-base-100/60"
       >
         <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
-        {label(walletNetwork ?? network)}
+        {label(walletNetwork)}
       </span>
     );
   }
