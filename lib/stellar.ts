@@ -23,23 +23,36 @@ import {
 import type { Network, TxResult } from "@/types";
 
 interface NetworkConfig {
-  rpcUrl: string;
+  /** Ordered candidates; the first is primary, the rest are failover RPCs. */
+  rpcUrls: string[];
   passphrase: string;
   explorerBase: string;
 }
 
+/** Split a comma-separated env var into trimmed, non-empty URLs. */
+function urlList(value: string | undefined): string[] {
+  return (value ?? "")
+    .split(",")
+    .map((u) => u.trim())
+    .filter(Boolean);
+}
+
 const NETWORKS: Record<Network, NetworkConfig> = {
   testnet: {
-    rpcUrl:
-      process.env.NEXT_PUBLIC_TESTNET_RPC_URL ??
+    rpcUrls: [
+      ...urlList(process.env.NEXT_PUBLIC_TESTNET_RPC_URL),
+      ...urlList(process.env.NEXT_PUBLIC_TESTNET_RPC_URLS_FALLBACK),
       "https://soroban-testnet.stellar.org",
+    ],
     passphrase: Networks.TESTNET,
     explorerBase: "https://stellar.expert/explorer/testnet",
   },
   mainnet: {
-    rpcUrl:
-      process.env.NEXT_PUBLIC_MAINNET_RPC_URL ??
+    rpcUrls: [
+      ...urlList(process.env.NEXT_PUBLIC_MAINNET_RPC_URL),
+      ...urlList(process.env.NEXT_PUBLIC_MAINNET_RPC_URLS_FALLBACK),
       "https://mainnet.sorobanrpc.com",
+    ],
     passphrase: Networks.PUBLIC,
     explorerBase: "https://stellar.expert/explorer/public",
   },
@@ -57,18 +70,66 @@ export const DEFAULT_NETWORK: Network =
  */
 const READ_SOURCE = "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA";
 
-const serverCache = new Map<Network, rpc.Server>();
+interface ServerCacheEntry {
+  server: rpc.Server;
+  urlIndex: number;
+  failureCount: number;
+}
+
+/** Consecutive failures against the current RPC URL before failing over. */
+const FAILOVER_THRESHOLD = 3;
+
+const serverCache = new Map<Network, ServerCacheEntry>();
+
+function buildServer(cfg: NetworkConfig, urlIndex: number): rpc.Server {
+  const url = cfg.rpcUrls[urlIndex] ?? cfg.rpcUrls[0];
+  return new rpc.Server(url, { allowHttp: url.startsWith("http://") });
+}
 
 export function getServer(network: Network): rpc.Server {
-  let server = serverCache.get(network);
-  if (!server) {
-    const cfg = NETWORKS[network];
-    server = new rpc.Server(cfg.rpcUrl, {
-      allowHttp: cfg.rpcUrl.startsWith("http://"),
-    });
-    serverCache.set(network, server);
+  let entry = serverCache.get(network);
+  if (!entry) {
+    entry = { server: buildServer(NETWORKS[network], 0), urlIndex: 0, failureCount: 0 };
+    serverCache.set(network, entry);
   }
-  return server;
+  return entry.server;
+}
+
+/**
+ * Record an RPC failure for `network`. After `FAILOVER_THRESHOLD` consecutive
+ * failures, the cached client is invalidated and rebuilt against the next
+ * configured RPC URL (wrapping back to the primary once the list is
+ * exhausted). Call sites that hit the RPC directly should report failures
+ * here so a persistently down endpoint doesn't stick around for the whole
+ * page lifetime.
+ */
+export function reportServerFailure(network: Network): void {
+  const cfg = NETWORKS[network];
+  const entry = serverCache.get(network);
+  const urlIndex = entry?.urlIndex ?? 0;
+  const failureCount = (entry?.failureCount ?? 0) + 1;
+
+  if (failureCount < FAILOVER_THRESHOLD || cfg.rpcUrls.length <= 1) {
+    serverCache.set(network, {
+      server: entry?.server ?? buildServer(cfg, urlIndex),
+      urlIndex,
+      failureCount,
+    });
+    return;
+  }
+
+  const nextIndex = (urlIndex + 1) % cfg.rpcUrls.length;
+  serverCache.set(network, { server: buildServer(cfg, nextIndex), urlIndex: nextIndex, failureCount: 0 });
+}
+
+/** Run an RPC call, reporting failures for failover bookkeeping. */
+async function withFailover<T>(network: Network, fn: (server: rpc.Server) => Promise<T>): Promise<T> {
+  try {
+    return await fn(getServer(network));
+  } catch (e) {
+    reportServerFailure(network);
+    throw e;
+  }
 }
 
 export function networkPassphrase(network: Network): string {
@@ -77,7 +138,7 @@ export function networkPassphrase(network: Network): string {
 
 /** Current ledger sequence, used to date ledger-based timestamps. */
 export async function getLatestLedger(network: Network): Promise<number> {
-  const res = await getServer(network).getLatestLedger();
+  const res = await withFailover(network, (server) => server.getLatestLedger());
   return res.sequence;
 }
 
@@ -119,7 +180,6 @@ export async function readContract<T = unknown>(
   method: string,
   args: xdr.ScVal[] = [],
 ): Promise<T> {
-  const server = getServer(network);
   const contract = new Contract(contractId);
   const source = new Account(READ_SOURCE, "0");
   const tx = new TransactionBuilder(source, {
@@ -130,7 +190,7 @@ export async function readContract<T = unknown>(
     .setTimeout(30)
     .build();
 
-  const sim = await server.simulateTransaction(tx);
+  const sim = await withFailover(network, (server) => server.simulateTransaction(tx));
   if (rpc.Api.isSimulationError(sim)) {
     throw new ContractError(parseContractError(sim.error), sim.error);
   }
@@ -155,12 +215,15 @@ export async function invokeContract(
   sign: Signer,
   onPhase?: (phase: "building" | "signing" | "submitting" | "confirming") => void,
 ): Promise<TxResult> {
+  // Resolved once and reused for the rest of this invocation — submitting and
+  // polling must stay pinned to the node that received the signed tx, even if
+  // a failover happens afterward for subsequent calls.
   const server = getServer(network);
   const passphrase = networkPassphrase(network);
   const contract = new Contract(contractId);
 
   onPhase?.("building");
-  const account = await server.getAccount(source);
+  const account = await withFailover(network, () => server.getAccount(source));
   const built = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: passphrase,
