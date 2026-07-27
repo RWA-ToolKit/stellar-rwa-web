@@ -33,6 +33,14 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
+  const trimmedTo = to.trim();
+  const recipientFormatValid =
+    StrKey.isValidEd25519PublicKey(trimmedTo) || StrKey.isValidContract(trimmedTo);
+  const recipientCompliance = useCompliance(
+    metadata.complianceContract,
+    recipientFormatValid ? trimmedTo : null,
+  );
+
   if (!address) {
     return (
       <p className="text-sm text-base-100/50">
@@ -57,6 +65,14 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
     }
     if (recipient === address) {
       setFormError("You can't transfer to your own address.");
+      return;
+    }
+    if (recipientCompliance.loading || !recipientCompliance.data) {
+      setFormError("Still checking recipient compliance — try again in a moment.");
+      return;
+    }
+    if (!recipientCompliance.data.allowed) {
+      setFormError("Recipient isn't KYC-approved for this asset and can't receive a transfer.");
       return;
     }
     let raw: bigint;
@@ -132,6 +148,19 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             className="input font-mono text-xs"
             spellCheck={false}
           />
+          {recipientFormatValid && (
+            <p className="mt-1.5 text-xs">
+              {recipientCompliance.loading ? (
+                <span className="text-base-100/40">Checking recipient compliance…</span>
+              ) : recipientCompliance.data?.allowed ? (
+                <span className="text-brand-300">Recipient is KYC-approved.</span>
+              ) : (
+                <span className="text-red-400">
+                  Recipient isn't KYC-approved for this asset and can't receive a transfer.
+                </span>
+              )}
+            </p>
+          )}
         </div>
         <div>
           <div className="flex items-center justify-between">

@@ -14,10 +14,21 @@ const NETWORKS: { value: Network; label: string }[] = [
  * simply reflects the wallet's current network.
  */
 export function NetworkSelector() {
-  const { network, setNetwork, address, walletNetwork } = useWallet();
+  const { network, setNetwork, address, walletNetwork, networkUnknown } = useWallet();
   const locked = Boolean(address);
 
   if (locked) {
+    if (networkUnknown) {
+      return (
+        <span
+          title="Couldn't verify your wallet's network. Reconnect before signing anything — writes are blocked until this resolves."
+          className="chip border border-red-500/25 bg-red-500/10 text-red-300"
+        >
+          <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
+          Network unknown
+        </span>
+      );
+    }
     return (
       <span
         title="Network follows your connected wallet"
