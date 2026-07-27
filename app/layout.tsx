@@ -4,7 +4,10 @@ import { WalletProvider } from "@/hooks/useWallet";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://stellar-rwa.vercel.app";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: "Stellar RWA — Tokenize real-world assets on Stellar",
     template: "%s · Stellar RWA",
@@ -16,6 +19,11 @@ export const metadata: Metadata = {
     title: "Stellar RWA",
     description: "Tokenize real-world assets on Stellar with on-chain compliance.",
     type: "website",
+    url: siteUrl,
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 
