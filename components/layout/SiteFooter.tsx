@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-const CONTRACTS_REPO = "https://github.com/your-org/stellar-rwa-contracts";
-const DOCS_REPO = "https://github.com/your-org/stellar-rwa-api-docs";
+const CONTRACTS_REPO = "https://github.com/RWA-ToolKit/stellar-rwa-contracts";
+const DOCS_REPO = "https://github.com/RWA-ToolKit/stellar-rwa-api-docs";
 
 export function SiteFooter() {
   return (
@@ -25,9 +25,6 @@ export function SiteFooter() {
               </p>
               <ul className="space-y-2 text-base-100/60">
                 <li><Link href="/explore" className="hover:text-brand-300">Explore assets</Link></li>
-                <li><Link href="/asset/new" className="hover:text-brand-300">Tokenize an asset</Link></li>
-                <li><Link href="/issuer" className="hover:text-brand-300">Issuer dashboard</Link></li>
-                <li><Link href="/portfolio" className="hover:text-brand-300">Portfolio</Link></li>
               </ul>
             </div>
             <div>
