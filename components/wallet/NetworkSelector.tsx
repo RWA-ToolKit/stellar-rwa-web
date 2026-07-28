@@ -20,11 +20,15 @@ export function NetworkSelector() {
   if (locked) {
     return (
       <span
-        title="Network follows your connected wallet"
-        className="chip border border-white/10 bg-white/5 text-base-100/60"
+        role="status"
+        aria-label={`Network: ${label(walletNetwork ?? network)} (follows wallet)`}
+        className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-base-100/60"
       >
         <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
         {label(walletNetwork ?? network)}
+        <span className="text-base-100/30" aria-hidden="true">
+          — via wallet
+        </span>
       </span>
     );
   }
