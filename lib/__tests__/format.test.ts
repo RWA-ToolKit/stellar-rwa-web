@@ -7,6 +7,7 @@ import {
   truncateAddress,
   percent,
   ledgerToApproxDate,
+  timeAgo,
 } from "@/lib/format";
 
 describe("formatUsdCents", () => {
@@ -110,5 +111,59 @@ describe("ledgerToApproxDate", () => {
   it("returns a Date for a valid target", () => {
     const result = ledgerToApproxDate(110, 100);
     expect(result).toBeInstanceOf(Date);
+  });
+});
+
+describe("timeAgo", () => {
+  const now = new Date("2025-06-15T12:00:00Z");
+
+  it("returns 'less than a minute ago' for < 60s", () => {
+    const date = new Date(now.getTime() - 30_000);
+    expect(timeAgo(date, now)).toBe("less than a minute ago");
+  });
+
+  it("returns '1 minute ago' for 60–119s", () => {
+    const date = new Date(now.getTime() - 90_000);
+    expect(timeAgo(date, now)).toBe("1 minute ago");
+  });
+
+  it("returns '5 minutes ago'", () => {
+    const date = new Date(now.getTime() - 5 * 60_000);
+    expect(timeAgo(date, now)).toBe("5 minutes ago");
+  });
+
+  it("returns 'about 1 hour ago'", () => {
+    const date = new Date(now.getTime() - 3_600_000);
+    expect(timeAgo(date, now)).toBe("about 1 hour ago");
+  });
+
+  it("returns 'about 3 hours ago'", () => {
+    const date = new Date(now.getTime() - 3 * 3_600_000);
+    expect(timeAgo(date, now)).toBe("about 3 hours ago");
+  });
+
+  it("returns '1 day ago'", () => {
+    const date = new Date(now.getTime() - 86_400_000);
+    expect(timeAgo(date, now)).toBe("1 day ago");
+  });
+
+  it("returns '10 days ago'", () => {
+    const date = new Date(now.getTime() - 10 * 86_400_000);
+    expect(timeAgo(date, now)).toBe("10 days ago");
+  });
+
+  it("returns 'about 1 month ago'", () => {
+    const date = new Date(now.getTime() - 35 * 86_400_000);
+    expect(timeAgo(date, now)).toBe("about 1 month ago");
+  });
+
+  it("returns 'about 1 year ago' for > 365 days", () => {
+    const date = new Date(now.getTime() - 400 * 86_400_000);
+    expect(timeAgo(date, now)).toBe("about 1 year ago");
+  });
+
+  it("returns future tense for dates in the future", () => {
+    const date = new Date(now.getTime() + 5 * 60_000);
+    expect(timeAgo(date, now)).toBe("in 5 minutes");
   });
 });

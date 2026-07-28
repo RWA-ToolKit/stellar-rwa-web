@@ -112,3 +112,42 @@ export function ledgerToApproxDate(
   const deltaSeconds = (targetLedger - currentLedger) * 5;
   return new Date(Date.now() + deltaSeconds * 1000);
 }
+
+/**
+ * Human-readable relative time string, e.g. "3 days ago" or "in 2 hours".
+ * Replaces `date-fns/formatDistanceToNow` to avoid pulling in the dependency
+ * for a single call site.
+ */
+export function timeAgo(date: Date, now = new Date()): string {
+  const ms = now.getTime() - date.getTime();
+  const abs = Math.abs(ms);
+  const future = ms < 0;
+
+  const SEC = 1000;
+  const MIN = 60 * SEC;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+  const MONTH = 30 * DAY;
+  const YEAR = 365 * DAY;
+
+  let label: string;
+  if (abs < MIN) label = "less than a minute";
+  else if (abs < HOUR) {
+    const n = Math.floor(abs / MIN);
+    label = n === 1 ? "1 minute" : `${n} minutes`;
+  } else if (abs < DAY) {
+    const n = Math.floor(abs / HOUR);
+    label = n === 1 ? "about 1 hour" : `about ${n} hours`;
+  } else if (abs < MONTH) {
+    const n = Math.floor(abs / DAY);
+    label = n === 1 ? "1 day" : `${n} days`;
+  } else if (abs < YEAR) {
+    const n = Math.floor(abs / MONTH);
+    label = n === 1 ? "about 1 month" : `about ${n} months`;
+  } else {
+    const n = Math.floor(abs / YEAR);
+    label = n === 1 ? "about 1 year" : `about ${n} years`;
+  }
+
+  return future ? `in ${label}` : `${label} ago`;
+}
