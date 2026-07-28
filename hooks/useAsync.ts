@@ -32,6 +32,9 @@ export function useAsync<T>(
     const id = ++reqId.current;
     setLoading(true);
     setError(null);
+    // Clear stale data so consumers show a loading state instead of data
+    // fetched for a previous set of dependencies (e.g. a different network).
+    setData(null);
     loader()
       .then((res) => {
         if (id === reqId.current) {
