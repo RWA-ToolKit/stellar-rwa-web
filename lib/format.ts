@@ -96,6 +96,17 @@ export function parseUsdToCents(input: string): bigint {
   return parseTokenAmount(input, 2);
 }
 
+/**
+ * Build the detail-page href for an asset id. Asset ids are `bigint`
+ * on-chain; interpolating a bigint directly into a template string or URL
+ * works today but is easy to get wrong (e.g. mixing bigint and string keys
+ * across components). Route all id -> string conversions through here so
+ * links and React keys stay consistent.
+ */
+export function assetHref(id: bigint): string {
+  return `/asset/${id.toString()}`;
+}
+
 /** Truncate a Stellar address for display: G/C... + last 4. */
 export function truncateAddress(addr: string, lead = 4, tail = 4): string {
   if (!addr || addr.length <= lead + tail + 1) return addr;

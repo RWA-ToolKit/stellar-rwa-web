@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { AssetEntry } from "@/types";
-import { formatUsdCents, truncateAddress } from "@/lib/format";
+import { assetHref, formatUsdCents, truncateAddress } from "@/lib/format";
 import { AssetTypeBadge } from "./AssetTypeBadge";
 
 interface AssetCardProps {
@@ -15,7 +15,7 @@ interface AssetCardProps {
 export function AssetCard({ asset, holders, supply }: AssetCardProps) {
   return (
     <Link
-      href={`/asset/${asset.id}`}
+      href={assetHref(asset.id)}
       className="card card-hover group flex flex-col gap-4 p-5"
     >
       <div className="flex items-start justify-between gap-3">
