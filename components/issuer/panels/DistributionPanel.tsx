@@ -7,11 +7,14 @@ import { dividend } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useDividends } from "@/hooks/useDividends";
 import { parseTokenAmount, formatTokenAmount, truncateAddress } from "@/lib/format";
+import { explorerContractUrl } from "@/lib/stellar";
+import { useWallet } from "@/hooks/useWallet";
 import { PAYMENT_TOKEN_DECIMALS } from "@/components/dividend/ClaimButton";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { percent } from "@/lib/format";
 
 interface DistributionPanelProps {
@@ -149,6 +152,7 @@ function CreateDistributionCard({
 // ---- Existing distributions ----
 
 function ExistingDistributionsCard({ tokenContract }: { tokenContract: string }) {
+  const { network } = useWallet();
   const { data, loading, error, refetch } = useDividends(tokenContract);
   const distributions = data ?? [];
 
@@ -197,9 +201,18 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
                         <span className="chip border border-gold-500/25 bg-gold-500/10 text-gold-300 text-[10px]">Active</span>
                       )}
                     </div>
-                    <p className="text-[11px] text-base-100/40">
-                      Payment token: {truncateAddress(d.paymentToken)}
-                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-base-100/40">
+                      <span>Payment token:</span>
+                      <a
+                        href={explorerContractUrl(network, d.paymentToken)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono hover:text-brand-300"
+                      >
+                        {truncateAddress(d.paymentToken)}
+                      </a>
+                      <CopyButton value={d.paymentToken} />
+                    </div>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-gold-300">

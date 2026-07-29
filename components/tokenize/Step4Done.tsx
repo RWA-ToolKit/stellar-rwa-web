@@ -4,6 +4,7 @@ import { explorerTxUrl } from "@/lib/stellar";
 import type { ValidatedToken } from "@/lib/tokenizeFlow";
 import { formatUsdCents } from "@/lib/format";
 import { ASSET_TYPE_LABELS } from "@/types";
+import { CopyButton } from "@/components/ui/CopyButton";
 
 interface Step4Props {
   validated: ValidatedToken;
@@ -68,6 +69,7 @@ export function Step4Done({ validated, name, assetType, valuation, assetId, txHa
         >
           View transaction ↗
         </a>
+        <CopyButton value={txHash} label="Copy tx hash" />
       </div>
 
       {/* Next steps */}
