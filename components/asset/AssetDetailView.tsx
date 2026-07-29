@@ -16,8 +16,9 @@ import { LoadingPanel } from "@/components/ui/Spinner";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { EmptyState } from "@/components/ui/EmptyState";
 
-export function AssetDetailView({ id }: { id: bigint }) {
+export function AssetDetailView({ id: idProp }: { id: string }) {
   const { network } = useWallet();
+  const id = BigInt(idProp);
   const asset = useAsset(id);
   const balance = useBalance(asset.data?.tokenContract ?? null);
   const dividends = useDividends(asset.data?.tokenContract ?? null);

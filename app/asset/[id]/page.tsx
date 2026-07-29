@@ -36,5 +36,8 @@ export default function AssetPage({ params }: PageProps) {
     );
   }
 
-  return <AssetDetailView id={id} />;
+  // Pass the id across the server/client boundary as a string — bigint
+  // serialization across RSC props is fragile and version-dependent in
+  // Next.js. AssetDetailView converts it back to bigint on the client.
+  return <AssetDetailView id={id.toString()} />;
 }
