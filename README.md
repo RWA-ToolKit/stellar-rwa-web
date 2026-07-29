@@ -98,10 +98,21 @@ Install the [Freighter](https://freighter.app) browser extension and point it at
 
 ## Configuration
 
-All configuration is via `NEXT_PUBLIC_*` env vars (see `.env.example`): the
-default network, Soroban RPC URLs, and the registry / compliance / dividend
-contract ids per network. Asset-token contract ids are discovered at runtime
-from the registry.
+All configuration is via `NEXT_PUBLIC_*` env vars (see `.env.example`). The app reads:
+
+- `NEXT_PUBLIC_DEFAULT_NETWORK` — `testnet` or `mainnet`
+- `NEXT_PUBLIC_TESTNET_RPC_URL` — primary Soroban RPC endpoint for testnet
+- `NEXT_PUBLIC_TESTNET_RPC_URLS_FALLBACK` — optional comma-separated failover RPC URLs for testnet
+- `NEXT_PUBLIC_MAINNET_RPC_URL` — primary Soroban RPC endpoint for mainnet
+- `NEXT_PUBLIC_MAINNET_RPC_URLS_FALLBACK` — optional comma-separated failover RPC URLs for mainnet
+- `NEXT_PUBLIC_TESTNET_REGISTRY_ID` — registry contract ID on testnet
+- `NEXT_PUBLIC_TESTNET_COMPLIANCE_ID` — compliance contract ID on testnet
+- `NEXT_PUBLIC_TESTNET_DIVIDEND_ID` — dividend contract ID on testnet
+- `NEXT_PUBLIC_MAINNET_REGISTRY_ID` — registry contract ID on mainnet
+- `NEXT_PUBLIC_MAINNET_COMPLIANCE_ID` — compliance contract ID on mainnet
+- `NEXT_PUBLIC_MAINNET_DIVIDEND_ID` — dividend contract ID on mainnet
+
+Asset-token contract IDs are not configured directly. They are discovered at runtime from the registry contract when browsing assets.
 
 ## Architecture
 
@@ -127,8 +138,6 @@ types/          Domain types mirroring the contracts
 | `/`            | ✅     | Landing: live platform stats, featured assets, how-it-works |
 | `/explore`     | ✅     | Browse assets — filter by type, sort, paginate         |
 | `/asset/[id]`  | ✅     | Asset detail: stats, holders, dividends, gated transfer |
-| `/asset/new`   | ⏳     | Tokenize a new asset (multi-step)                      |
-| `/issuer`      | ⏳     | Issuer dashboard                                        |
-| `/issuer/compliance` | ⏳ | Manage KYC allowlist                                  |
-| `/issuer/dividends`  | ⏳ | Create/manage distributions                          |
-| `/portfolio`   | ⏳     | Investor holdings                                      |
+| `/asset/new`   | ⚠️     | Tokenization wizard present; flow is still under active development |
+| `/issuer`      | ⚠️     | Issuer dashboard present; compliance and distributions are preview tabs |
+| `/portfolio`   | ⚠️     | Portfolio view present; holdings aggregation is still evolving |
