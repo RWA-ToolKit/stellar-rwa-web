@@ -296,7 +296,12 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Error carrying a user-facing message plus the raw diagnostic detail. */
+/**
+ * Error carrying a user-facing `message` plus a raw diagnostic `detail`
+ * (JSON/XDR blobs, hashes). `detail` is developer-facing only — UI should
+ * render `message` and keep `detail` behind a collapsed "details" affordance
+ * or the console, never inline by default.
+ */
 export class ContractError extends Error {
   detail?: string;
   constructor(message: string, detail?: string) {

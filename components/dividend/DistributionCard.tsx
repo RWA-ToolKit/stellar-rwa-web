@@ -40,7 +40,9 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             )}
           </div>
           <p className="mt-1 text-xs text-base-100/40">
-            {when ? `Created ${formatDistanceToNow(when, { addSuffix: true })}` : `Ledger ${d.createdAt}`}
+            {when
+              ? `Created ~${formatDistanceToNow(when, { addSuffix: true })}`
+              : `Ledger ${d.createdAt}`}
             {" · "}
             Payment token {truncateAddress(d.paymentToken)}
           </p>
