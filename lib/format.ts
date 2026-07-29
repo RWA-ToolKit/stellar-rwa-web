@@ -116,10 +116,17 @@ export function complianceStatusLabel(status: ComplianceStatus): string {
   return status;
 }
 
-/** A percentage 0–100 with one decimal, clamped. */
+/**
+ * A percentage 0–100 with one decimal, clamped.
+ * `part` is clamped to `[0, whole]` before the bigint math so the
+ * intermediate `* 10000n` product — and the resulting quotient passed to
+ * `Number()` — stays bounded regardless of how large the raw operands are.
+ * `part > whole` (or negative `part`) is treated as 100% / 0% respectively.
+ */
 export function percent(part: bigint, whole: bigint): number {
   if (whole <= 0n) return 0;
-  const pct = Number((part * 10000n) / whole) / 100;
+  const clamped = part < 0n ? 0n : part > whole ? whole : part;
+  const pct = Number((clamped * 10000n) / whole) / 100;
   return Math.max(0, Math.min(100, pct));
 }
 

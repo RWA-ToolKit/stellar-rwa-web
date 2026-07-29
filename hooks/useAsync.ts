@@ -23,6 +23,10 @@ export function useAsync<T>(
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
   const reqId = useRef(0);
+  // Serialize deps to a stable string key so memoization is by value, not by
+  // array identity/length — unstable references or a changing-length caller
+  // deps array no longer break the useCallback dependency list below.
+  const depsKey = JSON.stringify(deps);
 
   const run = useCallback(() => {
     if (!enabled) {
@@ -46,7 +50,7 @@ export function useAsync<T>(
         }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, ...deps]);
+  }, [enabled, depsKey]);
 
   useEffect(() => {
     run();

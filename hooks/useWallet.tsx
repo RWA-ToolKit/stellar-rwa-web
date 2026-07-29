@@ -33,6 +33,12 @@ interface WalletContextValue {
   address: string | null;
   network: Network;
   walletNetwork: Network | null;
+  /**
+   * True when connected but the wallet's actual network couldn't be
+   * determined (`getWalletNetwork` returned null). `network` may then be
+   * stale, so writes are blocked until this clears.
+   */
+  networkUnknown: boolean;
   installed: boolean;
   connecting: boolean;
   error: string | null;
@@ -138,22 +144,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [address],
   );
 
+  const networkUnknown = Boolean(address) && walletNetwork === null;
+
   const sign = useCallback(
     (xdr: string) => {
       if (!addressRef.current) {
         return Promise.reject(new Error("Connect your wallet first."));
       }
+      if (networkUnknown) {
+        return Promise.reject(
+          new Error("Can't verify your wallet's network. Reconnect and try again."),
+        );
+      }
       return signTx(xdr, networkPassphrase(network), addressRef.current);
     },
-    [network],
+    [network, networkUnknown],
   );
 
   const writeCtx = useCallback(
     (onPhase?: WriteCtx["onPhase"]): WriteCtx => {
       if (!addressRef.current) throw new Error("Connect your wallet first.");
+      if (networkUnknown) {
+        throw new Error("Can't verify your wallet's network. Reconnect and try again.");
+      }
       return { network, source: addressRef.current, sign, onPhase };
     },
-    [network, sign],
+    [network, sign, networkUnknown],
   );
 
   const value = useMemo<WalletContextValue>(
@@ -161,6 +177,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       address,
       network,
       walletNetwork,
+      networkUnknown,
       installed,
       connecting,
       error,
@@ -174,6 +191,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       address,
       network,
       walletNetwork,
+      networkUnknown,
       installed,
       connecting,
       error,
