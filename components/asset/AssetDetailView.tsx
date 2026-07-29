@@ -10,6 +10,7 @@ import { getLatestLedger } from "@/lib/stellar";
 import { AssetHeader } from "./AssetHeader";
 import { AssetStats } from "./AssetStats";
 import { TransferPanel } from "./TransferPanel";
+import { CompliancePanel } from "./CompliancePanel";
 import { HolderList } from "./HolderList";
 import { DistributionCard } from "@/components/dividend/DistributionCard";
 import { LoadingPanel } from "@/components/ui/Spinner";
@@ -131,6 +132,13 @@ export function AssetDetailView({ id }: { id: bigint }) {
               Overview
             </h2>
             <AssetStats asset={detail} holders={holderCount} />
+          </div>
+
+          <div className="card p-6">
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-base-100/50">
+              Compliance
+            </h2>
+            <CompliancePanel asset={detail} network={network} />
           </div>
 
           <div className="card p-6">

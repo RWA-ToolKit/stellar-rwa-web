@@ -39,6 +39,55 @@ export function useCompliance(complianceId: string | null, address: string | nul
   );
 }
 
+export interface JurisdictionStatus {
+  /** ISO country code as recorded on the allowlist, e.g. "US". */
+  code: string;
+  blocked: boolean;
+}
+
+export interface ComplianceOverview {
+  /** Number of addresses on the KYC allowlist. */
+  allowlistSize: number;
+  /** Jurisdictions represented on the allowlist, with their block status. */
+  jurisdictions: JurisdictionStatus[];
+}
+
+/**
+ * Public, read-only summary of a compliance contract — for anyone inspecting an
+ * asset, not just its issuer.
+ *
+ * The contract has no method that enumerates blocked jurisdictions, so the
+ * codes checked here are the distinct ones on the allowlist's own KYC records.
+ * A jurisdiction blocked before any address from it was ever approved therefore
+ * won't appear.
+ */
+export function useComplianceOverview(complianceId: string | null) {
+  const { network } = useWallet();
+  return useAsync<ComplianceOverview>(
+    async () => {
+      if (!complianceId) return { allowlistSize: 0, jurisdictions: [] };
+      const addresses = await compliance.getAllowlist(network, complianceId);
+      const records = await Promise.all(
+        addresses.map((a) => compliance.getRecord(network, complianceId, a)),
+      );
+      const codes = [
+        ...new Set(
+          records.flatMap((r) => (r?.jurisdiction ? [r.jurisdiction] : [])),
+        ),
+      ].sort();
+      const blocked = await Promise.all(
+        codes.map((c) => compliance.isJurisdictionBlocked(network, complianceId, c)),
+      );
+      return {
+        allowlistSize: addresses.length,
+        jurisdictions: codes.map((code, i) => ({ code, blocked: blocked[i] })),
+      };
+    },
+    [complianceId, network],
+    Boolean(complianceId),
+  );
+}
+
 /** Full KYC allowlist (with records) for a compliance contract — issuer views. */
 export function useAllowlist(complianceId: string | null) {
   const { network } = useWallet();
