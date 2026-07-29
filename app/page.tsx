@@ -40,7 +40,7 @@ export default function HomePage() {
       <section className="relative py-20 sm:py-28">
         <div className="mx-auto max-w-3xl text-center">
           <span className="chip mx-auto border border-brand-500/25 bg-brand-500/10 text-brand-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-brand-400" />
+            <span className="h-1.5 w-1.5 rounded-full bg-brand-400" aria-hidden="true" />
             Compliant RWA tokenization on Stellar
           </span>
           <h1 className="mt-6 text-4xl font-bold tracking-tight text-base-100 sm:text-6xl">
@@ -89,7 +89,16 @@ export default function HomePage() {
           {STEPS.map((step, i) => (
             <li key={step.title} className="card card-hover relative p-6">
               <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-brand-500/10 text-brand-400">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  aria-hidden="true"
+                  focusable="false"
+                >
                   {step.icon}
                 </svg>
               </div>
