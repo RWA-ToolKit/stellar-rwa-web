@@ -1,6 +1,7 @@
 "use client";
 
 import { compliance, assetToken } from "@/lib/contracts";
+import { api } from "@/lib/api";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
 
@@ -13,6 +14,7 @@ export interface Holder {
  * Derive an asset's holders. The token contract doesn't enumerate holders, so
  * we read the compliance allowlist (the only addresses that *can* hold it) and
  * keep those with a positive balance, sorted by size.
+ * When the API is configured, reads the pre-aggregated holder list instead.
  */
 /**
  * @param refreshKey Bump this (e.g. after a confirmed transfer) to force a
@@ -27,11 +29,19 @@ export function useHolders(
   return useAsync<Holder[]>(
     async () => {
       if (!complianceId || !tokenContract) return [];
+
+      const fromApi = tokenContract ? await api.getHolders(tokenContract) : null;
+      if (fromApi) {
+        return fromApi
+          .filter((h) => h.balance > 0n)
+          .sort((a, b) => (a.balance > b.balance ? -1 : a.balance < b.balance ? 1 : 0));
+      }
+
       const addresses = await compliance.getAllowlist(network, complianceId);
       const holders = await Promise.all(
         addresses.map(async (address) => ({
           address,
-          balance: await assetToken.balance(network, tokenContract, address),
+          balance: await assetToken.balance(network, tokenContract!, address),
         })),
       );
       return holders
