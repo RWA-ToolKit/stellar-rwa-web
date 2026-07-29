@@ -36,6 +36,7 @@ export function useCompliance(complianceId: string | null, address: string | nul
     },
     [complianceId, address, network],
     Boolean(complianceId && address),
+    { cacheKey: `compliance:${network}:${complianceId}:${address}`, staleTime: 5_000 },
   );
 }
 
@@ -53,5 +54,6 @@ export function useAllowlist(complianceId: string | null) {
     },
     [complianceId, network],
     Boolean(complianceId),
+    { cacheKey: `allowlist:${network}:${complianceId}` },
   );
 }

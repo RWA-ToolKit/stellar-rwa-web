@@ -20,6 +20,7 @@ export function useAsset(id: bigint | null) {
     },
     [id?.toString(), network],
     id !== null,
+    { cacheKey: `asset:${network}:${id?.toString()}` },
   );
 }
 
@@ -33,5 +34,6 @@ export function useBalance(tokenContract: string | null) {
         : Promise.resolve(0n),
     [tokenContract, address, network],
     Boolean(tokenContract && address),
+    { cacheKey: `balance:${network}:${tokenContract}:${address}`, staleTime: 5_000 },
   );
 }

@@ -109,5 +109,6 @@ export function usePortfolio() {
     },
     [address, network],
     Boolean(address),
+    { cacheKey: `portfolio:${network}:${address}`, staleTime: 10_000 },
   );
 }

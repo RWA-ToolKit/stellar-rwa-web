@@ -37,5 +37,6 @@ export function useDividends(assetToken: string | null) {
     },
     [assetToken, address, network],
     Boolean(assetToken),
+    { cacheKey: `dividends:${network}:${assetToken}:${address}`, staleTime: 10_000 },
   );
 }

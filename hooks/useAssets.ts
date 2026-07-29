@@ -12,6 +12,8 @@ export function useAssets(opts?: { includeInactive?: boolean }) {
   const state = useAsync<AssetEntry[]>(
     () => registry.getAllAssets(network),
     [network],
+    true,
+    { cacheKey: `assets:${network}` },
   );
   const assets = useMemo(() => {
     const list = state.data ?? [];
@@ -38,6 +40,8 @@ export function usePlatformStats() {
       };
     },
     [network],
+    true,
+    { cacheKey: `platform-stats:${network}` },
   );
 }
 
@@ -47,5 +51,6 @@ export function useIssuerAssets(issuer: string | null, network: Network) {
     () => (issuer ? registry.getAssetsByIssuer(network, issuer) : Promise.resolve([])),
     [issuer, network],
     Boolean(issuer),
+    { cacheKey: `issuer-assets:${network}:${issuer}` },
   );
 }

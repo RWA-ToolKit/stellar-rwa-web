@@ -31,5 +31,6 @@ export function useHolderTotals(assets: AssetEntry[] | null) {
     },
     [key, network],
     assets !== null,
+    { cacheKey: `holder-totals:${network}:${key}` },
   );
 }

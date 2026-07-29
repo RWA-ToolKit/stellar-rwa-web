@@ -40,5 +40,6 @@ export function useHolders(
     },
     [complianceId, tokenContract, network, refreshKey],
     Boolean(complianceId && tokenContract),
+    { cacheKey: `holders:${network}:${complianceId}:${tokenContract}:${refreshKey}` },
   );
 }
