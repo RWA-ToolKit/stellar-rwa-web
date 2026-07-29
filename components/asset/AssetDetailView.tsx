@@ -23,6 +23,7 @@ export function AssetDetailView({ id }: { id: bigint }) {
   const dividends = useDividends(asset.data?.tokenContract ?? null);
   const ledger = useAsync(() => getLatestLedger(network), [network]);
   const [holderCount, setHolderCount] = useState<number | undefined>(undefined);
+  const [holdersRefreshKey, setHoldersRefreshKey] = useState(0);
 
   if (asset.loading) {
     return (
@@ -119,7 +120,7 @@ export function AssetDetailView({ id }: { id: bigint }) {
 
           <section className="card p-6">
             <h2 className="mb-1 text-lg font-semibold text-base-100">Holders</h2>
-            <HolderList asset={detail} onCount={setHolderCount} />
+            <HolderList asset={detail} onCount={setHolderCount} refreshKey={holdersRefreshKey} />
           </section>
         </div>
 
@@ -142,6 +143,7 @@ export function AssetDetailView({ id }: { id: bigint }) {
               onTransferred={() => {
                 balance.refetch();
                 dividends.refetch();
+                setHoldersRefreshKey((k) => k + 1);
               }}
             />
           </div>

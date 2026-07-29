@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import type { TxPhase, TxResult } from "@/types";
 import type { WriteCtx } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
+import { ContractError } from "@/lib/stellar";
 
 interface RunResult {
   phase: TxPhase;
@@ -48,6 +49,11 @@ export function useTx(): RunResult {
         setPhase("success");
         return result;
       } catch (e) {
+        // The raw diagnostic (JSON/XDR) is developer-facing only — keep it
+        // out of the user-visible `error` string and log it instead.
+        if (e instanceof ContractError && e.detail) {
+          console.error("Transaction failed:", e.detail);
+        }
         setError(e instanceof Error ? e.message : "Transaction failed.");
         setPhase("error");
         return null;

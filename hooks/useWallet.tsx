@@ -33,6 +33,12 @@ interface WalletContextValue {
   address: string | null;
   network: Network;
   walletNetwork: Network | null;
+  /**
+   * True when connected but the wallet's actual network couldn't be
+   * determined (`getWalletNetwork` returned null). `network` may then be
+   * stale, so writes are blocked until this clears.
+   */
+  networkUnknown: boolean;
   installed: boolean;
   connecting: boolean;
   error: string | null;
@@ -74,9 +80,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (!present) return;
       if (typeof window !== "undefined" && localStorage.getItem(STORAGE_KEY)) {
         const existing = await getConnectedAddress();
-        if (!cancelled && existing) {
+        if (cancelled) return;
+        if (existing) {
           setAddress(existing);
           await syncNetwork();
+        } else {
+          // Access was revoked in the wallet since we last connected — drop
+          // the stale flag so we stop silently probing on every load.
+          localStorage.removeItem(STORAGE_KEY);
         }
       }
     })();
@@ -85,15 +96,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     };
   }, [syncNetwork]);
 
-  // React to account / network switches made inside the extension.
+  // React to account / network switches made inside the extension. Runs
+  // whenever the extension is present, not just while connected, so a
+  // network change made before connecting is still picked up.
   useEffect(() => {
-    if (!address) return;
+    if (!installed) return;
     const stop = watchWallet(({ address: next }) => {
-      if (next && next !== addressRef.current) setAddress(next);
-      void syncNetwork();
+      if (addressRef.current) {
+        if (next && next !== addressRef.current) setAddress(next);
+        void syncNetwork();
+      } else {
+        // Disconnected: just observe the wallet's network without forcing
+        // the freely-chosen read-only browsing network to follow it.
+        void getWalletNetwork().then(setWalletNetwork);
+      }
     });
     return stop;
-  }, [address, syncNetwork]);
+  }, [installed, syncNetwork]);
 
   const connect = useCallback(async () => {
     setConnecting(true);
@@ -125,22 +144,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [address],
   );
 
+  const networkUnknown = Boolean(address) && walletNetwork === null;
+
   const sign = useCallback(
     (xdr: string) => {
       if (!addressRef.current) {
         return Promise.reject(new Error("Connect your wallet first."));
       }
+      if (networkUnknown) {
+        return Promise.reject(
+          new Error("Can't verify your wallet's network. Reconnect and try again."),
+        );
+      }
       return signTx(xdr, networkPassphrase(network), addressRef.current);
     },
-    [network],
+    [network, networkUnknown],
   );
 
   const writeCtx = useCallback(
     (onPhase?: WriteCtx["onPhase"]): WriteCtx => {
       if (!addressRef.current) throw new Error("Connect your wallet first.");
+      if (networkUnknown) {
+        throw new Error("Can't verify your wallet's network. Reconnect and try again.");
+      }
       return { network, source: addressRef.current, sign, onPhase };
     },
-    [network, sign],
+    [network, sign, networkUnknown],
   );
 
   const value = useMemo<WalletContextValue>(
@@ -148,6 +177,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       address,
       network,
       walletNetwork,
+      networkUnknown,
       installed,
       connecting,
       error,
@@ -161,6 +191,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       address,
       network,
       walletNetwork,
+      networkUnknown,
       installed,
       connecting,
       error,

@@ -7,7 +7,7 @@ import { assetToken } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useTx } from "@/hooks/useTx";
 import { useCompliance } from "@/hooks/useCompliance";
-import { formatTokenAmount, parseTokenAmount } from "@/lib/format";
+import { formatTokenAmount, formatRawPlain, parseTokenAmount } from "@/lib/format";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 
@@ -33,6 +33,14 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
+  const trimmedTo = to.trim();
+  const recipientFormatValid =
+    StrKey.isValidEd25519PublicKey(trimmedTo) || StrKey.isValidContract(trimmedTo);
+  const recipientCompliance = useCompliance(
+    metadata.complianceContract,
+    recipientFormatValid ? trimmedTo : null,
+  );
+
   if (!address) {
     return (
       <p className="text-sm text-base-100/50">
@@ -41,10 +49,14 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
     );
   }
 
+  const complianceLoading = compliance.loading;
   const approved = compliance.data?.allowed ?? false;
   const status = compliance.data?.status ?? "None";
   const paused = metadata.paused;
-  const canTransfer = approved && !paused && balance > 0n;
+  // Do not evaluate transfer eligibility while compliance is still loading —
+  // treating an unresolved status as "not allowed" would flash "Transfer
+  // unavailable" copy before the check completes (issues #33 / #34).
+  const canTransfer = !complianceLoading && approved && !paused && balance > 0n;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -57,6 +69,14 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
     }
     if (recipient === address) {
       setFormError("You can't transfer to your own address.");
+      return;
+    }
+    if (recipientCompliance.loading || !recipientCompliance.data) {
+      setFormError("Still checking recipient compliance — try again in a moment.");
+      return;
+    }
+    if (!recipientCompliance.data.allowed) {
+      setFormError("Recipient isn't KYC-approved for this asset and can't receive a transfer.");
       return;
     }
     let raw: bigint;
@@ -128,10 +148,23 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             value={to}
             onChange={(e) => setTo(e.target.value)}
             placeholder="G… or C…"
-            disabled={!canTransfer || tx.pending}
+            disabled={!canTransfer || complianceLoading || tx.pending}
             className="input font-mono text-xs"
             spellCheck={false}
           />
+          {recipientFormatValid && (
+            <p className="mt-1.5 text-xs">
+              {recipientCompliance.loading ? (
+                <span className="text-base-100/40">Checking recipient compliance…</span>
+              ) : recipientCompliance.data?.allowed ? (
+                <span className="text-brand-300">Recipient is KYC-approved.</span>
+              ) : (
+                <span className="text-red-400">
+                  Recipient isn't KYC-approved for this asset and can't receive a transfer.
+                </span>
+              )}
+            </p>
+          )}
         </div>
         <div>
           <div className="flex items-center justify-between">
@@ -139,7 +172,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             {canTransfer && (
               <button
                 type="button"
-                onClick={() => setAmount(formatTokenAmount(balance, metadata.decimals).replace(/,/g, ""))}
+                onClick={() => setAmount(formatRawPlain(balance, metadata.decimals))}
                 className="mb-1.5 text-xs text-brand-400 hover:text-brand-300"
               >
                 Max
@@ -153,7 +186,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               inputMode="decimal"
-              disabled={!canTransfer || tx.pending}
+              disabled={!canTransfer || complianceLoading || tx.pending}
               className="input pr-16"
             />
             <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
@@ -165,8 +198,16 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
         {formError && <p className="text-xs text-red-400">{formError}</p>}
 
         {tx.phase === "idle" ? (
-          <button type="submit" disabled={!canTransfer} className="btn-primary w-full">
-            {canTransfer ? "Transfer" : "Transfer unavailable"}
+          <button
+            type="submit"
+            disabled={!canTransfer || complianceLoading}
+            className="btn-primary w-full"
+          >
+            {complianceLoading
+              ? "Checking compliance…"
+              : canTransfer
+                ? "Transfer"
+                : "Transfer unavailable"}
           </button>
         ) : (
           <TxProgress
