@@ -266,6 +266,16 @@ export const assetToken = {
     );
   },
 
+  /**
+   * Read just the `compliance_contract` field, instead of the full
+   * `AssetMetadata` struct via `getMetadata`. Used by callers (like
+   * `useHolderTotals`) that only need to resolve the compliance contract for
+   * many assets and shouldn't pay for a full metadata decode each time.
+   */
+  getComplianceContract(network: Network, tokenId: string): Promise<string> {
+    return readContract<string>(network, tokenId, "get_compliance_contract");
+  },
+
   balance(network: Network, tokenId: string, holder: string): Promise<bigint> {
     return readContract<bigint>(network, tokenId, "balance", [
       arg.address(holder),
