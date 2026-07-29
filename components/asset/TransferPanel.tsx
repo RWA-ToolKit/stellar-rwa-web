@@ -41,10 +41,14 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
     );
   }
 
+  const complianceLoading = compliance.loading;
   const approved = compliance.data?.allowed ?? false;
   const status = compliance.data?.status ?? "None";
   const paused = metadata.paused;
-  const canTransfer = approved && !paused && balance > 0n;
+  // Do not evaluate transfer eligibility while compliance is still loading —
+  // treating an unresolved status as "not allowed" would flash "Transfer
+  // unavailable" copy before the check completes (issues #33 / #34).
+  const canTransfer = !complianceLoading && approved && !paused && balance > 0n;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -128,7 +132,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             value={to}
             onChange={(e) => setTo(e.target.value)}
             placeholder="G… or C…"
-            disabled={!canTransfer || tx.pending}
+            disabled={!canTransfer || complianceLoading || tx.pending}
             className="input font-mono text-xs"
             spellCheck={false}
           />
@@ -153,7 +157,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               inputMode="decimal"
-              disabled={!canTransfer || tx.pending}
+              disabled={!canTransfer || complianceLoading || tx.pending}
               className="input pr-16"
             />
             <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
@@ -165,8 +169,16 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
         {formError && <p className="text-xs text-red-400">{formError}</p>}
 
         {tx.phase === "idle" ? (
-          <button type="submit" disabled={!canTransfer} className="btn-primary w-full">
-            {canTransfer ? "Transfer" : "Transfer unavailable"}
+          <button
+            type="submit"
+            disabled={!canTransfer || complianceLoading}
+            className="btn-primary w-full"
+          >
+            {complianceLoading
+              ? "Checking compliance…"
+              : canTransfer
+                ? "Transfer"
+                : "Transfer unavailable"}
           </button>
         ) : (
           <TxProgress
