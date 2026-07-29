@@ -99,9 +99,17 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // React to account / network switches made inside the extension. Runs
   // whenever the extension is present, not just while connected, so a
   // network change made before connecting is still picked up.
+  //
+  // The watcher polls Freighter on a timer (no push events are available),
+  // so we stop it while the tab is hidden and restart it on return to avoid
+  // burning battery/CPU on background tabs the user isn't looking at.
   useEffect(() => {
     if (!installed) return;
-    const stop = watchWallet(({ address: next }) => {
+    if (typeof document === "undefined") return watchWallet(handleWatchChange);
+
+    let stop: (() => void) | null = null;
+
+    function handleWatchChange({ address: next }: { address: string; network: string }) {
       if (addressRef.current) {
         if (next && next !== addressRef.current) setAddress(next);
         void syncNetwork();
@@ -110,8 +118,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         // the freely-chosen read-only browsing network to follow it.
         void getWalletNetwork().then(setWalletNetwork);
       }
-    });
-    return stop;
+    }
+
+    function start() {
+      if (!stop) stop = watchWallet(handleWatchChange);
+    }
+
+    function pause() {
+      stop?.();
+      stop = null;
+    }
+
+    function onVisibilityChange() {
+      if (document.hidden) {
+        pause();
+      } else {
+        start();
+      }
+    }
+
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      pause();
+    };
   }, [installed, syncNetwork]);
 
   const connect = useCallback(async () => {
