@@ -13,12 +13,18 @@ interface HolderListProps {
   asset: AssetDetail;
   /** Notified with the holder count once resolved (feeds AssetStats). */
   onCount?: (count: number) => void;
+  /** Bump to force a refetch (e.g. after a confirmed transfer). */
+  refreshKey?: number;
 }
 
-export function HolderList({ asset, onCount }: HolderListProps) {
+export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
   const { metadata } = asset;
   const { address } = useWallet();
-  const { data, loading, error } = useHolders(metadata.complianceContract, asset.tokenContract);
+  const { data, loading, error } = useHolders(
+    metadata.complianceContract,
+    asset.tokenContract,
+    refreshKey,
+  );
 
   const holders = data ?? [];
 

@@ -57,7 +57,9 @@ export function formatTokenAmount(raw: bigint, decimals: number): string {
  */
 export function parseTokenAmount(input: string, decimals: number): bigint {
   const cleaned = input.replace(/,/g, "").trim();
-  if (!/^\d*(\.\d*)?$/.test(cleaned) || cleaned === "" || cleaned === ".") {
+  // Requires at least one digit on one side of an optional single dot:
+  // "5", "5.5", ".5" are valid; "", ".", "5.", "-5", "1e5" are not.
+  if (!/^(\d+(\.\d+)?|\.\d+)$/.test(cleaned)) {
     throw new Error("Enter a valid number");
   }
   const [whole, frac = ""] = cleaned.split(".");

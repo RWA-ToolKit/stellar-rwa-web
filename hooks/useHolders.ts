@@ -14,7 +14,15 @@ export interface Holder {
  * we read the compliance allowlist (the only addresses that *can* hold it) and
  * keep those with a positive balance, sorted by size.
  */
-export function useHolders(complianceId: string | null, tokenContract: string | null) {
+/**
+ * @param refreshKey Bump this (e.g. after a confirmed transfer) to force a
+ * refetch even though `complianceId`/`tokenContract`/`network` didn't change.
+ */
+export function useHolders(
+  complianceId: string | null,
+  tokenContract: string | null,
+  refreshKey = 0,
+) {
   const { network } = useWallet();
   return useAsync<Holder[]>(
     async () => {
@@ -30,7 +38,7 @@ export function useHolders(complianceId: string | null, tokenContract: string | 
         .filter((h) => h.balance > 0n)
         .sort((a, b) => (a.balance > b.balance ? -1 : a.balance < b.balance ? 1 : 0));
     },
-    [complianceId, tokenContract, network],
+    [complianceId, tokenContract, network, refreshKey],
     Boolean(complianceId && tokenContract),
   );
 }
