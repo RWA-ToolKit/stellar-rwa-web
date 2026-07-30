@@ -17,6 +17,10 @@ export const metadata: Metadata = {
     description: "Tokenize real-world assets on Stellar with on-chain compliance.",
     type: "website",
   },
+  appleWebApp: {
+    title: "Stellar RWA",
+    statusBarStyle: "black-translucent",
+  },
 };
 
 export const viewport: Viewport = {

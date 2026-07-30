@@ -132,6 +132,45 @@ async function withFailover<T>(network: Network, fn: (server: rpc.Server) => Pro
   }
 }
 
+/** Max attempts (including the first) for {@link withRetry}. */
+const RETRY_ATTEMPTS = 3;
+/** Base delay for the exponential backoff between retries, in ms. */
+const RETRY_BASE_DELAY_MS = 300;
+
+/** Matches HTTP 429 / rate-limit errors surfaced by public Soroban RPC nodes. */
+function isTransientRpcError(err: unknown): boolean {
+  const message =
+    err instanceof Error ? err.message : typeof err === "string" ? err : JSON.stringify(err);
+  return /429|rate.?limit|too many requests|ETIMEDOUT|ECONNRESET|network ?error/i.test(
+    message ?? "",
+  );
+}
+
+/**
+ * Retry a transient (rate-limit / network) failure with exponential backoff
+ * plus jitter, bounded by `RETRY_ATTEMPTS`. Non-transient errors (e.g.
+ * contract/simulation errors) are rethrown immediately without retrying,
+ * since retrying a deterministic contract rejection just wastes an RPC round
+ * trip.
+ */
+async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      const isLastAttempt = attempt === RETRY_ATTEMPTS - 1;
+      if (isLastAttempt || !isTransientRpcError(e)) throw e;
+      const backoff = RETRY_BASE_DELAY_MS * 2 ** attempt;
+      const jitter = Math.random() * RETRY_BASE_DELAY_MS;
+      await sleep(backoff + jitter);
+    }
+  }
+  // Unreachable: the loop above always either returns or throws.
+  throw lastError;
+}
+
 export function networkPassphrase(network: Network): string {
   return NETWORKS[network].passphrase;
 }
@@ -190,7 +229,12 @@ export async function readContract<T = unknown>(
     .setTimeout(30)
     .build();
 
-  const sim = await withFailover(network, (server) => server.simulateTransaction(tx));
+  // The public RPC intermittently 429s under the N+1 fan-out from data hooks;
+  // bound retries with backoff so a transient rate-limit doesn't surface as a
+  // hard error for the whole view.
+  const sim = await withRetry(() =>
+    withFailover(network, (server) => server.simulateTransaction(tx)),
+  );
   if (rpc.Api.isSimulationError(sim)) {
     throw new ContractError(parseContractError(sim.error), sim.error);
   }

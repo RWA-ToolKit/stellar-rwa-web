@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Holding } from "@/hooks/usePortfolio";
-import { formatTokenAmount, formatUsdCents, percent } from "@/lib/format";
+import { assetHref, formatTokenAmount, formatUsdCents, percent } from "@/lib/format";
 import { PAYMENT_TOKEN_DECIMALS } from "@/components/dividend/ClaimButton";
 import { AssetTypeBadge } from "@/components/asset/AssetTypeBadge";
 import { DistributionCard } from "@/components/dividend/DistributionCard";
@@ -50,7 +50,7 @@ export function HoldingRow({ holding, onClaimed }: HoldingRowProps) {
             )}
           </div>
           <Link
-            href={`/asset/${asset.id}`}
+            href={assetHref(asset.id)}
             className="mt-1 block text-base font-semibold text-base-100 hover:text-brand-300 transition-colors"
           >
             {asset.name}

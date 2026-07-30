@@ -3,6 +3,21 @@ import Link from "next/link";
 const CONTRACTS_REPO = "https://github.com/your-org/stellar-rwa-contracts";
 const DOCS_REPO = "https://github.com/your-org/stellar-rwa-api-docs";
 
+/** Surfaces the deployed build so a user report can be correlated with a deploy. */
+function BuildInfo() {
+  const version = process.env.NEXT_PUBLIC_APP_VERSION;
+  const commit = process.env.NEXT_PUBLIC_APP_COMMIT;
+  if (!version && !commit) return null;
+
+  return (
+    <span className="font-mono">
+      {version ? `v${version}` : null}
+      {version && commit ? " · " : null}
+      {commit ? `#${commit}` : null}
+    </span>
+  );
+}
+
 export function SiteFooter() {
   return (
     <footer className="mt-24 border-t border-white/5">
@@ -43,9 +58,12 @@ export function SiteFooter() {
           </div>
         </div>
 
-        <div className="mt-10 border-t border-white/5 pt-6 text-xs text-base-100/40">
-          Built on Stellar / Soroban. Asset tokens are compliance-gated — only
-          KYC-approved addresses can hold or transfer them.
+        <div className="mt-10 flex flex-col gap-2 border-t border-white/5 pt-6 text-xs text-base-100/40 sm:flex-row sm:items-center sm:justify-between">
+          <span>
+            Built on Stellar / Soroban. Asset tokens are compliance-gated — only
+            KYC-approved addresses can hold or transfer them.
+          </span>
+          <BuildInfo />
         </div>
       </div>
     </footer>
