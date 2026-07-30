@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import type { TxPhase, TxResult, TxTelemetry } from "@/types";
 import type { WriteCtx } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
+import { useToast } from "@/components/ui/ToastProvider";
 import { ContractError } from "@/lib/stellar";
 
 interface RunResult {
@@ -37,6 +38,7 @@ const noopTelemetry: TxTelemetry = {};
  */
 export function useTx(telemetry?: TxTelemetry): RunResult {
   const { writeCtx } = useWallet();
+  const { addToast } = useToast();
   const [phase, setPhase] = useState<TxPhase>("idle");
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,12 +74,13 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
         }
         setError(msg);
         setPhase("error");
+        addToast({ title: "Transaction failed", description: msg, tone: "error" });
         t.onPhase?.("error", msg);
         t.onError?.(msg, "error");
         return null;
       }
     },
-    [writeCtx, t],
+    [addToast, writeCtx, t],
   );
 
   return {

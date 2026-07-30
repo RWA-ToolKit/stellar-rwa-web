@@ -16,6 +16,7 @@ import { DistributionCard } from "@/components/dividend/DistributionCard";
 import { LoadingPanel } from "@/components/ui/Spinner";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { getDisplayText } from "@/lib/display";
 
 export function AssetDetailView({ id }: { id: bigint }) {
   const { network } = useWallet();
@@ -77,9 +78,7 @@ export function AssetDetailView({ id }: { id: bigint }) {
           <section className="card p-6">
             <h2 className="text-lg font-semibold text-base-100">About this asset</h2>
             <p className="mt-3 whitespace-pre-line leading-relaxed text-base-100/70">
-              {detail.metadata.assetDescription?.trim()
-                ? detail.metadata.assetDescription
-                : "The issuer hasn't provided a description for this asset."}
+              {getDisplayText(detail.metadata.assetDescription, "The issuer hasn't provided a description for this asset.")}
             </p>
           </section>
 

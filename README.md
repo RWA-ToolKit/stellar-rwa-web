@@ -77,6 +77,8 @@ per-asset token ids are discovered at runtime from the registry.
 
 ## Getting started
 
+> This project is currently configured for Stellar Testnet only. Mainnet contract IDs are intentionally left blank in [.env.example](.env.example), so the app will not expose fully working mainnet routes until those values are populated.
+
 ```bash
 cp .env.example .env.local   # Testnet contract ids are pre-filled
 npm install

@@ -1,5 +1,6 @@
 import type { AssetDetail } from "@/types";
 import { formatUsdCents, truncateAddress } from "@/lib/format";
+import { getDisplayText } from "@/lib/display";
 import { explorerContractUrl } from "@/lib/stellar";
 import { AssetTypeBadge } from "./AssetTypeBadge";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -33,8 +34,10 @@ export function AssetHeader({ asset, network }: AssetHeaderProps) {
           )}
         </div>
 
-        <h1 className="mt-4 text-3xl font-bold tracking-tight text-base-100 sm:text-4xl">
-          {asset.name}
+        <h1 className="mt-4 overflow-hidden text-3xl font-bold tracking-tight text-base-100 sm:text-4xl">
+          <span className="block max-w-full break-words whitespace-normal">
+            {getDisplayText(asset.name, "Unnamed asset")}
+          </span>
         </h1>
 
         <div className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-3">

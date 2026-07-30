@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { AssetEntry } from "@/types";
 import { assetHref, formatUsdCents, truncateAddress } from "@/lib/format";
+import { getDisplayText } from "@/lib/display";
 import { AssetTypeBadge } from "./AssetTypeBadge";
 
 interface AssetCardProps {
@@ -27,7 +28,7 @@ export function AssetCard({ asset, holders, supply }: AssetCardProps) {
 
       <div>
         <h3 className="text-lg font-semibold leading-tight text-base-100 transition-colors group-hover:text-brand-300">
-          {asset.name}
+          {getDisplayText(asset.name, "Unnamed asset")}
         </h3>
         <p className="mt-0.5 text-xs text-base-100/40">Asset #{asset.id.toString()}</p>
       </div>
