@@ -14,6 +14,10 @@ export interface DistributionWithClaim extends Distribution {
 /**
  * All distributions for an asset token, annotated with the connected wallet's
  * claimable amount and claimed status where a wallet is connected.
+ *
+ * Callers should invoke the returned `refetch` after a successful claim
+ * (see ClaimButton's `onClaimed`) so a distribution's row flips to
+ * "claimed" without requiring a manual page refresh.
  */
 export function useDividends(assetToken: string | null) {
   const { network, address } = useWallet();

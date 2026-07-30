@@ -40,14 +40,23 @@ export function ClaimButton({ distributionId, claimable, claimed, onClaimed }: C
   const nothing = claimable <= 0n;
 
   async function onClaim() {
+    // Guard against double-submission even if this ever renders while a
+    // previous run hasn't flipped `phase` away from "idle" yet.
+    if (tx.pending) return;
     const res = await tx.run((ctx) => dividend.claim(ctx, distributionId));
+    // Refetching the dividends list (see AssetDetailView's onClaimed) is what
+    // flips this row to "claimed" without a manual page refresh.
     if (res) onClaimed?.();
   }
 
   return (
     <div className="space-y-2">
       {tx.phase === "idle" ? (
-        <button onClick={onClaim} disabled={nothing} className="btn-primary w-full sm:w-auto">
+        <button
+          onClick={onClaim}
+          disabled={nothing || tx.pending}
+          className="btn-primary w-full sm:w-auto"
+        >
           {nothing
             ? "Nothing to claim"
             : `Claim ${formatTokenAmount(claimable, PAYMENT_TOKEN_DECIMALS)}`}

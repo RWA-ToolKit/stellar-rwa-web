@@ -13,19 +13,46 @@ import { Spinner } from "@/components/ui/Spinner";
  * inspect on the explorer, or disconnect.
  */
 export function ConnectButton() {
-  const { address, connect, disconnect, connecting, installed, network } = useWallet();
+  const { address, connect, disconnect, connecting, installed, network, error } = useWallet();
   const [open, setOpen] = useState(false);
 
   if (!address) {
     return (
-      <button
-        onClick={() => connect().catch(() => {})}
-        disabled={connecting}
-        className="btn-primary"
-      >
-        {connecting ? <Spinner size={16} className="border-base-950/30 border-t-base-950" /> : <WalletIcon />}
-        {connecting ? "Connecting…" : installed ? "Connect Wallet" : "Get Freighter"}
-      </button>
+      <div className="flex flex-col items-end gap-2">
+        <button
+          onClick={() => connect().catch(() => {})}
+          disabled={connecting}
+          className="btn-primary"
+        >
+          {connecting ? <Spinner size={16} className="border-base-950/30 border-t-base-950" /> : <WalletIcon />}
+          {connecting ? "Connecting…" : installed ? "Connect Wallet" : "Get Freighter"}
+        </button>
+        {error && !connecting && (
+          <div
+            role="alert"
+            className="max-w-xs rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-right text-xs text-red-300"
+          >
+            <p>{error}</p>
+            {installed ? (
+              <button
+                onClick={() => connect().catch(() => {})}
+                className="mt-1 font-medium underline underline-offset-2"
+              >
+                Try again
+              </button>
+            ) : (
+              <a
+                href="https://www.freighter.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block font-medium underline underline-offset-2"
+              >
+                Install Freighter ↗
+              </a>
+            )}
+          </div>
+        )}
+      </div>
     );
   }
 

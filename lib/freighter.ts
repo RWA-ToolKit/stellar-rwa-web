@@ -100,15 +100,24 @@ export async function signTx(
 }
 
 /**
+ * Default poll interval for {@link watchWallet}. Freighter has no
+ * push-based change events, so this is a tradeoff between responsiveness and
+ * battery/CPU drain from a background timer; the caller also pauses the
+ * watcher entirely while the tab is hidden (see hooks/useWallet.tsx).
+ */
+export const DEFAULT_WATCH_INTERVAL_MS = 8000;
+
+/**
  * Subscribe to Freighter account/network changes. Returns an unsubscribe fn.
  * Used by the wallet context to keep UI in sync when the user switches
  * accounts or networks inside the extension.
  */
 export function watchWallet(
   onChange: (info: { address: string; network: string }) => void,
+  intervalMs: number = DEFAULT_WATCH_INTERVAL_MS,
 ): () => void {
   try {
-    const watcher = new WatchWalletChanges(2000);
+    const watcher = new WatchWalletChanges(intervalMs);
     watcher.watch(onChange);
     return () => watcher.stop();
   } catch {
