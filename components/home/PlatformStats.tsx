@@ -8,7 +8,11 @@ import { Skeleton } from "@/components/ui/Skeleton";
 /** Headline platform metrics sourced live from the registry contract. */
 export function PlatformStats() {
   const stats = usePlatformStats();
-  const holders = useHolderTotals(stats.data?.assets ?? null);
+  const holders = useHolderTotals(
+    stats.data?.totalHolders !== null ? null : (stats.data?.assets ?? null),
+  );
+
+  const holderCount = stats.data?.totalHolders ?? holders.data ?? null;
 
   const items = [
     {
@@ -21,7 +25,7 @@ export function PlatformStats() {
     },
     {
       label: "Approved holders",
-      value: holders.data !== null && holders.data !== undefined ? compactNumber(holders.data) : null,
+      value: holderCount !== null ? compactNumber(holderCount) : null,
     },
   ];
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import type { TxPhase, TxResult } from "@/types";
+import type { TxPhase, TxResult, TxTelemetry } from "@/types";
 import type { WriteCtx } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { ContractError } from "@/lib/stellar";
@@ -21,15 +21,26 @@ interface RunResult {
 }
 
 /**
+ * Optional telemetry defaults — no-ops when not provided by the consumer.
+ * Assign to `window.__rwaTxTelemetry` or pass via `useTx(telemetry)`.
+ */
+const noopTelemetry: TxTelemetry = {};
+
+/**
  * Drives a single on-chain write: tracks phase (building → signing →
  * submitting → confirming → success/error) so the UI can show progress, and
  * exposes the resulting hash. Errors are captured as friendly messages.
+ *
+ * @param telemetry Optional lifecycle callbacks for product analytics or error
+ * monitoring (e.g. Sentry). Each phase change, success and error emit to the
+ * provided callbacks without blocking the transaction flow.
  */
-export function useTx(): RunResult {
+export function useTx(telemetry?: TxTelemetry): RunResult {
   const { writeCtx } = useWallet();
   const [phase, setPhase] = useState<TxPhase>("idle");
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const t = telemetry ?? noopTelemetry;
 
   const reset = useCallback(() => {
     setPhase("idle");
@@ -42,24 +53,31 @@ export function useTx(): RunResult {
       setError(null);
       setHash(null);
       setPhase("building");
+      t.onPhase?.("building");
       try {
-        const ctx = writeCtx((p) => setPhase(p));
+        const ctx = writeCtx((p) => {
+          setPhase(p);
+          t.onPhase?.(p);
+        });
         const result = await action(ctx);
         setHash(result.hash);
         setPhase("success");
+        t.onPhase?.("success");
+        t.onSuccess?.(result.hash, result);
         return result;
       } catch (e) {
-        // The raw diagnostic (JSON/XDR) is developer-facing only — keep it
-        // out of the user-visible `error` string and log it instead.
+        const msg = e instanceof Error ? e.message : "Transaction failed.";
         if (e instanceof ContractError && e.detail) {
           console.error("Transaction failed:", e.detail);
         }
-        setError(e instanceof Error ? e.message : "Transaction failed.");
+        setError(msg);
         setPhase("error");
+        t.onPhase?.("error", msg);
+        t.onError?.(msg, "error");
         return null;
       }
     },
-    [writeCtx],
+    [writeCtx, t],
   );
 
   return {

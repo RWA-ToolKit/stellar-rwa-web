@@ -99,3 +99,10 @@ export type TxPhase =
   | "confirming"
   | "success"
   | "error";
+
+/** Optional telemetry callbacks for the transaction lifecycle. */
+export interface TxTelemetry {
+  onPhase?: (phase: TxPhase, detail?: string) => void;
+  onSuccess?: (hash: string, result: TxResult) => void;
+  onError?: (error: string, phase: TxPhase) => void;
+}
