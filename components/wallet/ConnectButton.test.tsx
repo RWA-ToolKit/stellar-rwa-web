@@ -51,7 +51,7 @@ const mockUseWallet = useWallet as jest.MockedFunction<typeof useWallet>;
 
 // ── helpers ───────────────────────────────────────────────────────────────
 
-const BASE_WALLET = {
+const BASE_WALLET: ReturnType<typeof useWallet> = {
   address: null,
   connect: jest.fn().mockResolvedValue(undefined),
   disconnect: jest.fn(),
@@ -66,10 +66,8 @@ const BASE_WALLET = {
   writeCtx: jest.fn(),
 };
 
-function setup(overrides: Partial<typeof BASE_WALLET> = {}) {
-  mockUseWallet.mockReturnValue({ ...BASE_WALLET, ...overrides } as ReturnType<
-    typeof useWallet
-  >);
+function setup(overrides: Partial<ReturnType<typeof useWallet>> = {}) {
+  mockUseWallet.mockReturnValue({ ...BASE_WALLET, ...overrides });
   return render(<ConnectButton />);
 }
 

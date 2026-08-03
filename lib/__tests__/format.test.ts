@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { formatUsdCents, formatTokenAmount } from "@/lib/format";
 
 // ---------------------------------------------------------------------------
@@ -166,7 +165,7 @@ describe("formatTokenAmount", () => {
 
   it("applies thousand-grouping with decimals", () => {
     // 1_234_567_89 raw, 2 decimals → 12,345,678.9 → "12,345,678.9"
-    expect(formatTokenAmount(1_234_567_890n, 2)).toBe("12,345,678.90");
+    expect(formatTokenAmount(1_234_567_890n, 2)).toBe("12,345,678.9");
   });
 
   it("applies grouping to negative whole part", () => {
