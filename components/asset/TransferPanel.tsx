@@ -160,7 +160,8 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
                 <span className="text-brand-300">Recipient is KYC-approved.</span>
               ) : (
                 <span className="text-red-400">
-                  Recipient isn't KYC-approved for this asset and can't receive a transfer.
+                  Recipient isn&apos;t KYC-approved for this asset and can&apos;t receive a
+                  transfer.
                 </span>
               )}
             </p>
