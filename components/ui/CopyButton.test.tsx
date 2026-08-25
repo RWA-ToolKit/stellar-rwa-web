@@ -69,7 +69,7 @@ describe("CopyButton", () => {
     expect(screen.getByText("Copy Key")).toBeInTheDocument();
   });
 
-  it("fails silently when clipboard API rejects", async () => {
+  it("surfaces a failed state when clipboard API rejects and the fallback also fails", async () => {
     const writeTextMock = jest.fn().mockRejectedValue(new Error("Clipboard forbidden"));
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText: writeTextMock },
@@ -86,7 +86,16 @@ describe("CopyButton", () => {
     });
 
     expect(writeTextMock).toHaveBeenCalledWith("GABC123456789");
-    // State remains uncopied
+    // The rejection is caught and retried via legacyCopy, which also fails
+    // under jsdom (no document.execCommand), so the button reports the
+    // failure rather than silently pretending the copy succeeded.
+    expect(screen.getByRole("button", { name: "Copy failed" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copied" })).not.toBeInTheDocument();
+
+    // ...and recovers to the idle label once the feedback window elapses.
+    act(() => {
+      jest.advanceTimersByTime(1400);
+    });
     expect(screen.getByRole("button", { name: "Copy GABC123456789" })).toBeInTheDocument();
   });
 });
