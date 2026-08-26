@@ -68,30 +68,19 @@ describe("formatUsdCents", () => {
     expect(formatUsdCents(100_000_000n)).toBe("$1,000,000");
   });
 
-  // --- Number precision bug ------------------------------------------------
-  // NOTE: The implementation converts bigint → Number before dividing by 100.
-  // Number can only represent integers exactly up to 2^53-1 (9_007_199_254_740_991).
-  // Bigint cents values beyond ~900 trillion dollars lose precision silently.
-  // These tests document the *current* (buggy) behaviour, not the desired behaviour.
+  // --- bigint precision ------------------------------------------------
+  // formatUsdCents keeps values in bigint until the final string conversion, so
+  // it stays exact well past Number.MAX_SAFE_INTEGER (2^53-1 cents ≈ $90T).
 
-  it("[precision bug] large value within safe integer range formats correctly", () => {
+  it("preserves precision for a large value within safe integer range", () => {
     // 9_000_000_000_000n cents = $90,000,000,000 — still within Number safe range
     expect(formatUsdCents(9_000_000_000_000n)).toBe("$90,000,000,000");
   });
 
-  it("[precision bug] value exceeding Number.MAX_SAFE_INTEGER loses precision", () => {
-    // 10_000_000_000_000_000n cents ≈ $100 trillion
-    // Number(10_000_000_000_000_000n) / 100 may round incorrectly
-    // We capture the actual output rather than asserting a "correct" value —
-    // this test will FAIL when the bug is fixed (which is the desired signal).
-    const result = formatUsdCents(10_000_000_000_000_000n);
-    // The implementation silently loses precision; result is implementation-defined.
-    // Confirm it at least returns a string (doesn't throw).
-    expect(typeof result).toBe("string");
-    // Document the known-buggy value so regressions are visible:
-    // If Number(10_000_000_000_000_000n) / 100 rounds to 100_000_000_000_000,
-    // the output will be "$100,000,000,000,000" (correct) or nearby (incorrect).
-    expect(result).toMatch(/^\$/);
+  it("preserves precision for a value exceeding Number.MAX_SAFE_INTEGER", () => {
+    // 10_000_000_000_000_000n cents = $100,000,000,000,000 (~$100 trillion)
+    // Converting via Number() would silently round; bigint math does not.
+    expect(formatUsdCents(10_000_000_000_000_000n)).toBe("$100,000,000,000,000");
   });
 });
 
