@@ -161,7 +161,6 @@ type RawDist = {
   payment_token: string;
   total_amount: bigint;
   distributed: bigint;
-  snapshot_ledger: number;
   created_at: number;
   completed: boolean;
 };
@@ -173,7 +172,6 @@ function toDistribution(r: RawDist): Distribution {
     paymentToken: r.payment_token,
     totalAmount: BigInt(r.total_amount),
     distributed: BigInt(r.distributed),
-    snapshotLedger: Number(r.snapshot_ledger),
     createdAt: Number(r.created_at),
     completed: r.completed,
   };
