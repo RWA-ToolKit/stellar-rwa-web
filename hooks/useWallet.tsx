@@ -8,6 +8,7 @@
  */
 
 import {
+  Component,
   createContext,
   useCallback,
   useContext,
@@ -53,6 +54,74 @@ interface WalletContextValue {
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 const STORAGE_KEY = "rwa.wallet.connected";
+
+/**
+ * Value used when the provider fails to initialise. Keeps the app usable in a
+ * read-only, disconnected state instead of blanking the whole tree, and lets
+ * the user retry the wallet connection.
+ */
+const DISCONNECTED_WALLET: WalletContextValue = {
+  address: null,
+  network: DEFAULT_NETWORK,
+  walletNetwork: null,
+  networkUnknown: false,
+  installed: false,
+  connecting: false,
+  error: "The wallet failed to load.",
+  connect: async () => {},
+  disconnect: () => {},
+  setNetwork: () => {},
+  sign: () => Promise.reject(new Error("Connect your wallet first.")),
+  writeCtx: () => {
+    throw new Error("Connect your wallet first.");
+  },
+};
+
+/**
+ * Catches a failure thrown while the WalletProvider initialises (e.g. a
+ * Freighter API throw) and degrades to a disconnected `WalletContext` so the
+ * page stays alive. The `fallback` prop is the same app tree rendered normally
+ * inside the provider; on error it is re-rendered against the disconnected
+ * value with a retry affordance.
+ */
+export class WalletErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("WalletProvider failed to initialise:", error);
+  }
+
+  reset = () => this.setState({ hasError: false });
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <>
+          <WalletContext.Provider value={DISCONNECTED_WALLET}>
+            {this.props.fallback}
+          </WalletContext.Provider>
+          <div
+            role="alert"
+            className="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-2 text-sm text-red-200 backdrop-blur"
+          >
+            <span>Wallet failed to load — browsing in read-only mode.</span>
+            <button onClick={this.reset} className="btn-secondary text-xs">
+              Retry
+            </button>
+          </div>
+        </>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);

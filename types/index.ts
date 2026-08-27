@@ -78,7 +78,6 @@ export interface Distribution {
   paymentToken: string;
   totalAmount: bigint;
   distributed: bigint;
-  snapshotLedger: number;
   createdAt: number;
   completed: boolean;
 }

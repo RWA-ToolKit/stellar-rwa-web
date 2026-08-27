@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { WalletProvider } from "@/hooks/useWallet";
+import { WalletProvider, WalletErrorBoundary } from "@/hooks/useWallet";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { ToastProvider } from "@/components/ui/ToastProvider";
@@ -30,17 +30,25 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <ToastProvider>
+      <SiteHeader />
+      <main className="flex-1">{children}</main>
+      <SiteFooter />
+    </ToastProvider>
+  );
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
       <body className="flex min-h-screen flex-col">
-        <WalletProvider>
-          <ToastProvider>
-            <SiteHeader />
-            <main className="flex-1">{children}</main>
-            <SiteFooter />
-          </ToastProvider>
-        </WalletProvider>
+        <WalletErrorBoundary fallback={<AppShell>{children}</AppShell>}>
+          <WalletProvider>
+            <AppShell>{children}</AppShell>
+          </WalletProvider>
+        </WalletErrorBoundary>
       </body>
     </html>
   );

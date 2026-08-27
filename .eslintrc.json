@@ -1,4 +1,7 @@
 {
   "extends": "next/core-web-vitals",
-  "ignorePatterns": [".next/", "node_modules/", "next-env.d.ts"]
+  "ignorePatterns": [".next/", "node_modules/", "next-env.d.ts"],
+  "rules": {
+    "react/jsx-no-target-blank": "error"
+  }
 }

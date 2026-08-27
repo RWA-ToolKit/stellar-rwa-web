@@ -6,18 +6,29 @@
 import type { AssetType, ComplianceStatus } from "@/types";
 import { ASSET_TYPE_LABELS } from "@/types";
 
-/** Format USD cents (bigint) as a currency string, e.g. 500000000n -> "$5,000,000". */
+/**
+ * Format USD cents (bigint) as a currency string, e.g. 500000000n -> "$5,000,000".
+ * Stays in bigint until the final string conversion so valuations above
+ * Number.MAX_SAFE_INTEGER (2^53-1 cents) keep full precision — mirror of how
+ * formatTokenAmount already scales raw token amounts.
+ */
 export function formatUsdCents(cents: bigint, opts?: { compact?: boolean }): string {
-  const dollars = Number(cents) / 100;
-  if (opts?.compact && Math.abs(dollars) >= 1_000_000) {
-    return "$" + compactNumber(dollars);
+  const negative = cents < 0n;
+  const abs = negative ? -cents : cents;
+  const dollars = abs / 100n;
+  const remainder = abs % 100n;
+  const sign = negative ? "-" : "";
+
+  if (opts?.compact && dollars >= 1_000_000n) {
+    return `${sign}$${compactBigint(dollars)}`;
   }
-  return dollars.toLocaleString("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: dollars % 1 === 0 ? 0 : 2,
-    maximumFractionDigits: 2,
-  });
+
+  const wholeStr = dollars.toLocaleString("en-US");
+  if (remainder === 0n) {
+    return `${sign}$${wholeStr}`;
+  }
+  const fracStr = remainder.toString().padStart(2, "0");
+  return `${sign}$${wholeStr}.${fracStr}`;
 }
 
 /** Compact large numbers: 5_000_000 -> "5M", 12_300 -> "12.3K". */
@@ -31,6 +42,19 @@ export function compactNumber(n: number): string {
 
 function trimZero(n: number): string {
   return n.toFixed(1).replace(/\.0$/, "");
+}
+
+/**
+ * Compact a whole-dollar bigint for the `compact` display path. The magnitude is
+ * divided in bigint (so it never rounds away precision the way `Number()` on a
+ * large cents value would), then the small quotient is formatted.
+ */
+function compactBigint(n: bigint): string {
+  const abs = n < 0n ? -n : n;
+  if (abs >= 1_000_000_000n) return trimZero(Number(n) / 1_000_000_000) + "B";
+  if (abs >= 1_000_000n) return trimZero(Number(n) / 1_000_000) + "M";
+  if (abs >= 1_000n) return trimZero(Number(n) / 1_000) + "K";
+  return n.toString();
 }
 
 /**
