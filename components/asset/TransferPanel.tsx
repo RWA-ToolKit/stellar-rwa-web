@@ -57,6 +57,14 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   // treating an unresolved status as "not allowed" would flash "Transfer
   // unavailable" copy before the check completes (issues #33 / #34).
   const canTransfer = !complianceLoading && approved && !paused && balance > 0n;
+  let amountValid = false;
+  try {
+    const rawAmount = parseTokenAmount(amount, metadata.decimals);
+    amountValid = rawAmount > 0n && rawAmount <= balance;
+  } catch {
+    amountValid = false;
+  }
+  const formValid = recipientFormatValid && amountValid;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -202,7 +210,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
         {tx.phase === "idle" ? (
           <button
             type="submit"
-            disabled={!canTransfer || complianceLoading}
+            disabled={!canTransfer || complianceLoading || !formValid}
             className="btn-primary w-full"
           >
             {complianceLoading

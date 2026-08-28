@@ -52,10 +52,15 @@ interface ComplianceBadgeProps {
 /** Status pill for an address's KYC/compliance standing. */
 export function ComplianceBadge({ status, labelOverride, className = "" }: ComplianceBadgeProps) {
   const s = STYLES[status];
+  const label = labelOverride ?? s.label;
   return (
-    <span className={`chip border ${s.bg} ${s.text} ${className}`}>
+    <span
+      role="status"
+      aria-label={label}
+      className={`chip border ${s.bg} ${s.text} ${className}`}
+    >
       <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
-      {labelOverride ?? s.label}
+      {label}
     </span>
   );
 }
