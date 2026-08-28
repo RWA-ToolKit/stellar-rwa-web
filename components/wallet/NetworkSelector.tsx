@@ -40,16 +40,27 @@ export function NetworkSelector() {
     );
   }
 
+  /*
+   * #219 a11y: the two network toggle buttons are a logical group — wrap them
+   * in a div with role="group" and aria-label so screen readers announce the
+   * purpose before reading individual button labels.
+   * #215 a11y: each button now carries a focus-visible ring.
+   * #218 a11y: inactive button text bumped from /50 to /65 for WCAG AA contrast.
+   */
   return (
-    <div className="inline-flex rounded-xl border border-white/10 bg-base-900/60 p-0.5">
+    <div
+      role="group"
+      aria-label="Select network"
+      className="inline-flex rounded-xl border border-white/10 bg-base-900/60 p-0.5"
+    >
       {NETWORKS.map((n) => (
         <button
           key={n.value}
           onClick={() => setNetwork(n.value)}
-          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+          className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-900 ${
             network === n.value
               ? "bg-white/10 text-base-100"
-              : "text-base-100/50 hover:text-base-100/80"
+              : "text-base-100/65 hover:text-base-100/80"
           }`}
           aria-pressed={network === n.value}
         >

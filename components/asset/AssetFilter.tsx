@@ -26,6 +26,10 @@ const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
 export function AssetFilter({ value, onChange, counts }: AssetFilterProps) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* #215 a11y: focus-visible rings added to filter chip buttons.
+          #216 a11y: aria-label encodes the count so screen readers announce it
+                     alongside the visible badge (e.g. "Real Estate, 12 assets").
+          #218 a11y: inactive chip text bumped from /60 to /70. */}
       <div className="flex flex-wrap gap-2">
         {TYPE_OPTIONS.map((opt) => {
           const active = value.type === opt.value;
@@ -35,15 +39,16 @@ export function AssetFilter({ value, onChange, counts }: AssetFilterProps) {
               key={opt.value}
               onClick={() => onChange({ ...value, type: opt.value })}
               aria-pressed={active}
-              className={`chip border transition-colors ${
+              aria-label={count !== undefined ? `${opt.label}, ${count} asset${count === 1 ? "" : "s"}` : opt.label}
+              className={`chip border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950 ${
                 active
                   ? "border-brand-500/40 bg-brand-500/15 text-brand-200"
-                  : "border-white/10 bg-white/[0.03] text-base-100/60 hover:text-base-100/90"
+                  : "border-white/10 bg-white/[0.03] text-base-100/70 hover:text-base-100/90"
               }`}
             >
               {opt.label}
               {count !== undefined && (
-                <span className={active ? "text-brand-300/70" : "text-base-100/30"}>
+                <span aria-hidden="true" className={active ? "text-brand-300/70" : "text-base-100/40"}>
                   {count}
                 </span>
               )}
@@ -52,11 +57,17 @@ export function AssetFilter({ value, onChange, counts }: AssetFilterProps) {
         })}
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-base-100/50">
+      {/* #219 a11y: the <label> wraps the <select> so they're associated. The
+          visible "Sort" text is hidden on small screens but the label element
+          itself still provides the accessible name via the wrapping relationship.
+          An aria-label is added to the <select> as a belt-and-suspenders for
+          assistive technology that reads the select before the label text. */}
+      <label className="flex items-center gap-2 text-sm text-base-100/60">
         <span className="hidden sm:inline">Sort</span>
         <select
           value={value.sort}
           onChange={(e) => onChange({ ...value, sort: e.target.value as SortKey })}
+          aria-label="Sort assets"
           className="input w-auto cursor-pointer py-2 pr-8"
         >
           <option value="valuation">Highest valuation</option>

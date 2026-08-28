@@ -170,11 +170,12 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
         <div>
           <div className="flex items-center justify-between">
             <label htmlFor="transfer-amount" className="label">Amount</label>
+            {/* #215 a11y: focus-visible ring added (no .btn base class here) */}
             {canTransfer && (
               <button
                 type="button"
                 onClick={() => setAmount(formatRawPlain(balance, metadata.decimals))}
-                className="mb-1.5 text-xs text-brand-400 hover:text-brand-300"
+                className="mb-1.5 text-xs text-brand-400 hover:text-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-950 rounded"
               >
                 Max
               </button>

@@ -35,24 +35,25 @@ export function SiteFooter() {
 
           <div className="grid grid-cols-2 gap-10 text-sm sm:gap-16">
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-base-100/40">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-base-100/50">
                 Platform
               </p>
-              <ul className="space-y-2 text-base-100/60">
-                <li><Link href="/explore" className="hover:text-brand-300">Explore assets</Link></li>
-                <li><Link href="/asset/new" className="hover:text-brand-300">Tokenize an asset</Link></li>
-                <li><Link href="/issuer" className="hover:text-brand-300">Issuer dashboard</Link></li>
-                <li><Link href="/portfolio" className="hover:text-brand-300">Portfolio</Link></li>
+              {/* #215 a11y: focus-visible rings; #218 a11y: bumped from /60 to /70 */}
+              <ul className="space-y-2 text-base-100/70">
+                <li><Link href="/explore" className="hover:text-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-950 rounded">Explore assets</Link></li>
+                <li><Link href="/asset/new" className="hover:text-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-950 rounded">Tokenize an asset</Link></li>
+                <li><Link href="/issuer" className="hover:text-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-950 rounded">Issuer dashboard</Link></li>
+                <li><Link href="/portfolio" className="hover:text-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-950 rounded">Portfolio</Link></li>
               </ul>
             </div>
             <div>
-              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-base-100/40">
+              <p className="mb-3 text-xs font-medium uppercase tracking-wide text-base-100/50">
                 Developers
               </p>
-              <ul className="space-y-2 text-base-100/60">
-                <li><a href={CONTRACTS_REPO} target="_blank" rel="noopener noreferrer" className="hover:text-brand-300">Contracts ↗</a></li>
-                <li><a href={DOCS_REPO} target="_blank" rel="noopener noreferrer" className="hover:text-brand-300">API &amp; Docs ↗</a></li>
-                <li><a href="https://developers.stellar.org/docs/build/smart-contracts" target="_blank" rel="noopener noreferrer" className="hover:text-brand-300">Soroban ↗</a></li>
+              <ul className="space-y-2 text-base-100/70">
+                <li><a href={CONTRACTS_REPO} target="_blank" rel="noopener noreferrer" className="hover:text-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-950 rounded">Contracts ↗</a></li>
+                <li><a href={DOCS_REPO} target="_blank" rel="noopener noreferrer" className="hover:text-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-950 rounded">API &amp; Docs ↗</a></li>
+                <li><a href="https://developers.stellar.org/docs/build/smart-contracts" target="_blank" rel="noopener noreferrer" className="hover:text-brand-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-950 rounded">Soroban ↗</a></li>
               </ul>
             </div>
           </div>

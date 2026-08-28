@@ -19,6 +19,7 @@ export function ConnectButton() {
   if (!address) {
     return (
       <div className="flex flex-col items-end gap-2">
+        {/* #215 a11y: btn-primary already has focus-visible ring from globals.css */}
         <button
           onClick={() => connect().catch(() => {})}
           disabled={connecting}
@@ -36,7 +37,7 @@ export function ConnectButton() {
             {installed ? (
               <button
                 onClick={() => connect().catch(() => {})}
-                className="mt-1 font-medium underline underline-offset-2"
+                className="mt-1 font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-900 rounded"
               >
                 Try again
               </button>
@@ -45,7 +46,7 @@ export function ConnectButton() {
                 href="https://www.freighter.app"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-1 inline-block font-medium underline underline-offset-2"
+                className="mt-1 inline-block font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-900 rounded"
               >
                 Install Freighter ↗
               </a>
@@ -80,18 +81,20 @@ export function ConnectButton() {
           >
             <div className="mb-2 rounded-xl bg-base-950/60 p-3">
               <div className="mb-1 flex items-center justify-between">
-                <span className="text-[10px] font-medium uppercase tracking-wide text-base-100/40">
+                {/* #218 a11y: bumped from /40 to /55 for WCAG AA contrast */}
+                <span className="text-[10px] font-medium uppercase tracking-wide text-base-100/55">
                   Connected · {network}
                 </span>
                 <CopyButton value={address} />
               </div>
               <p className="break-all font-mono text-xs text-base-100/80">{address}</p>
             </div>
+            {/* #215 a11y: btn-secondary carries focus-visible ring; inline links get explicit ring */}
             <a
               href={explorerAccountUrl(network, address)}
               target="_blank"
               rel="noopener noreferrer"
-              className="block rounded-lg px-3 py-2 text-sm text-base-100/70 hover:bg-white/5"
+              className="block rounded-lg px-3 py-2 text-sm text-base-100/70 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-inset"
             >
               View on Stellar Expert ↗
             </a>
@@ -100,7 +103,7 @@ export function ConnectButton() {
                 disconnect();
                 setOpen(false);
               }}
-              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-300 hover:bg-red-500/10"
+              className="block w-full rounded-lg px-3 py-2 text-left text-sm text-red-300 hover:bg-red-500/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-inset"
             >
               Disconnect
             </button>

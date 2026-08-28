@@ -88,16 +88,21 @@ export function Step2AssetDetails({ validated, initial, onBack, onNext }: Step2P
           {errors.name && <p className="mt-1 text-xs text-red-400">{errors.name}</p>}
         </div>
 
-        {/* Asset type */}
-        <div>
-          <span className="label block">Asset class</span>
+        {/* Asset type
+            #219 a11y: the toggle buttons form a logical choice group — wrapping
+            them in a <fieldset> with a <legend> gives screen readers the group
+            name ("Asset class") before reading the individual option labels.
+            #215 a11y: each button carries a focus-visible ring. */}
+        <fieldset>
+          <legend className="label block">Asset class</legend>
           <div className="grid grid-cols-3 gap-2">
             {ASSET_TYPES.map((t) => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setAssetType(t)}
-                className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors ${
+                aria-pressed={assetType === t}
+                className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950 ${
                   assetType === t
                     ? "border-brand-500/50 bg-brand-500/15 text-brand-300"
                     : "border-white/10 bg-white/[0.02] text-base-100/60 hover:border-white/20 hover:text-base-100"
@@ -107,7 +112,7 @@ export function Step2AssetDetails({ validated, initial, onBack, onNext }: Step2P
               </button>
             ))}
           </div>
-        </div>
+        </fieldset>
 
         {/* Valuation */}
         <div>

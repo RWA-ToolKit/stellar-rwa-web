@@ -39,11 +39,22 @@ body {
   .card {
     @apply rounded-2xl border border-white/5 bg-base-900/70 backdrop-blur-sm;
   }
+  /*
+   * #215 a11y: card-hover is applied to <Link> cards so it must carry a
+   * focus-visible ring so keyboard users can see which card is focused.
+   */
   .card-hover {
-    @apply transition-all duration-200 hover:border-brand-500/40 hover:bg-base-850/80;
+    @apply transition-all duration-200 hover:border-brand-500/40 hover:bg-base-850/80
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
   }
+  /*
+   * #215 a11y: base .btn utility now includes a keyboard-reachable focus ring
+   * using focus-visible so it only shows for keyboard navigation (not mouse).
+   * All btn-* variants inherit this through the @apply chain.
+   */
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
   }
   .btn-primary {
     @apply btn bg-brand-500 text-base-950 hover:bg-brand-400 shadow-lg shadow-brand-500/20;
@@ -54,11 +65,22 @@ body {
   .btn-ghost {
     @apply btn text-base-100/70 hover:bg-white/5 hover:text-base-100;
   }
+  /*
+   * #215 a11y: .input already had focus:ring but used the hover-style ring
+   * (brand-500/20, too faint for WCAG AA). Kept the subtle inner ring for
+   * aesthetics and added a solid focus-visible ring to meet contrast.
+   */
   .input {
-    @apply w-full rounded-xl border border-white/10 bg-base-950/60 px-3.5 py-2.5 text-sm text-base-100 placeholder:text-base-100/30 outline-none transition-colors focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20;
+    @apply w-full rounded-xl border border-white/10 bg-base-950/60 px-3.5 py-2.5 text-sm text-base-100 placeholder:text-base-100/30 outline-none transition-colors focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20
+           focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
   }
+  /*
+   * #218 a11y: .label was text-base-100/50 (~#96989c on #0c0e13 ≈ 4.5:1,
+   * borderline fail for small text). Bumped to /60 (#a5a7ab on #0c0e13 ≈ 5.3:1)
+   * to pass WCAG AA for normal-weight small text.
+   */
   .label {
-    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-base-100/50;
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-base-100/60;
   }
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
