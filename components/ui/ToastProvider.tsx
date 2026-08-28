@@ -42,7 +42,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <div aria-live="polite" className="pointer-events-none fixed bottom-4 right-4 z-50 flex w-full max-w-sm flex-col gap-2 px-4">
         {toasts.map((toast) => (
-          <div key={toast.id} role="status" className="pointer-events-auto rounded-xl border border-white/10 bg-slate-900/95 p-3 shadow-2xl backdrop-blur">
+          <div
+            key={toast.id}
+            role={toast.tone === "error" ? "alert" : "status"}
+            aria-live={toast.tone === "error" ? "assertive" : "polite"}
+            className="pointer-events-auto rounded-xl border border-white/10 bg-slate-900/95 p-3 shadow-2xl backdrop-blur"
+          >
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-white">{toast.title}</p>

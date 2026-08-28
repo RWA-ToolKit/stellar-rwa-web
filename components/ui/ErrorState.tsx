@@ -15,6 +15,7 @@ export function ErrorState({
   return (
     <div
       role="alert"
+      aria-live="assertive"
       className={`flex flex-col items-center justify-center gap-3 rounded-2xl border border-red-500/20 bg-red-500/5 px-6 py-14 text-center ${className}`}
     >
       <div className="flex h-11 w-11 items-center justify-center rounded-full bg-red-500/10 text-red-400">

@@ -46,7 +46,11 @@ export function TxProgress({
 
   if (pending) {
     return (
-      <div className="flex items-center gap-3 rounded-xl border border-brand-500/20 bg-brand-500/5 px-4 py-3 text-sm text-base-100/80">
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex items-center gap-3 rounded-xl border border-brand-500/20 bg-brand-500/5 px-4 py-3 text-sm text-base-100/80"
+      >
         <Spinner size={18} />
         <span>{PHASE_LABEL[phase]}</span>
       </div>
@@ -57,6 +61,7 @@ export function TxProgress({
     return (
       <div
         role="alert"
+        aria-live="assertive"
         className="flex items-start justify-between gap-3 rounded-xl border border-red-500/25 bg-red-500/5 px-4 py-3 text-sm"
       >
         <div className="flex items-start gap-2.5 text-red-300">
@@ -77,7 +82,11 @@ export function TxProgress({
 
   // success
   return (
-    <div className="flex items-start justify-between gap-3 rounded-xl border border-brand-500/25 bg-brand-500/5 px-4 py-3 text-sm">
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex items-start justify-between gap-3 rounded-xl border border-brand-500/25 bg-brand-500/5 px-4 py-3 text-sm"
+    >
       <div className="flex items-start gap-2.5 text-brand-300">
         <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
           <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
