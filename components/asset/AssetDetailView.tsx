@@ -53,7 +53,8 @@ export function AssetDetailView({ id }: { id: bigint }) {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
-      <Link href="/explore" className="mb-5 inline-flex items-center gap-1.5 text-sm text-base-100/50 hover:text-base-100">
+      {/* #215 a11y: focus-visible ring added to back link */}
+      <Link href="/explore" className="mb-5 inline-flex items-center gap-1.5 text-sm text-base-100/60 hover:text-base-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950 rounded">
         ← Explore
       </Link>
 

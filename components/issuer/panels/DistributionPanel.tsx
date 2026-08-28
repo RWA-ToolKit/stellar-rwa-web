@@ -171,7 +171,8 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
       ) : error ? (
         <p className="py-2 text-sm text-red-400/80">
           Could not load distributions.{" "}
-          <button onClick={refetch} className="underline">Retry</button>
+          {/* #215 a11y: focus-visible ring added to inline text button */}
+          <button onClick={refetch} className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-900 rounded">Retry</button>
         </p>
       ) : distributions.length === 0 ? (
         <EmptyState
