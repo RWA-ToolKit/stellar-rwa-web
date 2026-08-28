@@ -124,7 +124,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
 
       {/* Explicit gating messages. */}
       {!compliance.loading && !approved && (
-        <p className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 text-xs text-amber-200/90">
+        <p role="alert" aria-live="polite" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 text-xs text-amber-200/90">
           {status === "None"
             ? "Your address isn't on this asset's KYC allowlist. Ask the issuer to approve you before you can hold or transfer it."
             : status === "Suspended"
@@ -135,7 +135,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
         </p>
       )}
       {paused && (
-        <p className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 text-xs text-amber-200/90">
+        <p role="alert" aria-live="polite" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 text-xs text-amber-200/90">
           Transfers are paused by the issuer for this asset.
         </p>
       )}
@@ -153,7 +153,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             spellCheck={false}
           />
           {recipientFormatValid && (
-            <p className="mt-1.5 text-xs">
+            <p role="status" aria-live="polite" className="mt-1.5 text-xs">
               {recipientCompliance.loading ? (
                 <span className="text-base-100/40">Checking recipient compliance…</span>
               ) : recipientCompliance.data?.allowed ? (
@@ -196,7 +196,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
           </div>
         </div>
 
-        {formError && <p className="text-xs text-red-400">{formError}</p>}
+        {formError && <p role="alert" aria-live="assertive" className="text-xs text-red-400">{formError}</p>}
 
         {tx.phase === "idle" ? (
           <button

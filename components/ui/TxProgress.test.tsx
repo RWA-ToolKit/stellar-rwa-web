@@ -22,12 +22,15 @@ describe("TxProgress", () => {
     ["signing", /Awaiting signature in Freighter…/],
     ["submitting", /Submitting to the network…/],
     ["confirming", /Confirming on-chain…/],
-  ])("shows pending text for %s phase", (phase, expected) => {
+  ])("shows pending text for %s phase with polite live region", (phase, expected) => {
     render(<TxProgress phase={phase as any} hash={null} error={null} />);
+    const statusEl = screen.getByRole("status");
+    expect(statusEl).toBeInTheDocument();
+    expect(statusEl).toHaveAttribute("aria-live", "polite");
     expect(screen.getByText(expected)).toBeInTheDocument();
   });
 
-  it("renders error state with message and dismiss button", () => {
+  it("renders error state with message, dismiss button, and assertive live region", () => {
     const onDismiss = jest.fn();
     render(
       <TxProgress
@@ -37,12 +40,14 @@ describe("TxProgress", () => {
         onDismiss={onDismiss}
       />,
     );
-    expect(screen.getByRole("alert")).toHaveTextContent("Network issue");
+    const alertEl = screen.getByRole("alert");
+    expect(alertEl).toHaveTextContent("Network issue");
+    expect(alertEl).toHaveAttribute("aria-live", "assertive");
     fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
     expect(onDismiss).toHaveBeenCalled();
   });
 
-  it("renders success state with explorer link when hash exists", () => {
+  it("renders success state with explorer link when hash exists and polite live region", () => {
     render(
       <TxProgress
         phase="success"
@@ -51,6 +56,9 @@ describe("TxProgress", () => {
         successMessage="Done"
       />,
     );
+    const statusEl = screen.getByRole("status");
+    expect(statusEl).toBeInTheDocument();
+    expect(statusEl).toHaveAttribute("aria-live", "polite");
     expect(screen.getByText("Done")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /view on stellar expert/i })).toHaveAttribute(
       "href",

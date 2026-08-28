@@ -19,7 +19,11 @@ export function Spinner({ size = 20, className = "", label }: SpinnerProps) {
 /** Full-panel loading state used inside cards and page sections. */
 export function LoadingPanel({ label = "Loading…" }: { label?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 text-base-100/50">
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex flex-col items-center justify-center gap-3 py-16 text-base-100/50"
+    >
       <Spinner size={28} />
       <p className="text-sm">{label}</p>
     </div>
