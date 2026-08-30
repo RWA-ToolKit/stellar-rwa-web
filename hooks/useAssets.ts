@@ -8,8 +8,13 @@ import { useAsync } from "@/hooks/useAsync";
 import type { AssetEntry, Network } from "@/types";
 
 async function loadAssets(network: Network, includeInactive?: boolean): Promise<AssetEntry[]> {
-  const fromApi = await api.getAllAssets();
-  if (fromApi) return includeInactive ? fromApi : fromApi.filter((a) => a.active);
+  try {
+    const fromApi = await api.getAllAssets(network);
+    if (fromApi) return includeInactive ? fromApi : fromApi.filter((a) => a.active);
+  } catch (err) {
+    console.warn("API getAllAssets failed, falling back to on-chain registry:", err);
+  }
+  
   const all = await registry.getAllAssets(network);
   return includeInactive ? all : all.filter((a) => a.active);
 }
@@ -34,15 +39,20 @@ export function usePlatformStats() {
   const { network } = useWallet();
   return useAsync<PlatformStatsData>(
     async () => {
-      const fromApi = await api.getStats();
-      if (fromApi) {
-        return {
-          totalAssets: fromApi.totalAssets,
-          tvl: BigInt(fromApi.tvl),
-          totalHolders: fromApi.totalHolders,
-          assets: null,
-        };
+      try {
+        const fromApi = await api.getStats(network);
+        if (fromApi) {
+          return {
+            totalAssets: fromApi.totalAssets,
+            tvl: BigInt(fromApi.tvl),
+            totalHolders: fromApi.totalHolders,
+            assets: null,
+          };
+        }
+      } catch (err) {
+        console.warn("API getStats failed, falling back to on-chain registry:", err);
       }
+      
       const [assets, tvl] = await Promise.all([
         registry.getAllAssets(network),
         registry.totalValueLocked(network),
@@ -58,8 +68,14 @@ export function useIssuerAssets(issuer: string | null, network: Network) {
   return useAsync<AssetEntry[]>(
     async () => {
       if (!issuer) return [];
-      const fromApi = await api.getAssetsByIssuer(issuer);
-      if (fromApi) return fromApi;
+      
+      try {
+        const fromApi = await api.getAssetsByIssuer(issuer, network);
+        if (fromApi) return fromApi;
+      } catch (err) {
+        console.warn("API getAssetsByIssuer failed, falling back to on-chain registry:", err);
+      }
+      
       return registry.getAssetsByIssuer(network, issuer);
     },
     [issuer, network],

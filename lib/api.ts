@@ -9,11 +9,37 @@ function apiUrl(path: string): string {
   return `${BASE.replace(/\/+$/, "")}${path}`;
 }
 
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number,
+    public readonly originalError?: Error,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function fetchJson<T>(url: string): Promise<T | null> {
   if (!url) return null;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new ApiError(
+        `HTTP ${res.status}: ${res.statusText}`,
+        res.status,
+      );
+    }
+    return res.json();
+  } catch (err) {
+    const error = err instanceof ApiError ? err : new ApiError(
+      err instanceof Error ? err.message : String(err),
+      undefined,
+      err instanceof Error ? err : undefined,
+    );
+    console.error("API fetch failed:", error.message, { url, error });
+    throw error;
+  }
 }
 
 export interface ApiAssetEntry {
@@ -67,10 +93,28 @@ export const api = {
     return fetchJson<ApiPaginatedResult<ApiAssetEntry>>(apiUrl(`/assets?${params}`));
   },
 
-  async getAllAssets(): Promise<AssetEntry[] | null> {
-    const raw = await fetchJson<ApiPaginatedResult<ApiAssetEntry>>(apiUrl("/assets?pageSize=500"));
-    if (!raw) return null;
-    return raw.data.map(toAssetEntry);
+  async getAllAssets(network?: Network): Promise<AssetEntry[] | null> {
+    const all: AssetEntry[] = [];
+    let page = 1;
+    const pageSize = 500;
+    
+    while (true) {
+      const params = new URLSearchParams({ 
+        page: String(page), 
+        pageSize: String(pageSize) 
+      });
+      if (network) params.set("network", network);
+      
+      const raw = await fetchJson<ApiPaginatedResult<ApiAssetEntry>>(apiUrl(`/assets?${params}`));
+      if (!raw) return null;
+      
+      all.push(...raw.data.map(toAssetEntry));
+      
+      if (page >= raw.totalPages) break;
+      page++;
+    }
+    
+    return all;
   },
 
   async getAsset(id: bigint): Promise<AssetEntry | null> {
@@ -78,14 +122,36 @@ export const api = {
     return raw ? toAssetEntry(raw) : null;
   },
 
-  async getAssetsByIssuer(issuer: string): Promise<AssetEntry[] | null> {
-    const raw = await fetchJson<ApiPaginatedResult<ApiAssetEntry>>(apiUrl(`/assets?issuer=${encodeURIComponent(issuer)}&pageSize=500`));
-    if (!raw) return null;
-    return raw.data.map(toAssetEntry);
+  async getAssetsByIssuer(issuer: string, network?: Network): Promise<AssetEntry[] | null> {
+    const all: AssetEntry[] = [];
+    let page = 1;
+    const pageSize = 500;
+    
+    while (true) {
+      const params = new URLSearchParams({ 
+        issuer: issuer,
+        page: String(page), 
+        pageSize: String(pageSize) 
+      });
+      if (network) params.set("network", network);
+      
+      const raw = await fetchJson<ApiPaginatedResult<ApiAssetEntry>>(apiUrl(`/assets?${params}`));
+      if (!raw) return null;
+      
+      all.push(...raw.data.map(toAssetEntry));
+      
+      if (page >= raw.totalPages) break;
+      page++;
+    }
+    
+    return all;
   },
 
-  getStats(): Promise<ApiStatsResult | null> {
-    return fetchJson<ApiStatsResult>(apiUrl("/stats"));
+  getStats(network?: Network): Promise<ApiStatsResult | null> {
+    const params = new URLSearchParams();
+    if (network) params.set("network", network);
+    const qs = params.toString();
+    return fetchJson<ApiStatsResult>(apiUrl(`/stats${qs ? "?" + qs : ""}`));
   },
 
   async getHolders(tokenContract: string): Promise<{ address: string; balance: bigint }[] | null> {

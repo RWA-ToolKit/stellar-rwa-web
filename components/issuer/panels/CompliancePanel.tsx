@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
-import type { AssetDetail } from "@/types";
+import type { AssetDetail, ComplianceStatus } from "@/types";
 import { compliance } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useAllowlist } from "@/hooks/useCompliance";
@@ -208,7 +208,7 @@ function AllowlistRow({
   complianceId,
   onChanged,
 }: {
-  record: { address: string; status: string; jurisdiction: string };
+  record: { address: string; status: ComplianceStatus; jurisdiction: string };
   complianceId: string;
   onChanged?: () => void;
 }) {
@@ -226,7 +226,7 @@ function AllowlistRow({
             {truncateAddress(record.address, 6, 6)}
           </span>
           <CopyButton value={record.address} />
-          <ComplianceBadge status={record.status as never} />
+          <ComplianceBadge status={record.status} />
           <span className="text-[10px] text-base-100/40">{record.jurisdiction}</span>
         </div>
         <div className="flex items-center gap-2">
