@@ -100,6 +100,17 @@ npm run dev                  # http://localhost:3000
 Install the [Freighter](https://freighter.app) browser extension and point it at
 **Testnet** to interact with the deployed contracts.
 
+### Pre-commit hook
+
+This project uses a Git pre-commit hook to run `typecheck` and `lint` before each commit. The hook:
+
+- Runs `npm run typecheck` against the entire codebase (to catch type errors early)
+- Runs `npm run lint` against only staged files (via `lint-staged`, keeping commit performance reasonable without skipping critical feedback)
+- Fails the commit (non-zero exit) if either check fails
+- Succeeds silently if both pass
+
+To skip the hook in exceptional cases, use `git commit --no-verify` (use sparingly — the hook exists to prevent CI failures).
+
 ### Scripts
 
 | Script            | Purpose                          |
