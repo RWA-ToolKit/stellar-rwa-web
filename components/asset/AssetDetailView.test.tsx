@@ -113,6 +113,26 @@ function setup() {
 describe("AssetDetailView", () => {
   afterEach(() => jest.clearAllMocks());
 
+  it("renders skeleton while asset is loading", () => {
+    mockUseWallet.mockReturnValue({ network: "testnet", address: null } as ReturnType<typeof useWallet>);
+    mockUseAsset.mockReturnValue({ data: null, loading: true, error: null, refetch: jest.fn() });
+    mockUseBalance.mockReturnValue({ data: 0n, loading: false, error: null, refetch: jest.fn() });
+    mockUseDividends.mockReturnValue({ data: [], loading: false, error: null, refetch: jest.fn() });
+    mockUseHolders.mockReturnValue({ data: [], loading: false, error: null, refetch: jest.fn() });
+    mockUseComplianceOverview.mockReturnValue({
+      data: null,
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    mockUseAsync.mockReturnValue({ data: 123, loading: false, error: null, refetch: jest.fn() });
+
+    const { container } = render(<AssetDetailView id={1n} />);
+
+    const skeletons = container.querySelectorAll("[aria-hidden='true']");
+    expect(skeletons.length).toBeGreaterThan(0);
+  });
+
   it("renders every asset detail sub-panel", () => {
     setup();
 

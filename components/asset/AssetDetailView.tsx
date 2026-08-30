@@ -13,7 +13,7 @@ import { TransferPanel } from "./TransferPanel";
 import { CompliancePanel } from "./CompliancePanel";
 import { HolderList } from "./HolderList";
 import { DistributionCard } from "@/components/dividend/DistributionCard";
-import { LoadingPanel } from "@/components/ui/Spinner";
+import { AssetDetailSkeleton } from "./AssetDetailSkeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getDisplayText } from "@/lib/display";
@@ -28,11 +28,7 @@ export function AssetDetailView({ id }: { id: bigint }) {
   const [holdersRefreshKey, setHoldersRefreshKey] = useState(0);
 
   if (asset.loading) {
-    return (
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
-        <LoadingPanel label="Loading asset…" />
-      </div>
-    );
+    return <AssetDetailSkeleton />;
   }
   if (asset.error || !asset.data) {
     return (
