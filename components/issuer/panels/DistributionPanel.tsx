@@ -214,7 +214,7 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400"
-                    style={{ width: `${pct}%` }}
+                    style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
                   />
                 </div>
               </li>

@@ -320,8 +320,13 @@ function JurisdictionCard({
     return null;
   }
 
+  // Either form being in-flight locks out the other to prevent racing a
+  // block and an unblock against the same jurisdiction before either confirms.
+  const eitherPending = blockTx.pending || unblockTx.pending;
+
   async function onBlock(e: React.FormEvent) {
     e.preventDefault();
+    if (eitherPending) return;
     const err = validateJur(blockJur);
     if (err) { setBlockError(err); return; }
     setBlockError(null);
@@ -333,6 +338,7 @@ function JurisdictionCard({
 
   async function onUnblock(e: React.FormEvent) {
     e.preventDefault();
+    if (eitherPending) return;
     const err = validateJur(unblockJur);
     if (err) { setUnblockError(err); return; }
     setUnblockError(null);
@@ -365,10 +371,10 @@ function JurisdictionCard({
               onChange={(e) => setBlockJur(e.target.value.toUpperCase())}
               placeholder="e.g. KP"
               maxLength={3}
-              disabled={blockTx.pending}
+              disabled={eitherPending}
               className="input flex-1 uppercase"
             />
-            <button type="submit" disabled={blockTx.pending} className="btn-secondary shrink-0">
+            <button type="submit" disabled={eitherPending} className="btn-secondary shrink-0">
               Block
             </button>
           </div>
@@ -394,10 +400,10 @@ function JurisdictionCard({
               onChange={(e) => setUnblockJur(e.target.value.toUpperCase())}
               placeholder="e.g. US"
               maxLength={3}
-              disabled={unblockTx.pending}
+              disabled={eitherPending}
               className="input flex-1 uppercase"
             />
-            <button type="submit" disabled={unblockTx.pending} className="btn-secondary shrink-0">
+            <button type="submit" disabled={eitherPending} className="btn-secondary shrink-0">
               Unblock
             </button>
           </div>

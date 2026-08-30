@@ -122,6 +122,26 @@ types/          Domain types mirroring the contracts
 - Monetary valuations are stored on-chain as **USD cents** (`i128`); token
   amounts are integers in each token's own `decimals` base.
 
+### Issuer dashboard roles
+
+The `/issuer` dashboard exposes three tabs that call privileged contract
+methods. All three require the connected wallet to match the asset's on-chain
+`admin` address (recorded in `AssetMetadata.admin` at token deployment).
+
+| Tab | Contract methods | Required on-chain role |
+|---|---|---|
+| Token | `mint`, `pause`, `unpause` | asset-token `admin` |
+| Compliance | `add_to_allowlist`, `suspend`, `remove`, `block_jurisdiction`, `unblock_jurisdiction` | compliance contract `admin` (same address as the token admin) |
+| Distributions | `create_distribution` | asset-token `admin` / registered issuer |
+
+When a non-admin wallet submits any of these actions, the Soroban contract
+reverts with an `Auth` error. `useTx` catches the revert and surfaces it as a
+generic "Transaction failed" toast via `TxProgress`. The UI does not currently
+distinguish an authorisation failure from other contract errors — it assumes the
+connected wallet is the admin. A future improvement is to compare
+`AssetMetadata.admin` against the connected address in the client and show an
+explicit "you are not the admin" notice before letting an action be attempted.
+
 ## Pages
 
 | Route          | Status | Description                                            |
