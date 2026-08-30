@@ -8,6 +8,7 @@ import { useTx } from "@/hooks/useTx";
 import { parseTokenAmount, formatTokenAmount } from "@/lib/format";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { TxProgress } from "@/components/ui/TxProgress";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface TokenPanelProps {
   asset: AssetDetail;
@@ -157,8 +158,20 @@ function PauseCard({
   onToggled?: () => void;
 }) {
   const tx = useTx();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  async function onToggle() {
+  function requestToggle() {
+    // Unpausing is recoverable; pausing is the irreversible (blocking) action
+    // that warrants an explicit confirmation step.
+    if (!paused) {
+      setConfirmOpen(true);
+    } else {
+      void doToggle();
+    }
+  }
+
+  async function doToggle() {
+    setConfirmOpen(false);
     const res = await tx.run((ctx) =>
       paused
         ? assetToken.unpause(ctx, tokenContract)
@@ -168,49 +181,60 @@ function PauseCard({
   }
 
   return (
-    <ActionCard
-      title={paused ? "Unpause transfers" : "Pause transfers"}
-      description={
-        paused
-          ? "All transfers are currently blocked. Unpause to allow compliant holders to transfer the asset again."
-          : "Temporarily stop all transfers of this token. Useful during compliance reviews or emergency situations."
-      }
-      accent={paused ? "bg-brand-500/10 text-brand-400" : "bg-amber-500/10 text-amber-400"}
-      icon={
-        paused ? (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <polygon points="5 3 19 12 5 21 5 3" strokeLinejoin="round" />
-          </svg>
+    <>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Pause all transfers?"
+        description="This will immediately stop all token transfers. Existing holders won't be able to send or receive this asset until you unpause it. Are you sure you want to continue?"
+        confirmLabel="Yes, pause transfers"
+        onConfirm={doToggle}
+        onCancel={() => setConfirmOpen(false)}
+      />
+
+      <ActionCard
+        title={paused ? "Unpause transfers" : "Pause transfers"}
+        description={
+          paused
+            ? "All transfers are currently blocked. Unpause to allow compliant holders to transfer the asset again."
+            : "Temporarily stop all transfers of this token. Useful during compliance reviews or emergency situations."
+        }
+        accent={paused ? "bg-brand-500/10 text-brand-400" : "bg-amber-500/10 text-amber-400"}
+        icon={
+          paused ? (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="5 3 19 12 5 21 5 3" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="6" y="4" width="4" height="16" rx="1" />
+              <rect x="14" y="4" width="4" height="16" rx="1" />
+            </svg>
+          )
+        }
+      >
+        {paused && (
+          <p className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-200/90">
+            Transfers are currently paused. Holders cannot send or receive this token.
+          </p>
+        )}
+        {tx.phase === "idle" ? (
+          <button
+            onClick={requestToggle}
+            disabled={tx.pending}
+            className={paused ? "btn-primary" : "btn-secondary"}
+          >
+            {paused ? "Unpause transfers" : "Pause transfers"}
+          </button>
         ) : (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <rect x="6" y="4" width="4" height="16" rx="1" />
-            <rect x="14" y="4" width="4" height="16" rx="1" />
-          </svg>
-        )
-      }
-    >
-      {paused && (
-        <p className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-200/90">
-          Transfers are currently paused. Holders cannot send or receive this token.
-        </p>
-      )}
-      {tx.phase === "idle" ? (
-        <button
-          onClick={onToggle}
-          disabled={tx.pending}
-          className={paused ? "btn-primary" : "btn-secondary"}
-        >
-          {paused ? "Unpause transfers" : "Pause transfers"}
-        </button>
-      ) : (
-        <TxProgress
-          phase={tx.phase}
-          hash={tx.hash}
-          error={tx.error}
-          onDismiss={tx.reset}
-          successMessage={paused ? "Token unpaused." : "Token paused."}
-        />
-      )}
-    </ActionCard>
+          <TxProgress
+            phase={tx.phase}
+            hash={tx.hash}
+            error={tx.error}
+            onDismiss={tx.reset}
+            successMessage={paused ? "Token unpaused." : "Token paused."}
+          />
+        )}
+      </ActionCard>
+    </>
   );
 }

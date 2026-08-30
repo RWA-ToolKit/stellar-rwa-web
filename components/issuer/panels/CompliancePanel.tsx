@@ -12,6 +12,7 @@ import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
 import { truncateAddress } from "@/lib/format";
 import { CopyButton } from "@/components/ui/CopyButton";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface CompliancePanelProps {
   asset: AssetDetail;
@@ -214,87 +215,102 @@ function AllowlistRow({
 }) {
   const suspendTx = useTx();
   const removeTx = useTx();
+  const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
 
   const isSuspended = record.status === "Suspended";
   const isPending = suspendTx.pending || removeTx.pending;
 
+  async function doRemove() {
+    setRemoveConfirmOpen(false);
+    removeTx
+      .run((ctx) => compliance.remove(ctx, complianceId, record.address))
+      .then((r) => r && onChanged?.());
+  }
+
   return (
-    <li className="py-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-base-100/80">
-            {truncateAddress(record.address, 6, 6)}
-          </span>
-          <CopyButton value={record.address} />
-          <ComplianceBadge status={record.status as never} />
-          <span className="text-[10px] text-base-100/40">{record.jurisdiction}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {!isSuspended && (
+    <>
+      <ConfirmDialog
+        open={removeConfirmOpen}
+        title="Remove address from allowlist?"
+        description={`This will permanently revoke KYC access for ${truncateAddress(record.address, 6, 6)}. The holder will lose the ability to hold or transfer this asset. You can re-approve them later if needed.`}
+        confirmLabel="Remove address"
+        onConfirm={doRemove}
+        onCancel={() => setRemoveConfirmOpen(false)}
+      />
+
+      <li className="py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-xs text-base-100/80">
+              {truncateAddress(record.address, 6, 6)}
+            </span>
+            <CopyButton value={record.address} />
+            <ComplianceBadge status={record.status as never} />
+            <span className="text-[10px] text-base-100/40">{record.jurisdiction}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isSuspended && (
+              <button
+                onClick={() =>
+                  suspendTx
+                    .run((ctx) => compliance.suspend(ctx, complianceId, record.address))
+                    .then((r) => r && onChanged?.())
+                }
+                disabled={isPending}
+                className="btn-ghost py-1 text-xs text-amber-300 hover:bg-amber-500/10"
+              >
+                Suspend
+              </button>
+            )}
+            {isSuspended && (
+              <button
+                onClick={() =>
+                  suspendTx
+                    .run((ctx) =>
+                      compliance.addToAllowlist(ctx, complianceId, record.address, record.jurisdiction, 0),
+                    )
+                    .then((r) => r && onChanged?.())
+                }
+                disabled={isPending}
+                className="btn-ghost py-1 text-xs text-brand-300 hover:bg-brand-500/10"
+              >
+                Re-approve
+              </button>
+            )}
             <button
-              onClick={() =>
-                suspendTx
-                  .run((ctx) => compliance.suspend(ctx, complianceId, record.address))
-                  .then((r) => r && onChanged?.())
-              }
+              onClick={() => setRemoveConfirmOpen(true)}
               disabled={isPending}
-              className="btn-ghost py-1 text-xs text-amber-300 hover:bg-amber-500/10"
+              className="btn-ghost py-1 text-xs text-red-400 hover:bg-red-500/10"
             >
-              Suspend
+              Remove
             </button>
-          )}
-          {isSuspended && (
-            <button
-              onClick={() =>
-                suspendTx
-                  .run((ctx) =>
-                    compliance.addToAllowlist(ctx, complianceId, record.address, record.jurisdiction, 0),
-                  )
-                  .then((r) => r && onChanged?.())
-              }
-              disabled={isPending}
-              className="btn-ghost py-1 text-xs text-brand-300 hover:bg-brand-500/10"
-            >
-              Re-approve
-            </button>
-          )}
-          <button
-            onClick={() =>
-              removeTx
-                .run((ctx) => compliance.remove(ctx, complianceId, record.address))
-                .then((r) => r && onChanged?.())
-            }
-            disabled={isPending}
-            className="btn-ghost py-1 text-xs text-red-400 hover:bg-red-500/10"
-          >
-            Remove
-          </button>
+          </div>
         </div>
-      </div>
-      {/* Show inline TX progress if either action is in flight */}
-      {suspendTx.phase !== "idle" && (
-        <div className="mt-2">
-          <TxProgress
-            phase={suspendTx.phase}
-            hash={suspendTx.hash}
-            error={suspendTx.error}
-            onDismiss={suspendTx.reset}
-            successMessage="Status updated."
-          />
-        </div>
-      )}
-      {removeTx.phase !== "idle" && (
-        <div className="mt-2">
-          <TxProgress
-            phase={removeTx.phase}
-            hash={removeTx.hash}
-            error={removeTx.error}
-            onDismiss={removeTx.reset}
-            successMessage="Address removed from allowlist."
-          />
-        </div>
-      )}
-    </li>
+        {/* Show inline TX progress if either action is in flight */}
+        {suspendTx.phase !== "idle" && (
+          <div className="mt-2">
+            <TxProgress
+              phase={suspendTx.phase}
+              hash={suspendTx.hash}
+              error={suspendTx.error}
+              onDismiss={suspendTx.reset}
+              successMessage="Status updated."
+            />
+          </div>
+        )}
+        {removeTx.phase !== "idle" && (
+          <div className="mt-2">
+            <TxProgress
+              phase={removeTx.phase}
+              hash={removeTx.hash}
+              error={removeTx.error}
+              onDismiss={removeTx.reset}
+              successMessage="Address removed from allowlist."
+            />
+          </div>
+        )}
+      </li>
+    </>
   );
 }
 
