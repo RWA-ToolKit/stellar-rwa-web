@@ -2,18 +2,23 @@
 
 import { useState } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
-import type { AssetDetail } from "@/types";
+import type { AssetDetail, Distribution } from "@/types";
 import { dividend } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useDividends } from "@/hooks/useDividends";
-import { parseTokenAmount, formatTokenAmount, truncateAddress } from "@/lib/format";
+import {
+  parseTokenAmount,
+  formatTokenAmount,
+  formatRawPlain,
+  truncateAddress,
+  percent,
+} from "@/lib/format";
 import { PAYMENT_TOKEN_DECIMALS } from "@/components/dividend/ClaimButton";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { percent } from "@/lib/format";
 
 interface DistributionPanelProps {
   asset: AssetDetail;
@@ -22,13 +27,25 @@ interface DistributionPanelProps {
 
 /** Create new dividend distributions and view existing ones for the asset. */
 export function DistributionPanel({ asset, onCreated }: DistributionPanelProps) {
+  // Track which distribution (by id) has its top-up/correct form open.
+  const [expandedId, setExpandedId] = useState<bigint | null>(null);
+
+  function handleCreated() {
+    onCreated?.();
+  }
+
   return (
     <div className="space-y-4">
       <CreateDistributionCard
         tokenContract={asset.tokenContract}
-        onCreated={onCreated}
+        onCreated={handleCreated}
       />
-      <ExistingDistributionsCard tokenContract={asset.tokenContract} />
+      <ExistingDistributionsCard
+        tokenContract={asset.tokenContract}
+        expandedId={expandedId}
+        onExpand={setExpandedId}
+        onMutated={handleCreated}
+      />
     </div>
   );
 }
@@ -149,9 +166,24 @@ function CreateDistributionCard({
 
 // ---- Existing distributions ----
 
-function ExistingDistributionsCard({ tokenContract }: { tokenContract: string }) {
+function ExistingDistributionsCard({
+  tokenContract,
+  expandedId,
+  onExpand,
+  onMutated,
+}: {
+  tokenContract: string;
+  expandedId: bigint | null;
+  onExpand: (id: bigint | null) => void;
+  onMutated?: () => void;
+}) {
   const { data, loading, error, refetch } = useDividends(tokenContract);
   const distributions = data ?? [];
+
+  function handleMutated() {
+    refetch();
+    onMutated?.();
+  }
 
   return (
     <ActionCard
@@ -186,6 +218,7 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
         <ul className="divide-y divide-white/5">
           {distributions.map((d) => {
             const pct = percent(d.distributed, d.totalAmount);
+            const isOpen = expandedId === d.id;
             return (
               <li key={d.id.toString()} className="py-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -204,24 +237,281 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
                       Payment token: {truncateAddress(d.paymentToken)}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-gold-300">
-                      {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
-                    </p>
-                    <p className="text-[11px] text-base-100/40">{pct.toFixed(1)}% claimed</p>
+                  <div className="flex items-start gap-3">
+                    <div className="text-right">
+                      <p className="text-sm font-bold text-gold-300">
+                        {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
+                      </p>
+                      <p className="text-[11px] text-base-100/40">{pct.toFixed(1)}% claimed</p>
+                    </div>
+                    {/* Top-up / correct toggle — only on active (non-completed) distributions */}
+                    {!d.completed && (
+                      <button
+                        onClick={() => onExpand(isOpen ? null : d.id)}
+                        aria-expanded={isOpen}
+                        aria-controls={`dist-actions-${d.id}`}
+                        className="btn-ghost py-1 text-xs text-gold-300 hover:bg-gold-500/10"
+                      >
+                        {isOpen ? "Close" : "Top-up / correct"}
+                      </button>
+                    )}
                   </div>
                 </div>
+
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
+
+                {/* Inline recovery panel */}
+                {isOpen && !d.completed && (
+                  <div id={`dist-actions-${d.id}`} className="mt-4">
+                    <DistributionRecoveryPanel
+                      tokenContract={tokenContract}
+                      distribution={d}
+                      onDone={() => {
+                        onExpand(null);
+                        handleMutated();
+                      }}
+                    />
+                  </div>
+                )}
               </li>
             );
           })}
         </ul>
       )}
     </ActionCard>
+  );
+}
+
+// ---- Recovery panel: top-up or correct a distribution ----
+
+/**
+ * The dividend contract does not expose a cancel, refund, or amend method.
+ * Once a distribution is created, its payment token and total pool are
+ * immutable on-chain. The options available to an issuer are:
+ *
+ *  1. Top-up — create a second distribution for the same payment token to
+ *     add more funds to the same payout round.
+ *  2. Correct token — if the wrong token was used, create a new distribution
+ *     with the correct token. Holders will see two distributions; the
+ *     erroneous one remains claimable unless the issuer drains it some other
+ *     way at the protocol level.
+ *
+ * This panel surfaces both options with honest messaging about the contract
+ * limitations so the issuer knows what they're committing to.
+ */
+function DistributionRecoveryPanel({
+  tokenContract,
+  distribution,
+  onDone,
+}: {
+  tokenContract: string;
+  distribution: Distribution;
+  onDone: () => void;
+}) {
+  type Mode = "topup" | "correct";
+  const [mode, setMode] = useState<Mode>("topup");
+  const tx = useTx();
+
+  // Top-up form state — reuses the existing payment token.
+  const [topupAmount, setTopupAmount] = useState("");
+  const [topupError, setTopupError] = useState<string | null>(null);
+
+  // Correct form state — lets the issuer specify a new token.
+  const [newToken, setNewToken] = useState("");
+  const [newAmount, setNewAmount] = useState(
+    // Pre-fill with the original amount so the issuer only has to change what's wrong.
+    formatRawPlain(distribution.totalAmount, PAYMENT_TOKEN_DECIMALS),
+  );
+  const [correctError, setCorrectError] = useState<string | null>(null);
+
+  async function onTopup(e: React.FormEvent) {
+    e.preventDefault();
+    setTopupError(null);
+    let raw: bigint;
+    try {
+      raw = parseTokenAmount(topupAmount, PAYMENT_TOKEN_DECIMALS);
+    } catch (err) {
+      setTopupError(err instanceof Error ? err.message : "Invalid amount.");
+      return;
+    }
+    if (raw <= 0n) {
+      setTopupError("Top-up amount must be greater than zero.");
+      return;
+    }
+    const res = await tx.run((ctx) =>
+      dividend.createDistribution(ctx, tokenContract, distribution.paymentToken, raw),
+    );
+    if (res) {
+      setTopupAmount("");
+      onDone();
+    }
+  }
+
+  async function onCorrect(e: React.FormEvent) {
+    e.preventDefault();
+    setCorrectError(null);
+    const pt = newToken.trim();
+    if (!StrKey.isValidContract(pt) && !StrKey.isValidEd25519PublicKey(pt)) {
+      setCorrectError("Enter a valid payment token contract address (C…).");
+      return;
+    }
+    let raw: bigint;
+    try {
+      raw = parseTokenAmount(newAmount, PAYMENT_TOKEN_DECIMALS);
+    } catch (err) {
+      setCorrectError(err instanceof Error ? err.message : "Invalid amount.");
+      return;
+    }
+    if (raw <= 0n) {
+      setCorrectError("Amount must be greater than zero.");
+      return;
+    }
+    const res = await tx.run((ctx) =>
+      dividend.createDistribution(ctx, tokenContract, pt, raw),
+    );
+    if (res) {
+      setNewToken("");
+      onDone();
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4 space-y-4">
+      {/* Contract limitation notice */}
+      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-200/80 space-y-1">
+        <p className="font-semibold text-amber-200">Contract limitation</p>
+        <p>
+          The on-chain dividend contract does not support cancelling or amending an existing
+          distribution. The options below create a <em>new</em> distribution — the original
+          distribution #{distribution.id.toString()} remains on-chain and claimable by holders.
+        </p>
+      </div>
+
+      {/* Mode toggle */}
+      <div className="flex gap-1 rounded-xl border border-white/5 bg-white/[0.02] p-1">
+        <button
+          onClick={() => { setMode("topup"); tx.reset(); }}
+          className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            mode === "topup"
+              ? "bg-white/10 text-base-100"
+              : "text-base-100/50 hover:text-base-100"
+          }`}
+        >
+          Add more funds (top-up)
+        </button>
+        <button
+          onClick={() => { setMode("correct"); tx.reset(); }}
+          className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            mode === "correct"
+              ? "bg-white/10 text-base-100"
+              : "text-base-100/50 hover:text-base-100"
+          }`}
+        >
+          Wrong token / amount (correct)
+        </button>
+      </div>
+
+      {/* Top-up form */}
+      {mode === "topup" && (
+        <form onSubmit={onTopup} className="space-y-3">
+          <p className="text-[11px] text-base-100/50">
+            Creates a new distribution using the same payment token as distribution
+            #{distribution.id.toString()} ({truncateAddress(distribution.paymentToken)}).
+            Holders will be able to claim from both distributions independently.
+          </p>
+          <div>
+            <label htmlFor="topup-amount" className="label">Additional pool amount</label>
+            <div className="relative">
+              <input
+                id="topup-amount"
+                value={topupAmount}
+                onChange={(e) => setTopupAmount(e.target.value)}
+                placeholder="0.0000000"
+                inputMode="decimal"
+                disabled={tx.pending}
+                className="input pr-16"
+              />
+              <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
+                tokens
+              </span>
+            </div>
+          </div>
+          {topupError && <p className="text-xs text-red-400">{topupError}</p>}
+          {tx.phase === "idle" ? (
+            <button type="submit" disabled={tx.pending} className="btn-primary">
+              Create top-up distribution
+            </button>
+          ) : (
+            <TxProgress
+              phase={tx.phase}
+              hash={tx.hash}
+              error={tx.error}
+              onDismiss={tx.reset}
+              successMessage="Top-up distribution created. Holders can now claim from it."
+            />
+          )}
+        </form>
+      )}
+
+      {/* Correct form */}
+      {mode === "correct" && (
+        <form onSubmit={onCorrect} className="space-y-3">
+          <p className="text-[11px] text-base-100/50">
+            Creates a new distribution with the corrected token and/or amount.
+            Distribution #{distribution.id.toString()} will remain on-chain — contact
+            your legal/ops team if the erroneous funds need to be recovered at the
+            protocol level.
+          </p>
+          <div>
+            <label htmlFor="correct-token" className="label">Correct payment token contract</label>
+            <input
+              id="correct-token"
+              value={newToken}
+              onChange={(e) => setNewToken(e.target.value)}
+              placeholder="C… (SAC or Soroban token contract)"
+              disabled={tx.pending}
+              className="input font-mono text-xs"
+              spellCheck={false}
+            />
+          </div>
+          <div>
+            <label htmlFor="correct-amount" className="label">Correct total pool amount</label>
+            <div className="relative">
+              <input
+                id="correct-amount"
+                value={newAmount}
+                onChange={(e) => setNewAmount(e.target.value)}
+                placeholder="0.0000000"
+                inputMode="decimal"
+                disabled={tx.pending}
+                className="input pr-16"
+              />
+              <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
+                tokens
+              </span>
+            </div>
+          </div>
+          {correctError && <p className="text-xs text-red-400">{correctError}</p>}
+          {tx.phase === "idle" ? (
+            <button type="submit" disabled={tx.pending} className="btn-primary">
+              Create corrected distribution
+            </button>
+          ) : (
+            <TxProgress
+              phase={tx.phase}
+              hash={tx.hash}
+              error={tx.error}
+              onDismiss={tx.reset}
+              successMessage="Corrected distribution created."
+            />
+          )}
+        </form>
+      )}
+    </div>
   );
 }

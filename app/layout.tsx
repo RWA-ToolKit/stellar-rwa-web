@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { WalletProvider, WalletErrorBoundary } from "@/hooks/useWallet";
+import { ThemeProvider, ThemeScript } from "@/hooks/useTheme";
 import { SkipLink } from "@/components/layout/SkipLink";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
@@ -26,7 +27,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#08090c",
+  // theme-color follows the resolved theme; a meta[name=theme-color] media
+  // query pair lets the browser pick the right value automatically.
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#08090c" },
+    { media: "(prefers-color-scheme: light)", color: "#f6f8fb" },
+  ],
   width: "device-width",
   initialScale: 1,
 };
@@ -46,13 +52,27 @@ function AppShell({ children }: { children: React.ReactNode }) {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
+    // No `className="dark"` here — ThemeScript sets/clears it synchronously
+    // before hydration so there's no flash of wrong theme. ThemeProvider then
+    // keeps it in sync with user preference changes and OS-level switches.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/*
+         * Runs synchronously before React hydration to apply the correct
+         * theme class. suppressHydrationWarning on <html> prevents React
+         * complaining about the class mismatch between SSR (no class) and
+         * the client (class set by this script).
+         */}
+        <ThemeScript />
+      </head>
       <body className="flex min-h-screen flex-col">
-        <WalletErrorBoundary fallback={<AppShell>{children}</AppShell>}>
-          <WalletProvider>
-            <AppShell>{children}</AppShell>
-          </WalletProvider>
-        </WalletErrorBoundary>
+        <ThemeProvider>
+          <WalletErrorBoundary fallback={<AppShell>{children}</AppShell>}>
+            <WalletProvider>
+              <AppShell>{children}</AppShell>
+            </WalletProvider>
+          </WalletErrorBoundary>
+        </ThemeProvider>
       </body>
     </html>
   );

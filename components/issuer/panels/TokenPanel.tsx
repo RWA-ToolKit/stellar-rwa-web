@@ -8,6 +8,7 @@ import { useTx } from "@/hooks/useTx";
 import { parseTokenAmount, formatTokenAmount } from "@/lib/format";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { TxProgress } from "@/components/ui/TxProgress";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 interface TokenPanelProps {
   asset: AssetDetail;
@@ -157,8 +158,10 @@ function PauseCard({
   onToggled?: () => void;
 }) {
   const tx = useTx();
+  const [confirming, setConfirming] = useState(false);
 
-  async function onToggle() {
+  async function executeToggle() {
+    setConfirming(false);
     const res = await tx.run((ctx) =>
       paused
         ? assetToken.unpause(ctx, tokenContract)
@@ -194,9 +197,10 @@ function PauseCard({
           Transfers are currently paused. Holders cannot send or receive this token.
         </p>
       )}
+
       {tx.phase === "idle" ? (
         <button
-          onClick={onToggle}
+          onClick={() => setConfirming(true)}
           disabled={tx.pending}
           className={paused ? "btn-primary" : "btn-secondary"}
         >
@@ -208,9 +212,32 @@ function PauseCard({
           hash={tx.hash}
           error={tx.error}
           onDismiss={tx.reset}
-          successMessage={paused ? "Token unpaused." : "Token paused."}
+          successMessage={paused ? "Token unpaused. Transfers are now live." : "Token paused. All transfers are blocked."}
         />
       )}
+
+      <ConfirmDialog
+        open={confirming}
+        title={paused ? "Unpause transfers?" : "Pause transfers?"}
+        description={
+          paused
+            ? "This will re-enable transfers for all KYC-approved holders. Make sure any compliance review that triggered the pause is resolved before proceeding."
+            : "This will immediately block all token transfers. Any transfer a holder has already signed but not yet submitted will revert once the pause lands on-chain. This action affects every holder of this asset."
+        }
+        detail={
+          !paused ? (
+            <ul className="mt-1 space-y-1 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-200/80">
+              <li>• In-flight transfers will fail after the pause confirms.</li>
+              <li>• Holders will not be able to send or receive until you unpause.</li>
+              <li>• Dividend claims may also be affected depending on contract logic.</li>
+            </ul>
+          ) : null
+        }
+        confirmLabel={paused ? "Yes, unpause" : "Yes, pause"}
+        confirmClassName={paused ? "btn-primary" : "btn bg-amber-500 text-base-950 hover:bg-amber-400"}
+        onConfirm={executeToggle}
+        onCancel={() => setConfirming(false)}
+      />
     </ActionCard>
   );
 }

@@ -11,6 +11,11 @@ html {
   color-scheme: dark;
 }
 
+/* ---- Light theme ---- */
+html:not(.dark) {
+  color-scheme: light;
+}
+
 body {
   @apply bg-base-950 text-base-100 antialiased;
   background-image:
@@ -19,6 +24,15 @@ body {
   background-attachment: fixed;
   min-height: 100vh;
   color: #e5e7eb;
+}
+
+/* Light mode body overrides */
+html:not(.dark) body {
+  @apply bg-base-50 text-base-950;
+  background-image:
+    radial-gradient(60rem 60rem at 80% -10%, rgba(16, 185, 129, 0.06), transparent 60%),
+    radial-gradient(50rem 50rem at 0% 0%, rgba(245, 158, 11, 0.04), transparent 55%);
+  color: #08090c;
 }
 
 /* Thin, unobtrusive scrollbars that match the dark surface. */
@@ -33,6 +47,14 @@ body {
 *::-webkit-scrollbar-thumb {
   background: #333a49;
   border-radius: 9999px;
+}
+
+/* Light mode scrollbars */
+html:not(.dark) * {
+  scrollbar-color: #c7cbd4 transparent;
+}
+html:not(.dark) *::-webkit-scrollbar-thumb {
+  background: #c7cbd4;
 }
 
 @layer components {
@@ -85,4 +107,54 @@ body {
   .chip {
     @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
   }
+}
+
+/* ---- Light mode component overrides ---- */
+/*
+ * The Tailwind `dark:` variant handles most cases; these rules cover the
+ * few components whose styles are set via @layer components (which can't
+ * use `dark:` inside the @apply) and raw CSS patterns like the card backdrop.
+ */
+
+html:not(.dark) .card {
+  border-color: rgba(0, 0, 0, 0.08);
+  background-color: rgba(255, 255, 255, 0.85);
+}
+
+html:not(.dark) .card-hover:hover {
+  background-color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+html:not(.dark) .btn-secondary {
+  border-color: rgba(0, 0, 0, 0.12);
+  background-color: rgba(0, 0, 0, 0.04);
+  color: #0c0e13;
+}
+
+html:not(.dark) .btn-secondary:hover {
+  background-color: rgba(0, 0, 0, 0.08);
+}
+
+html:not(.dark) .btn-ghost {
+  color: rgba(12, 14, 19, 0.65);
+}
+
+html:not(.dark) .btn-ghost:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: #0c0e13;
+}
+
+html:not(.dark) .input {
+  border-color: rgba(0, 0, 0, 0.12);
+  background-color: rgba(255, 255, 255, 0.8);
+  color: #0c0e13;
+}
+
+html:not(.dark) .input::placeholder {
+  color: rgba(12, 14, 19, 0.35);
+}
+
+html:not(.dark) .label {
+  color: rgba(12, 14, 19, 0.55);
 }

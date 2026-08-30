@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import "./globals.css";
+import { ThemeScript } from "@/hooks/useTheme";
 
 /**
  * Last-resort boundary for errors thrown by the root layout itself (where
@@ -20,7 +21,12 @@ export default function GlobalError({
   }, [error]);
 
   return (
-    <html lang="en" className="dark">
+    // suppressHydrationWarning: ThemeScript sets `dark` class before React
+    // hydrates; the SSR output won't have it, but that's intentional.
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        <ThemeScript />
+      </head>
       <body className="flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
         <h1 className="text-xl font-semibold text-base-100">Something went wrong</h1>
         <p className="max-w-md text-sm text-base-100/60">

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { NetworkSelector } from "@/components/wallet/NetworkSelector";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
 
 const NAV = [
   { href: "/explore", label: "Explore" },
@@ -53,6 +54,7 @@ export function SiteHeader() {
           <div className="hidden sm:block">
             <NetworkSelector />
           </div>
+          <ThemeToggle />
           <ConnectButton />
           <button
             className="btn-ghost p-2 md:hidden"
