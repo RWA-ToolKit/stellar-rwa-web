@@ -256,3 +256,98 @@ describe("parseTokenAmount", () => {
     expect(() => parseTokenAmount("1.5", 0)).toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #251 — formatRawPlain & round-trip with parseTokenAmount
+// ---------------------------------------------------------------------------
+describe("formatRawPlain", () => {
+  // --- round-trip tests ------------------------------------------------------
+
+  it("round-trips a whole number through parseTokenAmount", () => {
+    const input = "5";
+    const parsed = parseTokenAmount(input, 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("5");
+  });
+
+  it("round-trips a decimal number through parseTokenAmount", () => {
+    const input = "5.5";
+    const parsed = parseTokenAmount(input, 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("5.5");
+  });
+
+  it("round-trips a leading-decimal number through parseTokenAmount", () => {
+    const input = ".5";
+    const parsed = parseTokenAmount(input, 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("0.5");
+  });
+
+  it("round-trips a large number with many digits", () => {
+    const input = "1000000.12";
+    const parsed = parseTokenAmount(input, 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("1000000.12");
+  });
+
+  it("round-trips a number at max decimal precision", () => {
+    const input = "1.123456";
+    const parsed = parseTokenAmount(input, 6);
+    const formatted = formatRawPlain(parsed, 6);
+    expect(formatted).toBe("1.123456");
+  });
+
+  // --- trailing zero handling ------------------------------------------------
+
+  it("trims trailing zeros from formatted output", () => {
+    // Input "1.50" with 2 decimals: parses to 150n, formats back without trailing zero
+    const parsed = parseTokenAmount("1.5", 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("1.5");
+  });
+
+  it("preserves significant zeros but trims trailing zeros", () => {
+    // "1.05" parses to 105n (at 2 decimals), formats to "1.05" (no trailing zero)
+    const parsed = parseTokenAmount("1.05", 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("1.05");
+  });
+
+  it("trims all fractional zeros when fraction is exactly zero", () => {
+    const parsed = parseTokenAmount("1", 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("1");
+  });
+
+  it("handles value with many trailing zeros", () => {
+    // Raw 100n with 6 decimals = 0.0001, but formatRawPlain should trim to "0.0001"
+    const raw = 100n;
+    const formatted = formatRawPlain(raw, 6);
+    expect(formatted).toBe("0.0001");
+  });
+
+  // --- no thousands separators -----------------------------------------------
+
+  it("does not include thousands separators (unlike formatTokenAmount)", () => {
+    const raw = 1_000_000n;
+    const formatted = formatRawPlain(raw, 2);
+    expect(formatted).toBe("10000");
+    expect(formatted).not.toMatch(/,/);
+  });
+
+  // --- negative amounts ------------------------------------------------------
+
+  it("formats negative raw amounts with leading minus", () => {
+    const raw = -500n;
+    const formatted = formatRawPlain(raw, 2);
+    expect(formatted).toBe("-5");
+  });
+
+  it("round-trips negative amounts (if input were to be accepted)", () => {
+    // Note: parseTokenAmount rejects negative input, so this tests formatRawPlain's negative handling
+    const raw = -550n;
+    const formatted = formatRawPlain(raw, 2);
+    expect(formatted).toBe("-5.5");
+  });
+});
