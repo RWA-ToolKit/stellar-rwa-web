@@ -4,6 +4,7 @@ import { usePlatformStats } from "@/hooks/useAssets";
 import { useHolderTotals } from "@/hooks/useHolderTotals";
 import { formatUsdCents, compactNumber } from "@/lib/format";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 /** Headline platform metrics sourced live from the registry contract. */
 export function PlatformStats() {
@@ -13,6 +14,16 @@ export function PlatformStats() {
   );
 
   const holderCount = stats.data?.totalHolders ?? holders.data ?? null;
+
+  if (stats.error) {
+    return (
+      <ErrorState
+        title="Couldn't load platform stats"
+        message={stats.error}
+        onRetry={stats.refetch}
+      />
+    );
+  }
 
   const items = [
     {
@@ -36,9 +47,7 @@ export function PlatformStats() {
           <p className="text-xs font-medium uppercase tracking-wide text-base-100/40">
             {item.label}
           </p>
-          {stats.error ? (
-            <p className="mt-2 text-2xl font-bold text-base-100/30">—</p>
-          ) : item.value === null ? (
+          {item.value === null ? (
             <Skeleton className="mt-2 h-8 w-24" />
           ) : (
             <p className="mt-2 text-3xl font-bold text-base-100">{item.value}</p>

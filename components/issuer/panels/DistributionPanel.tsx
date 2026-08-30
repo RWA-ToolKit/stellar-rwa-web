@@ -12,6 +12,7 @@ import { ActionCard } from "@/components/issuer/ActionCard";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { percent } from "@/lib/format";
 
 interface DistributionPanelProps {
@@ -169,11 +170,12 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
           <Spinner size={14} /> Loading distributions…
         </div>
       ) : error ? (
-        <p className="py-2 text-sm text-red-400/80">
-          Could not load distributions.{" "}
-          {/* #215 a11y: focus-visible ring added to inline text button */}
-          <button onClick={refetch} className="underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-900 rounded">Retry</button>
-        </p>
+        <ErrorState
+          title="Couldn't load distributions"
+          message={error}
+          onRetry={refetch}
+          className="py-6"
+        />
       ) : distributions.length === 0 ? (
         <EmptyState
           title="No distributions yet"

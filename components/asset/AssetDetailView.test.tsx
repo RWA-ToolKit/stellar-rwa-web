@@ -153,7 +153,8 @@ describe("AssetDetailView", () => {
 
     render(<AssetDetailView id={1n} />);
 
-    expect(screen.getByText("Couldn't load holders.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/couldn't load holders/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Compliance" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Your position" })).toBeInTheDocument();
   });
@@ -169,7 +170,8 @@ describe("AssetDetailView", () => {
 
     render(<AssetDetailView id={1n} />);
 
-    expect(screen.getByText("Couldn't load compliance data.")).toBeInTheDocument();
+    expect(screen.getAllByRole("alert").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/couldn't load compliance data/i)).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Dividend history" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Your position" })).toBeInTheDocument();
   });

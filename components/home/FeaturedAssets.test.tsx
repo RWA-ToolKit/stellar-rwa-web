@@ -139,10 +139,13 @@ describe("FeaturedAssets", () => {
   });
 
   // ── 2. Error state ───────────────────────────────────────────────────────
-  it("renders the empty state when there is an error", () => {
-    setupAssets({ loading: false, assets: [], error: "RPC unreachable" });
+  it("renders an error state with retry when there is an error", () => {
+    const mockRefetch = jest.fn();
+    setupAssets({ loading: false, assets: [], error: "RPC unreachable", refetch: mockRefetch });
     render(<FeaturedAssets />);
-    expect(screen.getByText(/no assets yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/couldn't load featured assets/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
   });
 

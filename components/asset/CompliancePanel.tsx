@@ -6,6 +6,7 @@ import { truncateAddress } from "@/lib/format";
 import { explorerContractUrl } from "@/lib/stellar";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 interface CompliancePanelProps {
   asset: AssetDetail;
@@ -19,7 +20,7 @@ interface CompliancePanelProps {
  */
 export function CompliancePanel({ asset, network }: CompliancePanelProps) {
   const complianceId = asset.metadata.complianceContract;
-  const { data, loading, error } = useComplianceOverview(complianceId || null);
+  const { data, loading, error, refetch } = useComplianceOverview(complianceId || null);
 
   if (!complianceId) {
     return (
@@ -27,6 +28,17 @@ export function CompliancePanel({ asset, network }: CompliancePanelProps) {
         This asset&apos;s token contract doesn&apos;t reference a compliance contract, so
         there are no allowlist or jurisdiction rules to verify on-chain.
       </p>
+    );
+  }
+
+  if (error) {
+    return (
+      <ErrorState
+        title="Couldn't load compliance data"
+        message={error}
+        onRetry={refetch}
+        className="py-6"
+      />
     );
   }
 
@@ -55,7 +67,7 @@ export function CompliancePanel({ asset, network }: CompliancePanelProps) {
           <dd className="text-sm font-semibold text-base-100">
             {loading ? (
               <Spinner size={14} label="Loading compliance data" />
-            ) : error || !data ? (
+            ) : !data ? (
               "—"
             ) : (
               data.allowlistSize.toLocaleString()
@@ -75,8 +87,6 @@ export function CompliancePanel({ asset, network }: CompliancePanelProps) {
           <div className="flex items-center gap-2 text-xs text-base-100/40">
             <Spinner size={14} /> Checking jurisdictions…
           </div>
-        ) : error ? (
-          <p className="text-xs text-red-400/80">Couldn&apos;t load compliance data.</p>
         ) : jurisdictions.length === 0 ? (
           <p className="text-xs text-base-100/40">
             No jurisdictions are registered on this asset&apos;s allowlist yet.

@@ -7,7 +7,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import type { AssetDetail } from "@/types";
 import { truncateAddress } from "@/lib/format";
 
@@ -131,13 +131,15 @@ describe("CompliancePanel", () => {
     expect(mockUseComplianceOverview).toHaveBeenCalledWith(null);
   });
 
-  it("falls back to placeholders when the compliance read fails", () => {
-    setupMock({ error: "RPC down" });
+  it("renders an error state with retry when the compliance read fails", () => {
+    const mockRefetch = jest.fn();
+    setupMock({ error: "RPC down", refetch: mockRefetch });
 
     render(<CompliancePanel asset={makeAsset()} network="testnet" />);
 
-    expect(screen.getByText("—")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(screen.getByText(/couldn't load compliance data/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 
   it("says so when the allowlist has no jurisdictions yet", () => {

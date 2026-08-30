@@ -7,6 +7,7 @@ import { useWallet } from "@/hooks/useWallet";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 import type { AssetDetail } from "@/types";
 
 interface HolderListProps {
@@ -20,7 +21,7 @@ interface HolderListProps {
 export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
   const { metadata } = asset;
   const { address } = useWallet();
-  const { data, loading, error } = useHolders(
+  const { data, loading, error, refetch } = useHolders(
     metadata.complianceContract,
     asset.tokenContract,
     refreshKey,
@@ -40,7 +41,14 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
     );
   }
   if (error) {
-    return <p className="py-4 text-sm text-red-400/80">Couldn&apos;t load holders.</p>;
+    return (
+      <ErrorState
+        title="Couldn't load holders"
+        message={error}
+        onRetry={refetch}
+        className="py-8"
+      />
+    );
   }
   if (holders.length === 0) {
     return (
