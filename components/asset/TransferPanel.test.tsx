@@ -61,6 +61,49 @@ function setup() {
 describe("TransferPanel", () => {
   afterEach(() => jest.clearAllMocks());
 
+  describe("when no wallet is connected and Freighter is not installed", () => {
+    it("renders Freighter install link", () => {
+      mockUseWallet.mockReturnValue({
+        address: null,
+        installed: false,
+        network: "testnet",
+        walletNetwork: null,
+        networkUnknown: false,
+        connecting: false,
+        error: null,
+        connect: jest.fn(),
+        disconnect: jest.fn(),
+        setNetwork: jest.fn(),
+        sign: jest.fn(),
+        writeCtx: jest.fn(),
+      } as ReturnType<typeof useWallet>);
+      mockUseCompliance.mockImplementation((_complianceId, address) => ({
+        data: address === RECIPIENT
+          ? { allowed: false, status: "Rejected", record: null }
+          : { allowed: true, status: "Approved", record: null },
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      }));
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        pending: false,
+        run: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      render(<TransferPanel asset={asset} balance={100n} />);
+
+      expect(screen.getByText(/freighter wallet not installed/i)).toBeInTheDocument();
+      const link = screen.getByRole("link", { name: /install freighter/i });
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveAttribute("href", "https://www.freighter.app");
+      expect(link).toHaveAttribute("target", "_blank");
+    });
+  });
+
   it("disables submit for an invalid recipient address", () => {
     setup();
 

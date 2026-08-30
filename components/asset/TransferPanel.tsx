@@ -24,7 +24,7 @@ interface TransferPanelProps {
  * surfaced with an explicit message rather than a silently disabled button.
  */
 export function TransferPanel({ asset, balance, onTransferred }: TransferPanelProps) {
-  const { address } = useWallet();
+  const { address, installed } = useWallet();
   const { metadata } = asset;
   const compliance = useCompliance(metadata.complianceContract, address);
   const tx = useTx();
@@ -42,6 +42,21 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   );
 
   if (!address) {
+    if (!installed) {
+      return (
+        <div className="space-y-2">
+          <p className="text-sm text-base-100/50">Freighter wallet not installed.</p>
+          <a
+            href="https://www.freighter.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-sm font-medium text-brand-400 hover:text-brand-300 underline underline-offset-2"
+          >
+            Install Freighter ↗
+          </a>
+        </div>
+      );
+    }
     return (
       <p className="text-sm text-base-100/50">
         Connect your wallet to view your balance and transfer this asset.

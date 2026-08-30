@@ -22,10 +22,25 @@ interface ClaimButtonProps {
  * been claimed.
  */
 export function ClaimButton({ distributionId, claimable, claimed, onClaimed }: ClaimButtonProps) {
-  const { address } = useWallet();
+  const { address, installed } = useWallet();
   const tx = useTx();
 
   if (!address) {
+    if (!installed) {
+      return (
+        <div className="space-y-2">
+          <p className="text-xs text-base-100/40">Freighter wallet not installed.</p>
+          <a
+            href="https://www.freighter.app"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-block text-xs font-medium text-brand-400 hover:text-brand-300 underline underline-offset-2"
+          >
+            Install Freighter ↗
+          </a>
+        </div>
+      );
+    }
     return <p className="text-xs text-base-100/40">Connect a wallet to claim.</p>;
   }
 

@@ -111,6 +111,36 @@ describe("ClaimButton", () => {
       expect(screen.getByText(/connect a wallet to claim/i)).toBeInTheDocument();
       expect(screen.queryByRole("button")).not.toBeInTheDocument();
     });
+
+    it("renders Freighter install link when installed is false", () => {
+      mockUseWallet.mockReturnValue({
+        address: null,
+        network: "testnet",
+        walletNetwork: null,
+        networkUnknown: false,
+        installed: false,
+        connecting: false,
+        error: null,
+        connect: jest.fn(),
+        disconnect: jest.fn(),
+        setNetwork: jest.fn(),
+        sign: jest.fn(),
+        writeCtx: jest.fn(),
+      });
+      setupTx();
+      render(
+        <ClaimButton
+          distributionId={DISTRIBUTION_ID}
+          claimable={1000_0000000n}
+          claimed={false}
+        />,
+      );
+      expect(screen.getByText(/freighter wallet not installed/i)).toBeInTheDocument();
+      const link = screen.getByRole("link", { name: /install freighter/i });
+      expect(link).toBeInTheDocument();
+      expect(link).toHaveAttribute("href", "https://www.freighter.app");
+      expect(link).toHaveAttribute("target", "_blank");
+    });
   });
 
   // ── 2. Already claimed ───────────────────────────────────────────────────
