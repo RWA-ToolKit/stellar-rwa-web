@@ -10,8 +10,7 @@ import { ActionCard } from "@/components/issuer/ActionCard";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
-import { truncateAddress } from "@/lib/format";
-import { CopyButton } from "@/components/ui/CopyButton";
+import { TruncatedAddress } from "@/components/ui/TruncatedAddress";
 
 interface CompliancePanelProps {
   asset: AssetDetail;
@@ -222,10 +221,7 @@ function AllowlistRow({
     <li className="py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs text-base-100/80">
-            {truncateAddress(record.address, 6, 6)}
-          </span>
-          <CopyButton value={record.address} />
+          <TruncatedAddress address={record.address} lead={6} tail={6} />
           <ComplianceBadge status={record.status as never} />
           <span className="text-[10px] text-base-100/40">{record.jurisdiction}</span>
         </div>

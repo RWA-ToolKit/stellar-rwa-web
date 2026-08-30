@@ -2,9 +2,9 @@
 
 import { useEffect } from "react";
 import { useHolders, type Holder } from "@/hooks/useHolders";
-import { formatTokenAmount, percent, truncateAddress } from "@/lib/format";
+import { formatTokenAmount, percent } from "@/lib/format";
 import { useWallet } from "@/hooks/useWallet";
-import { CopyButton } from "@/components/ui/CopyButton";
+import { TruncatedAddress } from "@/components/ui/TruncatedAddress";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -93,13 +93,10 @@ function HolderRow({
   return (
     <li className="flex items-center justify-between gap-3 py-3">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-sm text-base-100/80">
-          {truncateAddress(holder.address, 6, 6)}
-        </span>
+        <TruncatedAddress address={holder.address} lead={6} tail={6} />
         {isYou && (
           <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">You</span>
         )}
-        <CopyButton value={holder.address} />
       </div>
       <div className="text-right">
         <p className="text-sm font-semibold text-base-100">

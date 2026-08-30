@@ -2,9 +2,8 @@
 
 import type { AssetDetail, Network } from "@/types";
 import { useComplianceOverview } from "@/hooks/useCompliance";
-import { truncateAddress } from "@/lib/format";
 import { explorerContractUrl } from "@/lib/stellar";
-import { CopyButton } from "@/components/ui/CopyButton";
+import { TruncatedAddress } from "@/components/ui/TruncatedAddress";
 import { Spinner } from "@/components/ui/Spinner";
 import { ErrorState } from "@/components/ui/ErrorState";
 
@@ -55,11 +54,10 @@ export function CompliancePanel({ asset, network }: CompliancePanelProps) {
               href={explorerContractUrl(network, complianceId)}
               target="_blank"
               rel="noopener noreferrer"
-              className="font-mono text-xs text-base-100/70 hover:text-brand-300"
+              className="hover:text-brand-300"
             >
-              {truncateAddress(complianceId, 6, 6)}
+              <TruncatedAddress address={complianceId} lead={6} tail={6} />
             </a>
-            <CopyButton value={complianceId} />
           </dd>
         </div>
         <div className="flex items-center justify-between gap-3 py-2.5">

@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { useWallet } from "@/hooks/useWallet";
-import { truncateAddress } from "@/lib/format";
 import { explorerAccountUrl } from "@/lib/stellar";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
+import { TruncatedAddress } from "@/components/ui/TruncatedAddress";
 
 /**
  * Connect / connected-account control. When disconnected it prompts Freighter;
@@ -66,7 +66,7 @@ export function ConnectButton() {
         aria-haspopup="menu"
       >
         <span className="h-2 w-2 rounded-full bg-brand-400" />
-        <span className="font-mono text-xs">{truncateAddress(address)}</span>
+        <TruncatedAddress address={address} />
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={open ? "rotate-180 transition" : "transition"}>
           <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>

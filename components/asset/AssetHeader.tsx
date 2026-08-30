@@ -1,9 +1,9 @@
 import type { AssetDetail } from "@/types";
-import { formatUsdCents, truncateAddress } from "@/lib/format";
+import { formatUsdCents } from "@/lib/format";
 import { getDisplayText } from "@/lib/display";
 import { explorerContractUrl } from "@/lib/stellar";
 import { AssetTypeBadge } from "./AssetTypeBadge";
-import { CopyButton } from "@/components/ui/CopyButton";
+import { TruncatedAddress } from "@/components/ui/TruncatedAddress";
 import type { Network } from "@/types";
 
 interface AssetHeaderProps {
@@ -61,16 +61,14 @@ export function AssetHeader({ asset, network }: AssetHeaderProps) {
             href={explorerContractUrl(network, asset.tokenContract)}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-mono text-base-100/70 hover:text-brand-300"
+            className="hover:text-brand-300"
           >
-            {truncateAddress(asset.tokenContract, 6, 6)}
+            <TruncatedAddress address={asset.tokenContract} lead={6} tail={6} />
           </a>
-          <CopyButton value={asset.tokenContract} />
         </span>
         <span className="flex items-center gap-1.5">
           Issuer
-          <span className="font-mono text-base-100/70">{truncateAddress(asset.issuer, 6, 6)}</span>
-          <CopyButton value={asset.issuer} />
+          <TruncatedAddress address={asset.issuer} lead={6} tail={6} />
         </span>
       </div>
     </header>
