@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { AssetExplorer } from "@/components/asset/AssetExplorer";
+import { CardSkeletonGrid } from "@/components/ui/Skeleton";
 
 export const metadata: Metadata = {
   title: "Explore Assets",
@@ -17,7 +19,9 @@ export default function ExplorePage() {
           dividend history.
         </p>
       </div>
-      <AssetExplorer />
+      <Suspense fallback={<CardSkeletonGrid count={6} />}>
+        <AssetExplorer />
+      </Suspense>
     </div>
   );
 }
