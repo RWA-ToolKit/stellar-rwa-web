@@ -14,6 +14,9 @@ export const metadata: Metadata = {
   description:
     "Tokenize real-world assets on Stellar. Issue compliant asset tokens, manage KYC allowlists, and distribute dividends — all on-chain via Soroban.",
   keywords: ["Stellar", "Soroban", "RWA", "tokenization", "real-world assets", "compliance", "DeFi"],
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000",
+  ),
   openGraph: {
     title: "Stellar RWA",
     description: "Tokenize real-world assets on Stellar with on-chain compliance.",

@@ -44,16 +44,11 @@ jest.mock("./ClaimButton", () => ({
 
 // ── mock date-fns to avoid non-deterministic relative times ───────────────
 
-jest.mock("date-fns", () => ({
-  formatDistanceToNow: jest.fn(() => "2 days ago"),
-}));
-
-// ── mock ledgerToApproxDate so we control when a date is returned ─────────
-
 jest.mock("@/lib/format", () => {
   const actual = jest.requireActual("@/lib/format");
   return {
     ...actual,
+    formatTimeAgo: jest.fn(() => "2 days ago"),
     ledgerToApproxDate: jest.fn(() => new Date("2024-01-01T00:00:00Z")),
   };
 });

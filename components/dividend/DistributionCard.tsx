@@ -1,9 +1,9 @@
 "use client";
 
-import { formatDistanceToNow } from "date-fns";
 import type { DistributionWithClaim } from "@/hooks/useDividends";
 import {
   formatTokenAmount,
+  formatTimeAgo,
   percent,
   truncateAddress,
   ledgerToApproxDate as approxDate,
@@ -41,7 +41,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
           </div>
           <p className="mt-1 text-xs text-base-100/40">
             {when
-              ? `Created ~${formatDistanceToNow(when, { addSuffix: true })}`
+              ? `Created ~${formatTimeAgo(when)}`
               : `Ledger ${d.createdAt}`}
             {" · "}
             Payment token {truncateAddress(d.paymentToken)}

@@ -208,7 +208,7 @@ function AllowlistRow({
   complianceId,
   onChanged,
 }: {
-  record: { address: string; status: string; jurisdiction: string };
+  record: { address: string; status: string; jurisdiction: string; expiresAt?: number };
   complianceId: string;
   onChanged?: () => void;
 }) {
@@ -248,7 +248,13 @@ function AllowlistRow({
               onClick={() =>
                 suspendTx
                   .run((ctx) =>
-                    compliance.addToAllowlist(ctx, complianceId, record.address, record.jurisdiction, 0),
+                    compliance.addToAllowlist(
+                      ctx,
+                      complianceId,
+                      record.address,
+                      record.jurisdiction,
+                      record.expiresAt ?? 0,
+                    ),
                   )
                   .then((r) => r && onChanged?.())
               }

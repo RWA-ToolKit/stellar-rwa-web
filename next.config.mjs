@@ -29,6 +29,50 @@ const nextConfig = {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_APP_COMMIT: resolveCommitSha(),
   },
+  headers: async () => {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          // Clickjacking protection
+          {
+            key: "X-Frame-Options",
+            value: "DENY",
+          },
+          // Prevent MIME type sniffing
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          // Referrer policy
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          // Permissions policy (formerly Feature-Policy)
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=(), payment=()",
+          },
+          // Content Security Policy
+          {
+            key: "Content-Security-Policy",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'", // Next.js requires unsafe-inline and unsafe-eval for dev
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: https:",
+              "font-src 'self' data:",
+              "connect-src 'self' https: wss:", // Allow https and wss for RPC and wallet connections
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+            ].join("; "),
+          },
+        ],
+      },
+    ];
+  },
   webpack: (config) => {
     // stellar-sdk pulls in optional node deps that are irrelevant in the browser.
     config.resolve.fallback = { ...config.resolve.fallback, fs: false, net: false, tls: false };
