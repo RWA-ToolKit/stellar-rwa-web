@@ -79,6 +79,18 @@ per-asset token ids are discovered at runtime from the registry.
 
 > This project is currently configured for Stellar Testnet only. Mainnet contract IDs are intentionally left blank in [.env.example](.env.example), so the app will not expose fully working mainnet routes until those values are populated.
 
+### Node version
+
+This project pins Node.js version via `.nvmrc`. Before installing dependencies, use the pinned version:
+
+```bash
+nvm use
+```
+
+If you don't have nvm, install [nvm](https://github.com/nvm-sh/nvm) or use a Node version manager of your choice, then set your Node version to the one in `.nvmrc`.
+
+### Setup
+
 ```bash
 cp .env.example .env.local   # Testnet contract ids are pre-filled
 npm install
