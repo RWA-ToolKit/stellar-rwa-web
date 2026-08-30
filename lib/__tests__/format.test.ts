@@ -1,4 +1,4 @@
-import { formatUsdCents, formatTokenAmount } from "@/lib/format";
+import { formatUsdCents, formatTokenAmount, parseTokenAmount, formatRawPlain, compactNumber } from "@/lib/format";
 
 // ---------------------------------------------------------------------------
 // Issue #35 — formatUsdCents
@@ -174,5 +174,85 @@ describe("formatTokenAmount", () => {
 
   it("formats 10_000_000 raw at 7 decimals as 1", () => {
     expect(formatTokenAmount(10_000_000n, 7)).toBe("1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #250 — parseTokenAmount
+// ---------------------------------------------------------------------------
+describe("parseTokenAmount", () => {
+  // --- accepted inputs -------------------------------------------------------
+
+  it("accepts and parses single digit '5'", () => {
+    expect(parseTokenAmount("5", 2)).toBe(500n);
+  });
+
+  it("accepts and parses decimal '5.5' at 2 decimals", () => {
+    expect(parseTokenAmount("5.5", 2)).toBe(550n);
+  });
+
+  it("accepts and parses leading-decimal '.5' at 2 decimals", () => {
+    expect(parseTokenAmount(".5", 2)).toBe(50n);
+  });
+
+  // --- rejected inputs -------------------------------------------------------
+
+  it("rejects empty string", () => {
+    expect(() => parseTokenAmount("", 2)).toThrow();
+  });
+
+  it("rejects a lone dot '.'", () => {
+    expect(() => parseTokenAmount(".", 2)).toThrow();
+  });
+
+  it("rejects trailing dot '5.'", () => {
+    expect(() => parseTokenAmount("5.", 2)).toThrow();
+  });
+
+  it("rejects negative number '-5'", () => {
+    expect(() => parseTokenAmount("-5", 2)).toThrow();
+  });
+
+  it("rejects scientific notation '1e5'", () => {
+    expect(() => parseTokenAmount("1e5", 2)).toThrow();
+  });
+
+  // --- decimal place limits --------------------------------------------------
+
+  it("rejects input with more decimal places than allowed", () => {
+    // "1.123" has 3 decimal places, but max is 2
+    expect(() => parseTokenAmount("1.123", 2)).toThrow();
+  });
+
+  it("accepts input with exactly the allowed decimal places", () => {
+    // "1.12" has 2 decimal places, max is 2
+    expect(parseTokenAmount("1.12", 2)).toBe(112n);
+  });
+
+  // --- comma handling --------------------------------------------------------
+
+  it("strips commas from input before parsing", () => {
+    // "1,000.5" → removes commas → "1000.5" → parses correctly
+    expect(parseTokenAmount("1,000.5", 2)).toBe(100050n);
+  });
+
+  it("handles multiple commas correctly", () => {
+    expect(parseTokenAmount("1,000,000.25", 2)).toBe(100000025n);
+  });
+
+  // --- whitespace handling ---------------------------------------------------
+
+  it("trims leading and trailing whitespace", () => {
+    expect(parseTokenAmount("  5.5  ", 2)).toBe(550n);
+  });
+
+  // --- zero-decimals case ---------------------------------------------------
+
+  it("parses at 0 decimals (integer-only token)", () => {
+    expect(parseTokenAmount("100", 0)).toBe(100n);
+  });
+
+  it("rejects fractional input when decimals=0", () => {
+    expect(() => parseTokenAmount("1.5", 0)).toThrow();
   });
 });
