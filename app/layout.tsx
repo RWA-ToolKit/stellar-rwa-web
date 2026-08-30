@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { WalletProvider, WalletErrorBoundary } from "@/hooks/useWallet";
+import { SkipLink } from "@/components/layout/SkipLink";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { ToastProvider } from "@/components/ui/ToastProvider";
@@ -33,8 +34,11 @@ export const viewport: Viewport = {
 function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
+      <SkipLink />
       <SiteHeader />
-      <main className="flex-1">{children}</main>
+      <main id="main-content" className="flex-1" tabIndex={-1}>
+        {children}
+      </main>
       <SiteFooter />
     </ToastProvider>
   );
