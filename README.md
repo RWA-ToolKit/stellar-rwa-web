@@ -145,6 +145,10 @@ types/          Domain types mirroring the contracts
 - Monetary valuations are stored on-chain as **USD cents** (`i128`); token
   amounts are integers in each token's own `decimals` base.
 
+## Component Authoring
+
+All components should handle four distinct states: **loading**, **empty**, **error**, and **success**. For conventions on state handling, accessibility patterns, and testing guidance, see [Component Authoring Guide](docs/component-authoring.md).
+
 ## Pages
 
 | Route          | Status | Description                                            |
