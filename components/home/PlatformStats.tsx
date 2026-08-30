@@ -31,7 +31,7 @@ export function PlatformStats() {
       value: stats.data ? stats.data.totalAssets.toLocaleString() : null,
     },
     {
-      label: "Total value locked",
+      label: "Total value locked (self-reported)",
       value: stats.data ? formatUsdCents(stats.data.tvl, { compact: true }) : null,
     },
     {
