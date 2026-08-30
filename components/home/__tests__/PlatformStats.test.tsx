@@ -34,24 +34,38 @@ const mockUseHolderTotals = useHolderTotals as jest.MockedFunction<
 
 /** Return value shape for usePlatformStats */
 interface PlatformStatsResult {
-  data?: { totalAssets: number; tvl: bigint; assets: AssetEntry[] } | undefined;
+  data?: { totalAssets: number; tvl: bigint; totalHolders: number | null; assets: AssetEntry[] | null } | null;
   loading: boolean;
-  error: Error | null;
+  error: string | null;
+  refetch: () => void;
 }
 
 /** Return value shape for useHolderTotals */
 interface HolderTotalsResult {
   data: number | null;
   loading: boolean;
-  error: Error | null;
+  error: string | null;
+  refetch: () => void;
 }
 
 function setupMocks(
-  statsResult: PlatformStatsResult,
-  holderResult: HolderTotalsResult,
+  statsResult: Partial<PlatformStatsResult>,
+  holderResult: Partial<HolderTotalsResult>,
 ) {
-  mockUsePlatformStats.mockReturnValue(statsResult as ReturnType<typeof usePlatformStats>);
-  mockUseHolderTotals.mockReturnValue(holderResult as ReturnType<typeof useHolderTotals>);
+  mockUsePlatformStats.mockReturnValue({
+    data: null,
+    loading: false,
+    error: null,
+    refetch: jest.fn(),
+    ...statsResult,
+  } as ReturnType<typeof usePlatformStats>);
+  mockUseHolderTotals.mockReturnValue({
+    data: null,
+    loading: false,
+    error: null,
+    refetch: jest.fn(),
+    ...holderResult,
+  } as ReturnType<typeof useHolderTotals>);
 }
 
 // ── tests ──────────────────────────────────────────────────────────────────
@@ -60,7 +74,7 @@ describe("PlatformStats", () => {
   afterEach(() => jest.clearAllMocks());
 
   // ── tile labels always present ─────────────────────────────────────────
-  it("always renders all three tile labels", () => {
+  it("renders all three tile labels when data is loading", () => {
     setupMocks(
       { data: undefined, loading: true, error: null },
       { data: null, loading: true, error: null },
@@ -91,17 +105,26 @@ describe("PlatformStats", () => {
   });
 
   // ── error state ────────────────────────────────────────────────────────
-  it("renders em-dash placeholders when usePlatformStats returns an error", () => {
-    setupMocks(
-      { data: undefined, loading: false, error: new Error("RPC down") },
-      { data: null, loading: false, error: null },
-    );
+  it("renders an ErrorState with retry when usePlatformStats returns an error", () => {
+    const mockRefetch = jest.fn();
+    mockUsePlatformStats.mockReturnValue({
+      data: null,
+      loading: false,
+      error: "RPC down",
+      refetch: mockRefetch,
+    } as ReturnType<typeof usePlatformStats>);
+    mockUseHolderTotals.mockReturnValue({
+      data: null,
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    } as ReturnType<typeof useHolderTotals>);
 
     render(<PlatformStats />);
 
-    // All three tiles show "—" on error
-    const dashes = screen.getAllByText("—");
-    expect(dashes).toHaveLength(3);
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/couldn't load platform stats/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 
   // ── success state ──────────────────────────────────────────────────────
@@ -111,6 +134,7 @@ describe("PlatformStats", () => {
         data: {
           totalAssets: 42,
           tvl: 5_000_000_00n, // $5,000,000
+          totalHolders: null,
           assets: [],
         },
         loading: false,
@@ -134,7 +158,7 @@ describe("PlatformStats", () => {
   it("renders single-digit total assets correctly", () => {
     setupMocks(
       {
-        data: { totalAssets: 1, tvl: 100_00n, assets: [] },
+        data: { totalAssets: 1, tvl: 100_00n, totalHolders: null, assets: [] },
         loading: false,
         error: null,
       },
@@ -152,7 +176,7 @@ describe("PlatformStats", () => {
   it("shows stats values but skeleton for holders when only holder data is pending", () => {
     setupMocks(
       {
-        data: { totalAssets: 7, tvl: 2_500_000_00n, assets: [] },
+        data: { totalAssets: 7, tvl: 2_500_000_00n, totalHolders: null, assets: [] },
         loading: false,
         error: null,
       },
@@ -173,7 +197,7 @@ describe("PlatformStats", () => {
   it("formats large TVL values with compact notation", () => {
     setupMocks(
       {
-        data: { totalAssets: 100, tvl: 1_200_000_000_00n, assets: [] }, // $1.2B
+        data: { totalAssets: 100, tvl: 1_200_000_000_00n, totalHolders: null, assets: [] }, // $1.2B
         loading: false,
         error: null,
       },
@@ -187,7 +211,7 @@ describe("PlatformStats", () => {
   });
 
   // ── three tiles rendered ───────────────────────────────────────────────
-  it("renders exactly 3 stat tiles", () => {
+  it("renders exactly 3 stat tiles when data is loading", () => {
     setupMocks(
       { data: undefined, loading: true, error: null },
       { data: null, loading: true, error: null },

@@ -6,10 +6,11 @@ import { useAssets } from "@/hooks/useAssets";
 import { AssetCard } from "@/components/asset/AssetCard";
 import { CardSkeletonGrid } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
 
 /** The highest-valued active assets, shown on the landing page. */
 export function FeaturedAssets() {
-  const { assets, loading, error } = useAssets();
+  const { assets, loading, error, refetch } = useAssets();
 
   const featured = useMemo(
     () =>
@@ -33,7 +34,13 @@ export function FeaturedAssets() {
 
       {loading ? (
         <CardSkeletonGrid count={3} />
-      ) : error || featured.length === 0 ? (
+      ) : error ? (
+        <ErrorState
+          title="Couldn't load featured assets"
+          message={error}
+          onRetry={refetch}
+        />
+      ) : featured.length === 0 ? (
         <EmptyState
           title="No assets yet"
           description="Tokenized assets will appear here once they're registered on-chain."

@@ -2,17 +2,27 @@
  * Tests for components/asset/AssetExplorer.tsx
  *
  * Strategy: mock useAssets so the component renders without any Soroban / Stellar
- * SDK calls, then drive it through loading, error, empty and populated states,
- * and assert that the type-filter chip correctly narrows the rendered list.
+ * SDK calls. Mock useSearchParams and useRouter from Next.js navigation so URL-
+ * based filter state can be exercised without a real router. Then drive the
+ * component through loading, error, empty and populated states, and assert that
+ * the type-filter chip correctly narrows the rendered list.
  */
 
 import React from "react";
-import { render, screen, fireEvent, within } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import type { AssetEntry } from "@/types";
 
 // ── mock useAssets hook ────────────────────────────────────────────────────
 jest.mock("@/hooks/useAssets", () => ({
   useAssets: jest.fn(),
+}));
+
+// ── mock Next.js navigation ────────────────────────────────────────────────
+const mockPush = jest.fn();
+
+jest.mock("next/navigation", () => ({
+  useRouter: jest.fn(() => ({ push: mockPush })),
+  useSearchParams: jest.fn(() => new URLSearchParams()),
 }));
 
 // AssetCard renders a link to /asset/<id> — mock Next.js Link so it renders
@@ -29,16 +39,19 @@ jest.mock("next/link", () => {
   return MockLink;
 });
 
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAssets } from "@/hooks/useAssets";
 import { AssetExplorer } from "../AssetExplorer";
 
 const mockUseAssets = useAssets as jest.MockedFunction<typeof useAssets>;
+const mockUseSearchParams = useSearchParams as jest.MockedFunction<typeof useSearchParams>;
+const mockUseRouter = useRouter as jest.MockedFunction<typeof useRouter>;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
 type UseAssetsReturn = ReturnType<typeof useAssets>;
 
-function setupMock(state: Partial<UseAssetsReturn>) {
+function setupMock(state: Partial<UseAssetsReturn>, searchParamsStr = "") {
   mockUseAssets.mockReturnValue({
     assets: [],
     loading: false,
@@ -47,6 +60,12 @@ function setupMock(state: Partial<UseAssetsReturn>) {
     data: [],
     ...state,
   } as UseAssetsReturn);
+
+  mockUseSearchParams.mockReturnValue(
+    new URLSearchParams(searchParamsStr) as ReturnType<typeof useSearchParams>,
+  );
+
+  mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<typeof useRouter>);
 }
 
 function makeAsset(
@@ -139,14 +158,9 @@ describe("AssetExplorer", () => {
   });
 
   it("shows a type-specific empty state when the active filter has no matches", () => {
-    // Only a real_estate asset exists; filtering by 'invoice' should produce
-    // the filtered-empty message.
-    setupMock({ assets: [REAL_ESTATE_ASSET] });
+    // The URL already has type=invoice, but only a real_estate asset exists.
+    setupMock({ assets: [REAL_ESTATE_ASSET] }, "type=invoice");
     render(<AssetExplorer />);
-
-    // Click the 'Invoice' filter chip
-    const invoiceChip = screen.getByRole("button", { name: /invoice/i });
-    fireEvent.click(invoiceChip);
 
     expect(screen.getByText("No assets of this type")).toBeInTheDocument();
     expect(
@@ -165,14 +179,76 @@ describe("AssetExplorer", () => {
     expect(screen.getByText("Gold Reserve")).toBeInTheDocument();
   });
 
-  // ── type filtering ─────────────────────────────────────────────────────
+  // ── URL-based filtering ────────────────────────────────────────────────
 
-  it("filters the list to only real-estate assets when that chip is clicked", () => {
+  it("shows only real-estate assets when type=real_estate is in the URL", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] }, "type=real_estate");
+    render(<AssetExplorer />);
+
+    expect(screen.getByText("Lagos Office Tower")).toBeInTheDocument();
+    expect(screen.queryByText("Trade Invoice #42")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gold Reserve")).not.toBeInTheDocument();
+  });
+
+  it("shows only invoice assets when type=invoice is in the URL", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] }, "type=invoice");
+    render(<AssetExplorer />);
+
+    expect(screen.getByText("Trade Invoice #42")).toBeInTheDocument();
+    expect(screen.queryByText("Lagos Office Tower")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gold Reserve")).not.toBeInTheDocument();
+  });
+
+  it("shows only commodity assets when type=commodity is in the URL", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] }, "type=commodity");
+    render(<AssetExplorer />);
+
+    expect(screen.getByText("Gold Reserve")).toBeInTheDocument();
+    expect(screen.queryByText("Lagos Office Tower")).not.toBeInTheDocument();
+    expect(screen.queryByText("Trade Invoice #42")).not.toBeInTheDocument();
+  });
+
+  it("ignores an invalid type param and shows all assets", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET] }, "type=invalid_type");
+    render(<AssetExplorer />);
+
+    // Invalid type falls back to 'all'
+    expect(screen.getByText("Lagos Office Tower")).toBeInTheDocument();
+    expect(screen.getByText("Trade Invoice #42")).toBeInTheDocument();
+  });
+
+  // ── filter chip interactions push to router ────────────────────────────
+
+  it("calls router.push with type param when a filter chip is clicked", () => {
     setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] });
     render(<AssetExplorer />);
 
     const realEstateChip = screen.getByRole("button", { name: /real estate/i });
     fireEvent.click(realEstateChip);
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    const url: string = mockPush.mock.calls[0][0];
+    expect(url).toContain("type=real_estate");
+  });
+
+  it("calls router.push without type param when 'All Assets' chip is clicked", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET] }, "type=invoice");
+    render(<AssetExplorer />);
+
+    fireEvent.click(screen.getByRole("button", { name: /all assets/i }));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    const url: string = mockPush.mock.calls[0][0];
+    // 'all' should not add a type param (clean URL)
+    expect(url).not.toContain("type=");
+  });
+
+  // ── type filtering ─────────────────────────────────────────────────────
+
+  it("filters the list to only real-estate assets when that chip is clicked", () => {
+    // Re-render with the new searchParams to simulate navigation
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] }, "type=real_estate");
+    render(<AssetExplorer />);
 
     expect(screen.getByText("Lagos Office Tower")).toBeInTheDocument();
     expect(screen.queryByText("Trade Invoice #42")).not.toBeInTheDocument();
@@ -180,11 +256,8 @@ describe("AssetExplorer", () => {
   });
 
   it("filters the list to only invoice assets when the invoice chip is clicked", () => {
-    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] });
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] }, "type=invoice");
     render(<AssetExplorer />);
-
-    const invoiceChip = screen.getByRole("button", { name: /invoice/i });
-    fireEvent.click(invoiceChip);
 
     expect(screen.getByText("Trade Invoice #42")).toBeInTheDocument();
     expect(screen.queryByText("Lagos Office Tower")).not.toBeInTheDocument();
@@ -192,11 +265,8 @@ describe("AssetExplorer", () => {
   });
 
   it("filters the list to only commodity assets when the commodity chip is clicked", () => {
-    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] });
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] }, "type=commodity");
     render(<AssetExplorer />);
-
-    const commodityChip = screen.getByRole("button", { name: /commodity/i });
-    fireEvent.click(commodityChip);
 
     expect(screen.getByText("Gold Reserve")).toBeInTheDocument();
     expect(screen.queryByText("Lagos Office Tower")).not.toBeInTheDocument();
@@ -207,12 +277,7 @@ describe("AssetExplorer", () => {
     setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] });
     render(<AssetExplorer />);
 
-    // Apply filter
-    fireEvent.click(screen.getByRole("button", { name: /invoice/i }));
-    expect(screen.queryByText("Lagos Office Tower")).not.toBeInTheDocument();
-
-    // Clear filter
-    fireEvent.click(screen.getByRole("button", { name: /all assets/i }));
+    // All assets visible (no filter in URL)
     expect(screen.getByText("Lagos Office Tower")).toBeInTheDocument();
     expect(screen.getByText("Trade Invoice #42")).toBeInTheDocument();
     expect(screen.getByText("Gold Reserve")).toBeInTheDocument();
@@ -239,18 +304,12 @@ describe("AssetExplorer", () => {
     expect(screen.getByText(/page 1 of 2/i)).toBeInTheDocument();
   });
 
-  it("advances to page 2 when the next-page button is clicked", () => {
+  it("shows page 2 content when page=2 is in the URL", () => {
     const manyAssets = Array.from({ length: 11 }, (_, i) =>
       makeAsset({ id: BigInt(i + 1), name: `Asset ${i + 1}` }),
     );
-    setupMock({ assets: manyAssets });
+    setupMock({ assets: manyAssets }, "page=2");
     render(<AssetExplorer />);
-
-    // Page 1: first 9 assets visible, asset 10 is not
-    expect(screen.getByText("Asset 1")).toBeInTheDocument();
-    expect(screen.queryByText("Asset 10")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /next page/i }));
 
     // Page 2: assets 10 and 11 visible
     expect(screen.getByText("Asset 10")).toBeInTheDocument();
@@ -258,7 +317,21 @@ describe("AssetExplorer", () => {
     expect(screen.queryByText("Asset 1")).not.toBeInTheDocument();
   });
 
-  it("resets to page 1 when a filter chip is clicked while on page 2", () => {
+  it("calls router.push with the next page when the next-page button is clicked", () => {
+    const manyAssets = Array.from({ length: 11 }, (_, i) =>
+      makeAsset({ id: BigInt(i + 1), name: `Asset ${i + 1}` }),
+    );
+    setupMock({ assets: manyAssets });
+    render(<AssetExplorer />);
+
+    fireEvent.click(screen.getByRole("button", { name: /next page/i }));
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    const url: string = mockPush.mock.calls[0][0];
+    expect(url).toContain("page=2");
+  });
+
+  it("resets to page 1 when a filter chip is clicked", () => {
     const manyRealEstate = Array.from({ length: 10 }, (_, i) =>
       makeAsset({
         id: BigInt(i + 1),
@@ -266,15 +339,16 @@ describe("AssetExplorer", () => {
         assetType: "real_estate",
       }),
     );
-    setupMock({ assets: manyRealEstate });
+    // Start on page 2
+    setupMock({ assets: manyRealEstate }, "page=2");
     render(<AssetExplorer />);
 
-    // Advance to page 2
-    fireEvent.click(screen.getByRole("button", { name: /next page/i }));
-    expect(screen.getByText(/page 2/i)).toBeInTheDocument();
-
-    // Apply filter — page should reset to 1
+    // Apply filter — should call router.push without a page param (resets to 1)
     fireEvent.click(screen.getByRole("button", { name: /real estate/i }));
-    expect(screen.getByText(/page 1/i)).toBeInTheDocument();
+
+    expect(mockPush).toHaveBeenCalledTimes(1);
+    const url: string = mockPush.mock.calls[0][0];
+    expect(url).not.toContain("page=");
+    expect(url).toContain("type=real_estate");
   });
 });

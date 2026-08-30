@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import type { AssetDetail } from "@/types";
 import { useHolders, type Holder } from "@/hooks/useHolders";
 import { useWallet } from "@/hooks/useWallet";
@@ -64,5 +64,24 @@ describe("HolderList", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
+  });
+
+  it("renders an ErrorState with retry when loading holders fails", () => {
+    const mockRefetch = jest.fn();
+    mockUseWallet.mockReturnValue({ address: null } as ReturnType<typeof useWallet>);
+    mockUseHolders.mockReturnValue({
+      data: null,
+      loading: false,
+      error: "RPC unreachable",
+      refetch: mockRefetch,
+    });
+
+    render(<HolderList asset={asset} />);
+
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(screen.getByText(/couldn't load holders/i)).toBeInTheDocument();
+    const retryBtn = screen.getByRole("button", { name: /try again/i });
+    fireEvent.click(retryBtn);
+    expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 });
