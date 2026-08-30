@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "Tokenize real-world assets on Stellar \u2014 issue compliant asset tokens, manage KYC allowlists, and distribute dividends.",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

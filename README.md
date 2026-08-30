@@ -122,6 +122,43 @@ types/          Domain types mirroring the contracts
 - Monetary valuations are stored on-chain as **USD cents** (`i128`); token
   amounts are integers in each token's own `decimals` base.
 
+### Indexer API fast-path vs Soroban RPC fallback
+
+Several read hooks implement a **dual-path** data strategy to balance
+performance against self-sufficiency:
+
+```
+1. Try the indexer REST API  (fast — pre-aggregated, no RPC round-trips)
+   │
+   └─ null (API not configured / request failed)
+      │
+      └─ Fall back to direct Soroban RPC reads
+         (always works, but may be slower or less complete)
+```
+
+**How the API path is activated:** Set `NEXT_PUBLIC_API_URL` in your env file.
+When the variable is absent or empty, `lib/api.ts` returns `null` for every
+call and every hook immediately executes the Soroban RPC path. The two paths
+are transparent to callers — both resolve to the same TypeScript types.
+
+**Which hooks use this pattern and what each path does:**
+
+| Hook | API fast-path | Soroban RPC fallback |
+|------|--------------|----------------------|
+| `useAssets` | `GET /assets` — full list in one request | `registry.get_all_assets` |
+| `useIssuerAssets` | `GET /assets?issuer=…` | `registry.get_assets_by_issuer` |
+| `usePlatformStats` | `GET /stats` — includes `totalHolders` | Parallel `get_all_assets` + `total_value_locked`; `totalHolders` is `null` (not derivable cheaply) |
+| `useHolders` | `GET /assets/{contract}/holders` | Read compliance allowlist → `balance` per address (O(n) RPC calls) |
+| `useHolderTotals` | `GET /stats` → `totalHolders` | Union all allowlists across deduplicated compliance contracts |
+
+**Hooks that are always on-chain only** (no API path exists for them):
+`useCompliance`, `useAllowlist`, `useComplianceOverview`, `useDividends`.
+
+**Debugging tip:** if data looks stale or inconsistent between page loads, first
+check which path is active. With `NEXT_PUBLIC_API_URL` set, add a `console.log`
+in `lib/api.ts` → `fetchJson`. Without it, every fetch falls through to Soroban
+RPC and freshness is bounded by block time (~5 s on Testnet).
+
 ## Pages
 
 | Route          | Status | Description                                            |

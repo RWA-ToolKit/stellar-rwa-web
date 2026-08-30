@@ -10,7 +10,12 @@ import type { AssetEntry } from "@/types";
  * Count the distinct KYC-approved addresses across a set of assets. Assets can
  * share a compliance contract, so we dedupe by compliance contract before
  * unioning the allowlists. Returns 0 for an empty set.
- * When the API is configured, reads the pre-aggregated holder count instead.
+ *
+ * Dual-path: when the indexer API is configured (NEXT_PUBLIC_API_URL set), the
+ * pre-aggregated count is read from GET /stats → totalHolders in a single
+ * request. Without the API, the fallback unions the on-chain allowlists across
+ * all deduplicated compliance contracts to count unique addresses — multiple
+ * RPC calls. See README § "Indexer API fast-path vs Soroban RPC fallback".
  */
 export function useHolderTotals(assets: AssetEntry[] | null) {
   const { network } = useWallet();

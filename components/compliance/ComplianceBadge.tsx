@@ -51,7 +51,11 @@ interface ComplianceBadgeProps {
 
 /** Status pill for an address's KYC/compliance standing. */
 export function ComplianceBadge({ status, labelOverride, className = "" }: ComplianceBadgeProps) {
-  const s = STYLES[status];
+  // Guard against unexpected status strings coming from on-chain data that
+  // TypeScript can't validate at runtime (e.g. via the `as never` cast in
+  // AllowlistRow). Fall back to the neutral "None" style so the UI degrades
+  // gracefully instead of crashing on an undefined lookup.
+  const s = STYLES[status] ?? STYLES["None"];
   const label = labelOverride ?? s.label;
   return (
     <span

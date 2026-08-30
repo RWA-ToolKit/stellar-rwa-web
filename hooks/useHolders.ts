@@ -14,7 +14,13 @@ export interface Holder {
  * Derive an asset's holders. The token contract doesn't enumerate holders, so
  * we read the compliance allowlist (the only addresses that *can* hold it) and
  * keep those with a positive balance, sorted by size.
- * When the API is configured, reads the pre-aggregated holder list instead.
+ *
+ * Dual-path: when the indexer API is configured (NEXT_PUBLIC_API_URL set), the
+ * pre-aggregated holder list is fetched from GET /assets/{contract}/holders in
+ * a single request. Without the API, the fallback reads the compliance
+ * allowlist on-chain and then issues one balance RPC call per address — O(n)
+ * in the number of KYC-approved addresses, which can be slow for large lists.
+ * See README § "Indexer API fast-path vs Soroban RPC fallback".
  */
 /**
  * @param refreshKey Bump this (e.g. after a confirmed transfer) to force a

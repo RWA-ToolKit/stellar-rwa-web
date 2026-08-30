@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
 import { dividend } from "@/lib/contracts";
@@ -149,9 +149,61 @@ function CreateDistributionCard({
 
 // ---- Existing distributions ----
 
+/** How often (ms) to automatically re-fetch distribution data. */
+const AUTO_REFRESH_INTERVAL_MS = 30_000;
+
+/**
+ * Returns a human-readable "X seconds ago / X minutes ago" string relative to
+ * `since`, or null when `since` is null.
+ */
+function useRelativeTime(since: Date | null): string | null {
+  const [, tick] = useState(0);
+
+  useEffect(() => {
+    if (!since) return;
+    // Re-render every 10 s so the "X seconds ago" label stays accurate.
+    const id = setInterval(() => tick((n) => n + 1), 10_000);
+    return () => clearInterval(id);
+  }, [since]);
+
+  if (!since) return null;
+  const seconds = Math.round((Date.now() - since.getTime()) / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  return `${Math.floor(seconds / 60)}m ago`;
+}
+
 function ExistingDistributionsCard({ tokenContract }: { tokenContract: string }) {
   const { data, loading, error, refetch } = useDividends(tokenContract);
   const distributions = data ?? [];
+
+  // Track when data was last successfully loaded so we can show a staleness
+  // indicator. Updated every time `data` transitions from null → value or
+  // on subsequent successful refreshes (i.e. whenever we get new data and
+  // loading has just finished).
+  const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
+  const prevLoadingRef = useRef(loading);
+  useEffect(() => {
+    // loading just flipped from true → false and we have data: a fetch completed.
+    if (prevLoadingRef.current && !loading && data !== null) {
+      setLastRefreshed(new Date());
+    }
+    prevLoadingRef.current = loading;
+  }, [loading, data]);
+
+  // Auto-refresh every AUTO_REFRESH_INTERVAL_MS while the card is mounted.
+  // `refetch` is a stable callback (memoised inside useAsync) so this effect
+  // only re-runs if tokenContract changes.
+  const stableRefetch = useCallback(refetch, [refetch]);
+  useEffect(() => {
+    const id = setInterval(stableRefetch, AUTO_REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [stableRefetch]);
+
+  const relativeTime = useRelativeTime(lastRefreshed);
+
+  // True when a background refresh is in-flight but we already have data to
+  // display — used to show a subtle spinner without hiding the list.
+  const backgroundRefreshing = loading && data !== null;
 
   return (
     <ActionCard
@@ -165,11 +217,12 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
         </svg>
       }
     >
-      {loading ? (
+      {/* Initial load — no data yet */}
+      {loading && data === null ? (
         <div className="flex items-center gap-2 py-4 text-sm text-base-100/40">
           <Spinner size={14} /> Loading distributions…
         </div>
-      ) : error ? (
+      ) : error && data === null ? (
         <ErrorState
           title="Couldn't load distributions"
           message={error}
@@ -221,6 +274,39 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
             );
           })}
         </ul>
+      )}
+
+      {/* Staleness footer — only shown once we have data */}
+      {data !== null && (
+        <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2">
+          <p className="flex items-center gap-1.5 text-[11px] text-base-100/35">
+            {backgroundRefreshing ? (
+              <>
+                <Spinner size={10} />
+                <span>Refreshing…</span>
+              </>
+            ) : (
+              <>
+                {/* Simple clock icon */}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 6v6l4 2" strokeLinecap="round" />
+                </svg>
+                <span>
+                  {relativeTime ? `Updated ${relativeTime}` : "Up to date"} · auto-refreshes every 30 s
+                </span>
+              </>
+            )}
+          </p>
+          <button
+            onClick={refetch}
+            disabled={loading}
+            aria-label="Refresh distribution data"
+            className="btn-ghost py-0.5 px-1.5 text-[11px] text-base-100/40 hover:text-base-100/70 disabled:opacity-40"
+          >
+            Refresh
+          </button>
+        </div>
       )}
     </ActionCard>
   );
