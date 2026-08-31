@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@next/bundle-analyzer": "^14.2.5",
-    "@playwright/test": "^1.49.1",
+    "@playwright/test": "^1.62.1",
     "@size-limit/file": "^11.1.6",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^14.0.0",
