@@ -1,4 +1,4 @@
-import { formatUsdCents, formatTokenAmount } from "@/lib/format";
+import { formatUsdCents, formatTokenAmount, parseTokenAmount, formatRawPlain, compactNumber } from "@/lib/format";
 
 // ---------------------------------------------------------------------------
 // Issue #35 — formatUsdCents
@@ -174,5 +174,277 @@ describe("formatTokenAmount", () => {
 
   it("formats 10_000_000 raw at 7 decimals as 1", () => {
     expect(formatTokenAmount(10_000_000n, 7)).toBe("1");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #250 — parseTokenAmount
+// ---------------------------------------------------------------------------
+describe("parseTokenAmount", () => {
+  // --- accepted inputs -------------------------------------------------------
+
+  it("accepts and parses single digit '5'", () => {
+    expect(parseTokenAmount("5", 2)).toBe(500n);
+  });
+
+  it("accepts and parses decimal '5.5' at 2 decimals", () => {
+    expect(parseTokenAmount("5.5", 2)).toBe(550n);
+  });
+
+  it("accepts and parses leading-decimal '.5' at 2 decimals", () => {
+    expect(parseTokenAmount(".5", 2)).toBe(50n);
+  });
+
+  // --- rejected inputs -------------------------------------------------------
+
+  it("rejects empty string", () => {
+    expect(() => parseTokenAmount("", 2)).toThrow();
+  });
+
+  it("rejects a lone dot '.'", () => {
+    expect(() => parseTokenAmount(".", 2)).toThrow();
+  });
+
+  it("rejects trailing dot '5.'", () => {
+    expect(() => parseTokenAmount("5.", 2)).toThrow();
+  });
+
+  it("rejects negative number '-5'", () => {
+    expect(() => parseTokenAmount("-5", 2)).toThrow();
+  });
+
+  it("rejects scientific notation '1e5'", () => {
+    expect(() => parseTokenAmount("1e5", 2)).toThrow();
+  });
+
+  // --- decimal place limits --------------------------------------------------
+
+  it("rejects input with more decimal places than allowed", () => {
+    // "1.123" has 3 decimal places, but max is 2
+    expect(() => parseTokenAmount("1.123", 2)).toThrow();
+  });
+
+  it("accepts input with exactly the allowed decimal places", () => {
+    // "1.12" has 2 decimal places, max is 2
+    expect(parseTokenAmount("1.12", 2)).toBe(112n);
+  });
+
+  // --- comma handling --------------------------------------------------------
+
+  it("strips commas from input before parsing", () => {
+    // "1,000.5" → removes commas → "1000.5" → parses correctly
+    expect(parseTokenAmount("1,000.5", 2)).toBe(100050n);
+  });
+
+  it("handles multiple commas correctly", () => {
+    expect(parseTokenAmount("1,000,000.25", 2)).toBe(100000025n);
+  });
+
+  // --- whitespace handling ---------------------------------------------------
+
+  it("trims leading and trailing whitespace", () => {
+    expect(parseTokenAmount("  5.5  ", 2)).toBe(550n);
+  });
+
+  // --- zero-decimals case ---------------------------------------------------
+
+  it("parses at 0 decimals (integer-only token)", () => {
+    expect(parseTokenAmount("100", 0)).toBe(100n);
+  });
+
+  it("rejects fractional input when decimals=0", () => {
+    expect(() => parseTokenAmount("1.5", 0)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #251 — formatRawPlain & round-trip with parseTokenAmount
+// ---------------------------------------------------------------------------
+describe("formatRawPlain", () => {
+  // --- round-trip tests ------------------------------------------------------
+
+  it("round-trips a whole number through parseTokenAmount", () => {
+    const input = "5";
+    const parsed = parseTokenAmount(input, 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("5");
+  });
+
+  it("round-trips a decimal number through parseTokenAmount", () => {
+    const input = "5.5";
+    const parsed = parseTokenAmount(input, 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("5.5");
+  });
+
+  it("round-trips a leading-decimal number through parseTokenAmount", () => {
+    const input = ".5";
+    const parsed = parseTokenAmount(input, 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("0.5");
+  });
+
+  it("round-trips a large number with many digits", () => {
+    const input = "1000000.12";
+    const parsed = parseTokenAmount(input, 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("1000000.12");
+  });
+
+  it("round-trips a number at max decimal precision", () => {
+    const input = "1.123456";
+    const parsed = parseTokenAmount(input, 6);
+    const formatted = formatRawPlain(parsed, 6);
+    expect(formatted).toBe("1.123456");
+  });
+
+  // --- trailing zero handling ------------------------------------------------
+
+  it("trims trailing zeros from formatted output", () => {
+    // Input "1.50" with 2 decimals: parses to 150n, formats back without trailing zero
+    const parsed = parseTokenAmount("1.5", 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("1.5");
+  });
+
+  it("preserves significant zeros but trims trailing zeros", () => {
+    // "1.05" parses to 105n (at 2 decimals), formats to "1.05" (no trailing zero)
+    const parsed = parseTokenAmount("1.05", 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("1.05");
+  });
+
+  it("trims all fractional zeros when fraction is exactly zero", () => {
+    const parsed = parseTokenAmount("1", 2);
+    const formatted = formatRawPlain(parsed, 2);
+    expect(formatted).toBe("1");
+  });
+
+  it("handles value with many trailing zeros", () => {
+    // Raw 100n with 6 decimals = 0.0001, but formatRawPlain should trim to "0.0001"
+    const raw = 100n;
+    const formatted = formatRawPlain(raw, 6);
+    expect(formatted).toBe("0.0001");
+  });
+
+  // --- no thousands separators -----------------------------------------------
+
+  it("does not include thousands separators (unlike formatTokenAmount)", () => {
+    const raw = 1_000_000n;
+    const formatted = formatRawPlain(raw, 2);
+    expect(formatted).toBe("10000");
+    expect(formatted).not.toMatch(/,/);
+  });
+
+  // --- negative amounts ------------------------------------------------------
+
+  it("formats negative raw amounts with leading minus", () => {
+    const raw = -500n;
+    const formatted = formatRawPlain(raw, 2);
+    expect(formatted).toBe("-5");
+  });
+
+  it("round-trips negative amounts (if input were to be accepted)", () => {
+    // Note: parseTokenAmount rejects negative input, so this tests formatRawPlain's negative handling
+    const raw = -550n;
+    const formatted = formatRawPlain(raw, 2);
+    expect(formatted).toBe("-5.5");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #252 — compactNumber
+// ---------------------------------------------------------------------------
+describe("compactNumber", () => {
+  // --- sub-1000 (no compaction) ----------------------------------------------
+
+  it("does not compact values below 1,000", () => {
+    expect(compactNumber(999)).toBe("999");
+  });
+
+  it("does not compact value exactly 999", () => {
+    expect(compactNumber(999)).toBe("999");
+  });
+
+  it("returns plain string for 0", () => {
+    expect(compactNumber(0)).toBe("0");
+  });
+
+  it("returns plain string for 1", () => {
+    expect(compactNumber(1)).toBe("1");
+  });
+
+  // --- K threshold (1,000) ---------------------------------------------------
+
+  it("compacts exactly 1,000 as '1K'", () => {
+    expect(compactNumber(1_000)).toBe("1K");
+  });
+
+  it("compacts 1,200 as '1.2K'", () => {
+    expect(compactNumber(1_200)).toBe("1.2K");
+  });
+
+  it("compacts 12,345 as '12.3K'", () => {
+    expect(compactNumber(12_345)).toBe("12.3K");
+  });
+
+  it("compacts 999,999 as '1000K'", () => {
+    // 999999 / 1000 = 999.999, toFixed(1) = "1000.0", trimZero = "1000"
+    expect(compactNumber(999_999)).toBe("1000K");
+  });
+
+  // --- M threshold (1,000,000) -----------------------------------------------
+
+  it("compacts exactly 1,000,000 as '1M'", () => {
+    expect(compactNumber(1_000_000)).toBe("1M");
+  });
+
+  it("compacts 1,500,000 as '1.5M'", () => {
+    expect(compactNumber(1_500_000)).toBe("1.5M");
+  });
+
+  it("compacts 12,345,678 as '12.3M'", () => {
+    expect(compactNumber(12_345_678)).toBe("12.3M");
+  });
+
+  it("compacts 999,999,999 as '1000M'", () => {
+    // Just below 1B, should still use M suffix
+    expect(compactNumber(999_999_999)).toBe("1000M");
+  });
+
+  // --- B threshold (1,000,000,000) -------------------------------------------
+
+  it("compacts exactly 1,000,000,000 as '1B'", () => {
+    expect(compactNumber(1_000_000_000)).toBe("1B");
+  });
+
+  it("compacts 2,500,000,000 as '2.5B'", () => {
+    expect(compactNumber(2_500_000_000)).toBe("2.5B");
+  });
+
+  it("compacts 12,345,678,901 as '12.3B'", () => {
+    expect(compactNumber(12_345_678_901)).toBe("12.3B");
+  });
+
+  // --- negative numbers ------------------------------------------------------
+
+  it("compacts absolute value of negative numbers", () => {
+    expect(compactNumber(-1_000_000)).toBe("-1M");
+  });
+
+  it("does not compact negative values below -1000", () => {
+    expect(compactNumber(-999)).toBe("-999");
+  });
+
+  // --- decimal rounding (trimZero behavior) ---------------------------------
+
+  it("trims .0 suffix from rounded values", () => {
+    // 1000000 / 1000000 = 1.0 → trimmed to "1"
+    expect(compactNumber(1_000_000)).toBe("1M");
+  });
+
+  it("keeps single decimal when significant", () => {
+    // 1234567 / 1000000 = 1.234567, toFixed(1) = "1.2" (not trimmed)
+    expect(compactNumber(1_234_567)).toBe("1.2M");
   });
 });
