@@ -32,6 +32,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [amountError, setAmountError] = useState<string | null>(null);
 
   const trimmedTo = to.trim();
   const recipientFormatValid =
@@ -64,7 +65,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   } catch {
     amountValid = false;
   }
-  const formValid = recipientFormatValid && amountValid;
+  const formValid = recipientFormatValid && amountValid && !amountError;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -109,6 +110,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
     if (res) {
       setTo("");
       setAmount("");
+      setAmountError(null);
       onTransferred?.();
     }
   }
@@ -193,7 +195,22 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             <input
               id="transfer-amount"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setAmount(val);
+                // Inline decimal validation — check on every keystroke so the
+                // user gets immediate feedback without waiting for form submit.
+                if (val === "") {
+                  setAmountError(null);
+                } else {
+                  try {
+                    parseTokenAmount(val, metadata.decimals);
+                    setAmountError(null);
+                  } catch (err) {
+                    setAmountError(err instanceof Error ? err.message : null);
+                  }
+                }
+              }}
               placeholder="0.00"
               inputMode="decimal"
               disabled={!canTransfer || complianceLoading || tx.pending}
@@ -203,6 +220,11 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
               {metadata.symbol}
             </span>
           </div>
+          {amountError && (
+            <p role="alert" aria-live="polite" className="mt-1.5 text-xs text-red-400">
+              {amountError}
+            </p>
+          )}
         </div>
 
         {formError && <p role="alert" aria-live="assertive" className="text-xs text-red-400">{formError}</p>}
