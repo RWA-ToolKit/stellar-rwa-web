@@ -270,6 +270,22 @@ export const assetToken = {
     ]).then((v) => BigInt(v ?? 0n));
   },
 
+  /**
+   * Returns the amount of `tokenId` that `spender` is allowed to transfer on
+   * behalf of `owner` (SEP-41 `allowance`).
+   */
+  allowance(
+    network: Network,
+    tokenId: string,
+    owner: string,
+    spender: string,
+  ): Promise<bigint> {
+    return readContract<bigint>(network, tokenId, "allowance", [
+      arg.address(owner),
+      arg.address(spender),
+    ]).then((v) => BigInt(v ?? 0n));
+  },
+
   totalSupply(network: Network, tokenId: string): Promise<bigint> {
     return readContract<bigint>(network, tokenId, "total_supply").then((v) =>
       BigInt(v ?? 0n),

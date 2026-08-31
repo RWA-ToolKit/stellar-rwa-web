@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
-import { dividend } from "@/lib/contracts";
+import { assetToken, contractIds, dividend } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
+import { useAsync } from "@/hooks/useAsync";
+import { useWallet } from "@/hooks/useWallet";
 import { useDividends } from "@/hooks/useDividends";
 import { parseTokenAmount, formatTokenAmount, truncateAddress } from "@/lib/format";
 import { PAYMENT_TOKEN_DECIMALS } from "@/components/dividend/ClaimButton";
@@ -43,9 +45,43 @@ function CreateDistributionCard({
   onCreated?: () => void;
 }) {
   const tx = useTx();
+  const { address, network } = useWallet();
   const [paymentToken, setPaymentToken] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Only fetch when the input looks like a valid contract address.
+  const isValidPt =
+    paymentToken.trim().length > 0 &&
+    (StrKey.isValidContract(paymentToken.trim()) ||
+      StrKey.isValidEd25519PublicKey(paymentToken.trim()));
+
+  // #293: Show the issuer's balance in the payment token before they submit.
+  const { data: balance, loading: balanceLoading } = useAsync(
+    () => assetToken.balance(network, paymentToken.trim(), address!),
+    [network, paymentToken, address],
+    isValidPt && !!address,
+  );
+
+  // #293: Show how much the dividend contract is already approved to pull.
+  // Issuers need to approve at least totalAmount before the distribution can be funded.
+  const dividendContractId = contractIds(network).dividend;
+  const { data: allowance, loading: allowanceLoading } = useAsync(
+    () => assetToken.allowance(network, paymentToken.trim(), address!, dividendContractId),
+    [network, paymentToken, address, dividendContractId],
+    isValidPt && !!address,
+  );
+
+  // Parse the requested amount for comparison (best-effort; errors handled on submit).
+  let requestedRaw: bigint | null = null;
+  try {
+    if (totalAmount.trim()) requestedRaw = parseTokenAmount(totalAmount, PAYMENT_TOKEN_DECIMALS);
+  } catch {
+    // handled at submit time
+  }
+
+  const insufficientBalance = balance !== null && requestedRaw !== null && requestedRaw > balance;
+  const needsApproval = allowance !== null && requestedRaw !== null && requestedRaw > allowance;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -106,6 +142,51 @@ function CreateDistributionCard({
             This is the token used to pay holders — typically a stablecoin or XLM SAC.
           </p>
         </div>
+
+        {/* #293: surface balance + allowance so the issuer knows before submitting */}
+        {isValidPt && address && (
+          <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5 space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-base-100/50">Your balance</span>
+              {balanceLoading ? (
+                <Spinner size={10} />
+              ) : balance !== null ? (
+                <span className={insufficientBalance ? "font-semibold text-red-400" : "text-base-100/80"}>
+                  {formatTokenAmount(balance, PAYMENT_TOKEN_DECIMALS)}
+                </span>
+              ) : (
+                <span className="text-base-100/30">—</span>
+              )}
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-base-100/50">Dividend contract allowance</span>
+              {allowanceLoading ? (
+                <Spinner size={10} />
+              ) : allowance !== null ? (
+                <span className={needsApproval ? "font-semibold text-amber-400" : "text-base-100/80"}>
+                  {formatTokenAmount(allowance, PAYMENT_TOKEN_DECIMALS)}
+                </span>
+              ) : (
+                <span className="text-base-100/30">—</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {insufficientBalance && (
+          <p role="alert" className="text-xs text-red-400">
+            Insufficient balance — your wallet holds less than the requested distribution amount.
+          </p>
+        )}
+        {needsApproval && !insufficientBalance && (
+          <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90">
+            The dividend contract is not approved to spend enough of this token on your behalf.
+            Submit an <strong className="font-semibold">approve</strong> transaction for at least{" "}
+            {formatTokenAmount(requestedRaw ?? 0n, PAYMENT_TOKEN_DECIMALS)} tokens before funding
+            this distribution.
+          </p>
+        )}
+
         <div>
           <label htmlFor="dist-total" className="label">Total pool amount</label>
           <div className="relative">

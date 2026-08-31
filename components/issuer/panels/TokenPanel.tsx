@@ -92,6 +92,16 @@ function MintCard({
         </svg>
       }
     >
+      {/* #294: warn the issuer when the token is paused so mint attempts don't silently fail */}
+      {metadata.paused && (
+        <p
+          role="alert"
+          className="mb-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs text-amber-200/90"
+        >
+          This token is currently paused. Minting will likely fail until the token is
+          unpaused below.
+        </p>
+      )}
       <form onSubmit={onSubmit} className="space-y-3">
         <div>
           <label htmlFor="mint-to" className="label">Recipient address</label>
