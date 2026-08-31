@@ -11,9 +11,13 @@ function apiUrl(path: string): string {
 
 async function fetchJson<T>(url: string): Promise<T | null> {
   if (!url) return null;
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 export interface ApiAssetEntry {
