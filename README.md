@@ -60,10 +60,9 @@ If either party isn't KYC-approved the transaction reverts. The transfer form in
 `/asset/[id]` reads this status up front and disables the action with a clear
 reason when the connected wallet can't transfer.
 
-### Network & deployed contracts (Testnet)
+### Networks & deployed contracts
 
-Network passphrase: `Test SDF Network ; September 2015` · RPC:
-`https://soroban-testnet.stellar.org`
+**Testnet** · Network passphrase: `Test SDF Network ; September 2015` · Default RPC: `https://soroban-testnet.stellar.org`
 
 | Contract    | Contract ID | Explorer |
 |-------------|-------------|----------|
@@ -72,8 +71,9 @@ Network passphrase: `Test SDF Network ; September 2015` · RPC:
 | dividend    | `CAR4XY3CEBQWFOL27JEWFW34KXSIZA7RFKDQMEIV7ZU723RWY37I2SYX` | [view](https://stellar.expert/explorer/testnet/contract/CAR4XY3CEBQWFOL27JEWFW34KXSIZA7RFKDQMEIV7ZU723RWY37I2SYX) |
 | asset-token (sample) | `CBMCWLSQSWUTLUJFCNBHNBSXMUM3XU7NAQ5TSNERW4HA4ZZBYHLG4ECZ` | [view](https://stellar.expert/explorer/testnet/contract/CBMCWLSQSWUTLUJFCNBHNBSXMUM3XU7NAQ5TSNERW4HA4ZZBYHLG4ECZ) |
 
-Registry, compliance and dividend ids are configured via `NEXT_PUBLIC_*` env vars;
-per-asset token ids are discovered at runtime from the registry.
+Registry, compliance and dividend contract IDs are configured via environment variables (see [Environment Variables](docs/environment-variables.md#contract-ids)). Per-asset token IDs are discovered at runtime from the registry.
+
+To point the app at different deployments (e.g., local, alternative RPC, or Mainnet), see [Environment Variables](docs/environment-variables.md) and [Custom RPC Setup](docs/custom-rpc.md).
 
 ## Getting started
 
