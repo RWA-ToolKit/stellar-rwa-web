@@ -2,7 +2,8 @@ import { renderHook, act } from "@testing-library/react";
 import { useTx } from "../useTx";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
-import type { TxPhase, WriteCtx } from "@/lib/contracts";
+import type { WriteCtx } from "@/lib/contracts";
+import type { TxPhase } from "@/types";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 

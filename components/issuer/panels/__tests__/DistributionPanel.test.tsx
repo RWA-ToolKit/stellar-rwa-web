@@ -18,6 +18,14 @@ import type { AssetDetail } from "@/types";
 
 // ── mock useDividends ──────────────────────────────────────────────────────
 
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: jest.fn(() => ({ address: "GTESTADDRESS", network: "testnet" })),
+}));
+
+jest.mock("@/hooks/useAsync", () => ({
+  useAsync: jest.fn(() => ({ data: null, loading: false, error: null, refetch: jest.fn() })),
+}));
+
 jest.mock("@/hooks/useDividends", () => ({
   useDividends: jest.fn(),
 }));
@@ -37,7 +45,10 @@ jest.mock("@/hooks/useTx", () => ({
 
 // ── mock @stellar/stellar-sdk ─────────────────────────────────────────────
 
+// Only StrKey is stubbed; lib/stellar reads Networks at import time, so the
+// rest of the module has to stay real.
 jest.mock("@stellar/stellar-sdk", () => ({
+  ...jest.requireActual("@stellar/stellar-sdk"),
   StrKey: {
     isValidEd25519PublicKey: () => false,
     isValidContract: () => false,

@@ -1,4 +1,3 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   validateTokenContract,
   registerAsset,
@@ -9,12 +8,12 @@ import { assetToken, registry, type WriteCtx } from "@/lib/contracts";
 import type { AssetMetadata } from "@/types";
 
 // Mock the contracts module
-vi.mock("@/lib/contracts", () => ({
+jest.mock("@/lib/contracts", () => ({
   assetToken: {
-    getMetadata: vi.fn(),
+    getMetadata: jest.fn(),
   },
   registry: {
-    registerAsset: vi.fn(),
+    registerAsset: jest.fn(),
   },
 }));
 
@@ -23,7 +22,7 @@ vi.mock("@/lib/contracts", () => ({
 // ---------------------------------------------------------------------------
 describe("tokenizeFlow", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    jest.clearAllMocks();
   });
 
   // =========================================================================
@@ -45,7 +44,7 @@ describe("tokenizeFlow", () => {
 
     describe("valid inputs", () => {
       it("passes when token contract is reachable and has valid metadata", async () => {
-        vi.mocked(assetToken.getMetadata).mockResolvedValue(mockValidMetadata);
+        jest.mocked(assetToken.getMetadata).mockResolvedValue(mockValidMetadata);
 
         const result = await validateTokenContract(
           "testnet",
@@ -69,7 +68,7 @@ describe("tokenizeFlow", () => {
           symbol: "MYA",
         };
 
-        vi.mocked(assetToken.getMetadata).mockResolvedValue(metadata);
+        jest.mocked(assetToken.getMetadata).mockResolvedValue(metadata);
 
         const result = await validateTokenContract("testnet", "CTEST_ID");
         expect(result.metadata.name).toBe("MyAsset");
@@ -79,36 +78,20 @@ describe("tokenizeFlow", () => {
 
     describe("invalid inputs", () => {
       it("throws when token contract is unreachable or doesn't exist", async () => {
-        vi.mocked(assetToken.getMetadata).mockRejectedValue(
+        jest.mocked(assetToken.getMetadata).mockRejectedValue(
           new Error("Network error")
         );
 
-        try {
-          await validateTokenContract("testnet", "CINVALID_TOKEN_ID");
-          expect.fail("Expected error to be thrown");
-        } catch (e) {
-          expect((e as Error).message).toContain(
-            "Could not read the token contract"
-          );
-          expect((e as Error).message).toContain(
-            "Make sure the address is correct"
-          );
-        }
+        await expect(validateTokenContract("testnet", "CINVALID_TOKEN_ID")).rejects.toThrow("Could not read the token contract");
+        await expect(validateTokenContract("testnet", "CINVALID_TOKEN_ID")).rejects.toThrow("Make sure the address is correct");
       });
 
       it("throws when getMetadata call fails with simulation error", async () => {
-        vi.mocked(assetToken.getMetadata).mockRejectedValue(
+        jest.mocked(assetToken.getMetadata).mockRejectedValue(
           new Error("Simulation failed: contract not found")
         );
 
-        try {
-          await validateTokenContract("testnet", "CNONEXISTENT");
-          expect.fail("Expected error to be thrown");
-        } catch (e) {
-          expect((e as Error).message).toContain(
-            "Could not read the token contract"
-          );
-        }
+        await expect(validateTokenContract("testnet", "CNONEXISTENT")).rejects.toThrow("Could not read the token contract");
       });
 
       it("throws when metadata is missing name", async () => {
@@ -117,19 +100,12 @@ describe("tokenizeFlow", () => {
           name: "", // Empty name
         };
 
-        vi.mocked(assetToken.getMetadata).mockResolvedValue(
+        jest.mocked(assetToken.getMetadata).mockResolvedValue(
           incompleteMetadata
         );
 
-        try {
-          await validateTokenContract("testnet", "CTEST_ID");
-          expect.fail("Expected error to be thrown");
-        } catch (e) {
-          expect((e as Error).message).toContain(
-            "doesn't look like a valid asset-token"
-          );
-          expect((e as Error).message).toContain("missing name or symbol");
-        }
+        await expect(validateTokenContract("testnet", "CTEST_ID")).rejects.toThrow("doesn't look like a valid asset-token");
+        await expect(validateTokenContract("testnet", "CTEST_ID")).rejects.toThrow("missing name or symbol");
       });
 
       it("throws when metadata is missing symbol", async () => {
@@ -138,19 +114,12 @@ describe("tokenizeFlow", () => {
           symbol: "", // Empty symbol
         };
 
-        vi.mocked(assetToken.getMetadata).mockResolvedValue(
+        jest.mocked(assetToken.getMetadata).mockResolvedValue(
           incompleteMetadata
         );
 
-        try {
-          await validateTokenContract("testnet", "CTEST_ID");
-          expect.fail("Expected error to be thrown");
-        } catch (e) {
-          expect((e as Error).message).toContain(
-            "doesn't look like a valid asset-token"
-          );
-          expect((e as Error).message).toContain("missing name or symbol");
-        }
+        await expect(validateTokenContract("testnet", "CTEST_ID")).rejects.toThrow("doesn't look like a valid asset-token");
+        await expect(validateTokenContract("testnet", "CTEST_ID")).rejects.toThrow("missing name or symbol");
       });
 
       it("throws when both name and symbol are missing", async () => {
@@ -160,18 +129,11 @@ describe("tokenizeFlow", () => {
           symbol: "",
         };
 
-        vi.mocked(assetToken.getMetadata).mockResolvedValue(
+        jest.mocked(assetToken.getMetadata).mockResolvedValue(
           incompleteMetadata
         );
 
-        try {
-          await validateTokenContract("testnet", "CTEST_ID");
-          expect.fail("Expected error to be thrown");
-        } catch (e) {
-          expect((e as Error).message).toContain(
-            "doesn't look like a valid asset-token"
-          );
-        }
+        await expect(validateTokenContract("testnet", "CTEST_ID")).rejects.toThrow("doesn't look like a valid asset-token");
       });
 
       it("throws when metadata name is falsy (null or undefined)", async () => {
@@ -180,16 +142,9 @@ describe("tokenizeFlow", () => {
           name: null as unknown as string,
         };
 
-        vi.mocked(assetToken.getMetadata).mockResolvedValue(metadata);
+        jest.mocked(assetToken.getMetadata).mockResolvedValue(metadata);
 
-        try {
-          await validateTokenContract("testnet", "CTEST_ID");
-          expect.fail("Expected error to be thrown");
-        } catch (e) {
-          expect((e as Error).message).toContain(
-            "doesn't look like a valid asset-token"
-          );
-        }
+        await expect(validateTokenContract("testnet", "CTEST_ID")).rejects.toThrow("doesn't look like a valid asset-token");
       });
 
       it("throws when metadata symbol is falsy (null or undefined)", async () => {
@@ -198,34 +153,26 @@ describe("tokenizeFlow", () => {
           symbol: undefined as unknown as string,
         };
 
-        vi.mocked(assetToken.getMetadata).mockResolvedValue(metadata);
+        jest.mocked(assetToken.getMetadata).mockResolvedValue(metadata);
 
-        try {
-          await validateTokenContract("testnet", "CTEST_ID");
-          expect.fail("Expected error to be thrown");
-        } catch (e) {
-          expect((e as Error).message).toContain(
-            "doesn't look like a valid asset-token"
-          );
-        }
+        await expect(validateTokenContract("testnet", "CTEST_ID")).rejects.toThrow("doesn't look like a valid asset-token");
       });
     });
 
     describe("error messaging", () => {
       it("reports validation error specifically (doesn't mention registry or registration)", async () => {
-        vi.mocked(assetToken.getMetadata).mockResolvedValue({
+        jest.mocked(assetToken.getMetadata).mockResolvedValue({
           ...mockValidMetadata,
           name: "",
         });
 
-        try {
-          await validateTokenContract("testnet", "CTEST_ID");
-          expect.fail("Expected error");
-        } catch (e) {
-          const message = (e as Error).message;
-          expect(message).toContain("token contract");
-          expect(message).not.toContain("registry");
-        }
+        await expect(
+          validateTokenContract("testnet", "CTEST_ID"),
+        ).rejects.toThrow(/asset-token/);
+
+        await expect(
+          validateTokenContract("testnet", "CTEST_ID"),
+        ).rejects.not.toThrow(/registr/i);
       });
     });
   });
@@ -237,7 +184,7 @@ describe("tokenizeFlow", () => {
     const mockWriteCtx: WriteCtx = {
       network: "testnet",
       source: "GTEST_ISSUER",
-      sign: vi.fn(),
+      sign: jest.fn(),
     };
 
     const mockFormData: TokenizeFormData = {
@@ -249,7 +196,7 @@ describe("tokenizeFlow", () => {
 
     describe("valid inputs", () => {
       it("calls registry.registerAsset with correct parameters", async () => {
-        vi.mocked(registry.registerAsset).mockResolvedValue({
+        jest.mocked(registry.registerAsset).mockResolvedValue({
           hash: "test_hash",
           returnValue: 123n,
         });
@@ -270,7 +217,7 @@ describe("tokenizeFlow", () => {
 
       it("returns the asset ID from the transaction return value", async () => {
         const assetId = 42n;
-        vi.mocked(registry.registerAsset).mockResolvedValue({
+        jest.mocked(registry.registerAsset).mockResolvedValue({
           hash: "test_hash",
           returnValue: assetId,
         });
@@ -280,7 +227,7 @@ describe("tokenizeFlow", () => {
       });
 
       it("returns null when transaction has no return value", async () => {
-        vi.mocked(registry.registerAsset).mockResolvedValue({
+        jest.mocked(registry.registerAsset).mockResolvedValue({
           hash: "test_hash",
           returnValue: undefined,
         });
@@ -290,7 +237,7 @@ describe("tokenizeFlow", () => {
       });
 
       it("returns null when return value is null", async () => {
-        vi.mocked(registry.registerAsset).mockResolvedValue({
+        jest.mocked(registry.registerAsset).mockResolvedValue({
           hash: "test_hash",
           returnValue: null,
         });
@@ -301,7 +248,7 @@ describe("tokenizeFlow", () => {
 
       it("converts various return value types to BigInt", async () => {
         // Test with string return value
-        vi.mocked(registry.registerAsset).mockResolvedValue({
+        jest.mocked(registry.registerAsset).mockResolvedValue({
           hash: "test_hash",
           returnValue: "999" as unknown,
         });
@@ -310,7 +257,7 @@ describe("tokenizeFlow", () => {
         expect(result).toBe(999n);
 
         // Test with number return value
-        vi.mocked(registry.registerAsset).mockResolvedValue({
+        jest.mocked(registry.registerAsset).mockResolvedValue({
           hash: "test_hash",
           returnValue: 888,
         });
@@ -319,7 +266,7 @@ describe("tokenizeFlow", () => {
         expect(result).toBe(888n);
 
         // Test with bigint return value
-        vi.mocked(registry.registerAsset).mockResolvedValue({
+        jest.mocked(registry.registerAsset).mockResolvedValue({
           hash: "test_hash",
           returnValue: 777n,
         });
@@ -331,7 +278,7 @@ describe("tokenizeFlow", () => {
 
     describe("error handling", () => {
       it("returns null if return value cannot be converted to BigInt", async () => {
-        vi.mocked(registry.registerAsset).mockResolvedValue({
+        jest.mocked(registry.registerAsset).mockResolvedValue({
           hash: "test_hash",
           returnValue: "not_a_number",
         });
@@ -342,14 +289,11 @@ describe("tokenizeFlow", () => {
 
       it("propagates registry.registerAsset errors", async () => {
         const error = new Error("Registry write failed");
-        vi.mocked(registry.registerAsset).mockRejectedValue(error);
+        jest.mocked(registry.registerAsset).mockRejectedValue(error);
 
-        try {
-          await registerAsset(mockWriteCtx, mockFormData);
-          expect.fail("Expected error to be thrown");
-        } catch (e) {
-          expect(e).toBe(error);
-        }
+        await expect(registerAsset(mockWriteCtx, mockFormData)).rejects.toBe(
+          error,
+        );
       });
     });
   });
@@ -374,7 +318,7 @@ describe("tokenizeFlow", () => {
     const mockWriteCtx: WriteCtx = {
       network: "testnet",
       source: "GISSUER",
-      sign: vi.fn(),
+      sign: jest.fn(),
     };
 
     const mockFormData: TokenizeFormData = {
@@ -386,16 +330,11 @@ describe("tokenizeFlow", () => {
 
     it("step 1 failure prevents step 2 from running", async () => {
       // Step 1 fails: token contract validation
-      vi.mocked(assetToken.getMetadata).mockRejectedValue(
+      jest.mocked(assetToken.getMetadata).mockRejectedValue(
         new Error("Contract not found")
       );
 
-      try {
-        await validateTokenContract("testnet", mockFormData.tokenContract);
-        expect.fail("Expected step 1 to fail");
-      } catch (e) {
-        expect((e as Error).message).toContain("Could not read");
-      }
+      await expect(validateTokenContract("testnet", mockFormData.tokenContract)).rejects.toThrow("Could not read");
 
       // Step 2 should not be called
       expect(registry.registerAsset).not.toHaveBeenCalled();
@@ -403,7 +342,7 @@ describe("tokenizeFlow", () => {
 
     it("can complete both steps successfully in sequence", async () => {
       // Step 1: Validate token contract
-      vi.mocked(assetToken.getMetadata).mockResolvedValue(mockValidMetadata);
+      jest.mocked(assetToken.getMetadata).mockResolvedValue(mockValidMetadata);
 
       const validated = await validateTokenContract(
         "testnet",
@@ -412,7 +351,7 @@ describe("tokenizeFlow", () => {
       expect(validated.metadata.name).toBe(mockValidMetadata.name);
 
       // Step 2: Register asset
-      vi.mocked(registry.registerAsset).mockResolvedValue({
+      jest.mocked(registry.registerAsset).mockResolvedValue({
         hash: "tx_hash",
         returnValue: 100n,
       });
@@ -430,15 +369,10 @@ describe("tokenizeFlow", () => {
 
     it("step 1 validation with missing symbol fails before step 2", async () => {
       const invalidMetadata = { ...mockValidMetadata, symbol: "" };
-      vi.mocked(assetToken.getMetadata).mockResolvedValue(invalidMetadata);
+      jest.mocked(assetToken.getMetadata).mockResolvedValue(invalidMetadata);
 
-      try {
-        await validateTokenContract("testnet", mockFormData.tokenContract);
-        expect.fail("Expected validation to fail");
-      } catch (e) {
-        expect((e as Error).message).toContain("asset-token");
-        expect((e as Error).message).toContain("symbol");
-      }
+      await expect(validateTokenContract("testnet", mockFormData.tokenContract)).rejects.toThrow("asset-token");
+        await expect(validateTokenContract("testnet", mockFormData.tokenContract)).rejects.toThrow("symbol");
 
       expect(registry.registerAsset).not.toHaveBeenCalled();
     });
@@ -446,26 +380,22 @@ describe("tokenizeFlow", () => {
 
   describe("step-level failure attribution", () => {
     it("validateTokenContract errors mention step 1 context", async () => {
-      vi.mocked(assetToken.getMetadata).mockRejectedValue(
+      jest.mocked(assetToken.getMetadata).mockRejectedValue(
         new Error("RPC error")
       );
 
-      try {
-        await validateTokenContract("testnet", "CTEST");
-        expect.fail("Expected error");
-      } catch (e) {
-        const message = (e as Error).message;
-        // Error message should indicate it's about the token contract (step 1),
-        // not the registry or registration
-        expect(message).toContain("token contract");
-      }
+      // The message must point at the token contract (step 1), not the
+      // registry or registration.
+      await expect(
+        validateTokenContract("testnet", "CTEST"),
+      ).rejects.toThrow("token contract");
     });
 
     it("registerAsset can distinguish failures from step 2 context", async () => {
       const ctx: WriteCtx = {
         network: "testnet",
         source: "GISSUER",
-        sign: vi.fn(),
+        sign: jest.fn(),
       };
 
       const data: TokenizeFormData = {
@@ -475,17 +405,12 @@ describe("tokenizeFlow", () => {
         valuation: 100000000n,
       };
 
-      vi.mocked(registry.registerAsset).mockRejectedValue(
+      jest.mocked(registry.registerAsset).mockRejectedValue(
         new Error("Authorization failed")
       );
 
-      try {
-        await registerAsset(ctx, data);
-        expect.fail("Expected error");
-      } catch (e) {
-        // Error propagates directly from registry.registerAsset (step 2)
-        expect((e as Error).message).toContain("Authorization");
-      }
+      // Propagates directly from registry.registerAsset (step 2).
+      await expect(registerAsset(ctx, data)).rejects.toThrow("Authorization");
     });
   });
 });

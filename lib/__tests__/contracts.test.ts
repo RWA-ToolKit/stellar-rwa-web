@@ -1,4 +1,3 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { contractIds } from "@/lib/contracts";
 import type { Network } from "@/types";
 
@@ -86,7 +85,7 @@ describe("contractIds", () => {
     it("does not throw or warn for unknown networks, just returns undefined", () => {
       // The function has no error handling for unknown networks.
       // It simply returns IDS[network], which is undefined if network not in IDS.
-      const consoleWarnSpy = vi.spyOn(console, "warn");
+      const consoleWarnSpy = jest.spyOn(console, "warn");
 
       const unknownNetwork = "unknown" as unknown as Network;
       const ids = contractIds(unknownNetwork);

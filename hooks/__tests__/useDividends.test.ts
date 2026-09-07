@@ -24,8 +24,11 @@ function makeDistribution(overrides: Partial<Distribution> = {}): Distribution {
   return {
     id: BigInt(1),
     assetToken: "TOKEN_A",
-    amount: BigInt(1000),
-    blockTimestamp: 1600000000,
+    paymentToken: "TOKEN_B",
+    totalAmount: BigInt(1000),
+    distributed: BigInt(0),
+    createdAt: 1600000000,
+    completed: false,
     ...overrides,
   };
 }
@@ -47,8 +50,8 @@ describe("useDividends", () => {
   });
 
   it("returns distributions annotated with claimable and claimed when assetToken is provided and wallet connected", async () => {
-    const dist1 = makeDistribution({ id: BigInt(1), amount: BigInt(100) });
-    const dist2 = makeDistribution({ id: BigInt(2), amount: BigInt(200) });
+    const dist1 = makeDistribution({ id: BigInt(1), totalAmount: BigInt(100) });
+    const dist2 = makeDistribution({ id: BigInt(2), totalAmount: BigInt(200) });
 
     (dividend.getDistributionsForAsset as jest.Mock).mockResolvedValue([dist1, dist2]);
     (dividend.claimable as jest.Mock).mockImplementation((_net, id) => {

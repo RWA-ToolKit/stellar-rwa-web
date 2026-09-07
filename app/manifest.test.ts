@@ -36,7 +36,7 @@ describe("app/manifest.ts", () => {
   it("has a meaningful description", () => {
     expect(manifestData.description).toBeDefined();
     expect(typeof manifestData.description).toBe("string");
-    expect(manifestData.description.length).toBeGreaterThan(0);
+    expect(manifestData.description!.length).toBeGreaterThan(0);
     expect(manifestData.description).toContain("Stellar");
     expect(manifestData.description).toContain("asset");
   });
@@ -64,13 +64,13 @@ describe("app/manifest.ts", () => {
   it("has an icons array", () => {
     expect(manifestData.icons).toBeDefined();
     expect(Array.isArray(manifestData.icons)).toBe(true);
-    expect(manifestData.icons.length).toBeGreaterThan(0);
+    expect(manifestData.icons!.length).toBeGreaterThan(0);
   });
 
   it("has at least one icon with the required fields", () => {
-    expect(manifestData.icons.length).toBeGreaterThanOrEqual(1);
+    expect(manifestData.icons!.length).toBeGreaterThanOrEqual(1);
 
-    manifestData.icons.forEach((icon) => {
+    manifestData.icons!.forEach((icon) => {
       expect(icon.src).toBeDefined();
       expect(typeof icon.src).toBe("string");
       expect(icon.sizes).toBeDefined();
@@ -81,27 +81,27 @@ describe("app/manifest.ts", () => {
   });
 
   it("includes a 32x32 icon for favicon", () => {
-    const faviconIcon = manifestData.icons.find((icon) => icon.sizes === "32x32");
+    const faviconIcon = manifestData.icons!.find((icon) => icon.sizes === "32x32");
     expect(faviconIcon).toBeDefined();
     expect(faviconIcon?.src).toBe("/icon");
     expect(faviconIcon?.type).toBe("image/png");
   });
 
   it("includes a 180x180 apple touch icon", () => {
-    const appleTouchIcon = manifestData.icons.find((icon) => icon.sizes === "180x180");
+    const appleTouchIcon = manifestData.icons!.find((icon) => icon.sizes === "180x180");
     expect(appleTouchIcon).toBeDefined();
     expect(appleTouchIcon?.src).toBe("/apple-icon");
     expect(appleTouchIcon?.type).toBe("image/png");
   });
 
   it("all icons have image/png type", () => {
-    manifestData.icons.forEach((icon) => {
+    manifestData.icons!.forEach((icon) => {
       expect(icon.type).toBe("image/png");
     });
   });
 
   it("icon sources reference the correct icon handlers", () => {
-    const sources = manifestData.icons.map((icon) => icon.src);
+    const sources = manifestData.icons!.map((icon) => icon.src);
     expect(sources).toContain("/icon");
     expect(sources).toContain("/apple-icon");
   });

@@ -66,16 +66,15 @@ describe("LoadingPanel", () => {
     expect(screen.getByText("Fetching portfolio…")).toBeInTheDocument();
   });
 
-  it("contains both a panel element and a nested Spinner (two role=status nodes)", () => {
+  it("exposes the panel as the single live region, with the spinner hidden", () => {
     render(<LoadingPanel />);
-    const statusEls = screen.getAllByRole("status");
-    expect(statusEls.length).toBeGreaterThanOrEqual(2);
+    // The panel already announces the label, so the nested spinner is
+    // decorative — a second nested live region would double-announce.
+    expect(screen.getAllByRole("status")).toHaveLength(1);
   });
 
   it('has aria-live="polite" on the panel for non-intrusive announcements', () => {
     render(<LoadingPanel />);
-    const statusEls = screen.getAllByRole("status");
-    const panel = statusEls.find((el) => el.getAttribute("aria-live") === "polite");
-    expect(panel).toBeDefined();
+    expect(screen.getByRole("status")).toHaveAttribute("aria-live", "polite");
   });
 });

@@ -34,7 +34,10 @@ jest.mock("@/hooks/useTx", () => ({
 // Accept any string starting with "G" as a valid Ed25519 public key so tests
 // don't have to generate real Stellar keypairs.
 
+// Only StrKey is stubbed; lib/stellar reads Networks at import time, so the
+// rest of the module has to stay real.
 jest.mock("@stellar/stellar-sdk", () => ({
+  ...jest.requireActual("@stellar/stellar-sdk"),
   StrKey: {
     isValidEd25519PublicKey: (addr: string) => addr.startsWith("G"),
     isValidContract: (addr: string) => addr.startsWith("C"),

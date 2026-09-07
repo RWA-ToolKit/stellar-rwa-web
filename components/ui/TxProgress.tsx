@@ -51,7 +51,7 @@ export function TxProgress({
         aria-live="polite"
         className="flex items-center gap-3 rounded-xl border border-brand-500/20 bg-brand-500/5 px-4 py-3 text-sm text-base-100/80"
       >
-        <Spinner size={18} />
+        <Spinner size={18} decorative />
         <span>{PHASE_LABEL[phase]}</span>
       </div>
     );

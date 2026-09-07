@@ -29,6 +29,10 @@ import type { AssetDetail } from "@/types";
 
 // ── mock hooks ─────────────────────────────────────────────────────────────
 
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: jest.fn(),
+}));
+
 jest.mock("@/hooks/useTx", () => ({
   useTx: jest.fn(),
 }));
@@ -43,6 +47,15 @@ jest.mock("@/lib/contracts", () => ({
   dividend: {
     createDistribution: jest.fn(),
   },
+  assetToken: {
+    balance: jest.fn().mockResolvedValue(0n),
+    allowance: jest.fn().mockResolvedValue(0n),
+  },
+  contractIds: jest.fn(() => ({ dividend: "CDIVIDEND", registry: "CREGISTRY", compliance: "CCOMPLIANCE" })),
+}));
+
+jest.mock("@/hooks/useAsync", () => ({
+  useAsync: jest.fn(() => ({ data: null, loading: false, error: null, refetch: jest.fn() })),
 }));
 
 // ── mock sub-components ────────────────────────────────────────────────────
@@ -98,12 +111,20 @@ jest.mock("@/components/ui/ErrorState", () => ({
 
 import { useTx } from "@/hooks/useTx";
 import { useDividends } from "@/hooks/useDividends";
+import type { DistributionWithClaim } from "@/hooks/useDividends";
+import { useWallet } from "@/hooks/useWallet";
 import { DistributionPanel } from "./DistributionPanel";
 
 const mockUseTx = useTx as jest.MockedFunction<typeof useTx>;
 const mockUseDividends = useDividends as jest.MockedFunction<typeof useDividends>;
+const mockUseWallet = useWallet as jest.MockedFunction<typeof useWallet>;
 
 // ── helpers ────────────────────────────────────────────────────────────────
+
+// StrKey validation is not mocked here, so this has to be a real, checksum-valid
+// contract id — a made-up "C…" string is rejected before submit is reached.
+const VALID_PAYMENT_TOKEN =
+  "CAR4XY3CEBQWFOL27JEWFW34KXSIZA7RFKDQMEIV7ZU723RWY37I2SYX";
 
 const BASE_TX: ReturnType<typeof useTx> = {
   phase: "idle",
@@ -128,6 +149,24 @@ function setupDividends(overrides: Partial<DividendsReturn> = {}) {
     refetch: jest.fn(),
     ...overrides,
   } as DividendsReturn);
+}
+
+/** Fills the fields these tests don't exercise so fixtures stay type-complete. */
+function makeDistribution(
+  overrides: Partial<DistributionWithClaim>,
+): DistributionWithClaim {
+  return {
+    id: 1n,
+    assetToken: "CTOKEN",
+    paymentToken: "CPAYMENT",
+    totalAmount: 0n,
+    distributed: 0n,
+    createdAt: 0,
+    completed: false,
+    claimable: 0n,
+    claimed: false,
+    ...overrides,
+  };
 }
 
 const mockAsset: AssetDetail = {
@@ -158,6 +197,10 @@ const mockAsset: AssetDetail = {
 describe("DistributionPanel", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseWallet.mockReturnValue({
+      address: "GADMIN1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGH",
+      network: "testnet",
+    } as ReturnType<typeof useWallet>);
     setupTx();
     setupDividends();
   });
@@ -221,13 +264,14 @@ describe("DistributionPanel", () => {
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
       const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
 
-      await user.type(tokenInput, "CVALIDTOKEN123456789012345678901234567");
+      await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "not-a-number");
 
       const submitButton = screen.getByRole("button", { name: /create distribution/i });
       await user.click(submitButton);
 
-      expect(screen.getByText(/invalid amount/i)).toBeInTheDocument();
+      // Surfaced verbatim from parseTokenAmount.
+      expect(screen.getByText(/enter a valid number/i)).toBeInTheDocument();
       expect(run).not.toHaveBeenCalled();
     });
 
@@ -241,7 +285,7 @@ describe("DistributionPanel", () => {
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
       const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
 
-      await user.type(tokenInput, "CVALIDTOKEN123456789012345678901234567");
+      await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "0");
 
       const submitButton = screen.getByRole("button", { name: /create distribution/i });
@@ -263,7 +307,7 @@ describe("DistributionPanel", () => {
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
       const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
 
-      await user.type(tokenInput, "CVALIDTOKEN123456789012345678901234567");
+      await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "100.5");
 
       const submitButton = screen.getByRole("button", { name: /create distribution/i });
@@ -284,7 +328,7 @@ describe("DistributionPanel", () => {
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i) as HTMLInputElement;
       const amountInput = screen.getByPlaceholderText(/^0\.0000000$/) as HTMLInputElement;
 
-      await user.type(tokenInput, "CVALIDTOKEN123456789012345678901234567");
+      await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "100.5");
 
       const submitButton = screen.getByRole("button", { name: /create distribution/i });
@@ -307,7 +351,7 @@ describe("DistributionPanel", () => {
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
       const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
 
-      await user.type(tokenInput, "CVALIDTOKEN123456789012345678901234567");
+      await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "100.5");
 
       const submitButton = screen.getByRole("button", { name: /create distribution/i });
@@ -387,20 +431,20 @@ describe("DistributionPanel", () => {
 
     it("renders distribution list with IDs and statuses", () => {
       const distributions = [
-        {
+        makeDistribution({
           id: 1n,
           paymentToken: "GTOKEN1",
           totalAmount: 1000_0000000n,
           distributed: 500_0000000n,
           completed: false,
-        },
-        {
+        }),
+        makeDistribution({
           id: 2n,
           paymentToken: "GTOKEN2",
           totalAmount: 500_0000000n,
           distributed: 500_0000000n,
           completed: true,
-        },
+        }),
       ];
       setupDividends({ data: distributions });
 
@@ -412,13 +456,13 @@ describe("DistributionPanel", () => {
 
     it("shows 'Active' badge for ongoing distributions", () => {
       const distributions = [
-        {
+        makeDistribution({
           id: 1n,
           paymentToken: "GTOKEN1",
           totalAmount: 1000_0000000n,
           distributed: 500_0000000n,
           completed: false,
-        },
+        }),
       ];
       setupDividends({ data: distributions });
 
@@ -429,13 +473,13 @@ describe("DistributionPanel", () => {
 
     it("shows 'Complete' badge for finished distributions", () => {
       const distributions = [
-        {
+        makeDistribution({
           id: 1n,
           paymentToken: "GTOKEN1",
           totalAmount: 500_0000000n,
           distributed: 500_0000000n,
           completed: true,
-        },
+        }),
       ];
       setupDividends({ data: distributions });
 
@@ -446,13 +490,13 @@ describe("DistributionPanel", () => {
 
     it("renders progress bar with correct percentage", () => {
       const distributions = [
-        {
+        makeDistribution({
           id: 1n,
           paymentToken: "GTOKEN1",
           totalAmount: 1000_0000000n,
           distributed: 250_0000000n, // 25% claimed
           completed: false,
-        },
+        }),
       ];
       setupDividends({ data: distributions });
 
@@ -472,13 +516,13 @@ describe("DistributionPanel", () => {
 
     it("displays 100% claimed for fully distributed amounts", () => {
       const distributions = [
-        {
+        makeDistribution({
           id: 1n,
           paymentToken: "GTOKEN1",
           totalAmount: 1000_0000000n,
           distributed: 1000_0000000n, // 100% claimed
           completed: true,
-        },
+        }),
       ];
       setupDividends({ data: distributions });
 
@@ -489,13 +533,13 @@ describe("DistributionPanel", () => {
 
     it("shows truncated payment token address", () => {
       const distributions = [
-        {
+        makeDistribution({
           id: 1n,
           paymentToken: "GVERYLONGTOKEN1234567890ABCDEFGHIJKLMNOP",
           totalAmount: 1000_0000000n,
           distributed: 500_0000000n,
           completed: false,
-        },
+        }),
       ];
       setupDividends({ data: distributions });
 

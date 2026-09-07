@@ -61,8 +61,11 @@ function makeDistribution(overrides: Partial<Distribution> = {}): Distribution {
   return {
     id: BigInt(1),
     assetToken: "TOKEN_A",
-    amount: BigInt(500),
-    blockTimestamp: 1000,
+    paymentToken: "TOKEN_B",
+    totalAmount: BigInt(500),
+    distributed: BigInt(0),
+    createdAt: 1000,
+    completed: false,
     ...overrides,
   };
 }

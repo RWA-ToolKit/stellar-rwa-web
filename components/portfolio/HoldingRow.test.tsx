@@ -131,10 +131,12 @@ describe("HoldingRow", () => {
         claimableDistributions: [
           {
             id: 1n,
-            assetContract: "CABC",
+            assetToken: "CABC",
+            paymentToken: "CPAYMENT",
             totalAmount: 1000n,
-            snapshotLedger: 100,
-            expiresAt: 200,
+            distributed: 0n,
+            createdAt: 100,
+            completed: false,
             claimable: 500n,
             claimed: false,
           },
@@ -153,10 +155,12 @@ describe("HoldingRow", () => {
         claimableDistributions: [
           {
             id: 42n,
-            assetContract: "CABC",
+            assetToken: "CABC",
+            paymentToken: "CPAYMENT",
             totalAmount: 1000n,
-            snapshotLedger: 100,
-            expiresAt: 200,
+            distributed: 0n,
+            createdAt: 100,
+            completed: false,
             claimable: 500n,
             claimed: false,
           },
@@ -183,10 +187,12 @@ describe("HoldingRow", () => {
         claimableDistributions: [
           {
             id: 7n,
-            assetContract: "CABC",
+            assetToken: "CABC",
+            paymentToken: "CPAYMENT",
             totalAmount: 1000n,
-            snapshotLedger: 100,
-            expiresAt: 200,
+            distributed: 0n,
+            createdAt: 100,
+            completed: false,
             claimable: 0n,
             claimed: true,
           },

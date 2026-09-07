@@ -33,7 +33,7 @@ jest.mock("next/link", () => ({
 }));
 
 import { render, screen, fireEvent } from "@testing-library/react";
-import Error from "./error";
+import ErrorPage from "./error";
 
 describe("app/error.tsx", () => {
   const mockReset = jest.fn();
@@ -48,35 +48,39 @@ describe("app/error.tsx", () => {
     (console.error as jest.Mock).mockRestore();
   });
 
-  it("renders the error icon", () => {
-    render(<Error error={testError} reset={mockReset} />);
+  it("renders the error icon, hidden from assistive technology", () => {
+    const { container } = render(
+      <ErrorPage error={testError} reset={mockReset} />,
+    );
 
-    // The SVG icon should be present
-    const svg = screen.getByRole("img", { hidden: true })?.closest("svg");
+    // Decorative: the heading already carries the meaning, so the icon is
+    // aria-hidden and has no role to query by.
+    const svg = container.querySelector("svg");
     expect(svg).toBeInTheDocument();
+    expect(svg).toHaveAttribute("aria-hidden", "true");
   });
 
   it("renders the error title", () => {
-    render(<Error error={testError} reset={mockReset} />);
+    render(<ErrorPage error={testError} reset={mockReset} />);
 
     expect(screen.getByRole("heading", { name: /something went wrong/i })).toBeInTheDocument();
   });
 
   it("renders the error description", () => {
-    render(<Error error={testError} reset={mockReset} />);
+    render(<ErrorPage error={testError} reset={mockReset} />);
 
     expect(screen.getByText(/an unexpected error interrupted this page/i)).toBeInTheDocument();
   });
 
   it("renders a 'Try again' button", () => {
-    render(<Error error={testError} reset={mockReset} />);
+    render(<ErrorPage error={testError} reset={mockReset} />);
 
     const button = screen.getByRole("button", { name: /try again/i });
     expect(button).toBeInTheDocument();
   });
 
   it("renders a 'Go home' link", () => {
-    render(<Error error={testError} reset={mockReset} />);
+    render(<ErrorPage error={testError} reset={mockReset} />);
 
     const link = screen.getByRole("link", { name: /go home/i });
     expect(link).toBeInTheDocument();
@@ -84,7 +88,7 @@ describe("app/error.tsx", () => {
   });
 
   it("calls reset() when 'Try again' button is clicked", () => {
-    render(<Error error={testError} reset={mockReset} />);
+    render(<ErrorPage error={testError} reset={mockReset} />);
 
     fireEvent.click(screen.getByRole("button", { name: /try again/i }));
     expect(mockReset).toHaveBeenCalledTimes(1);
@@ -92,26 +96,26 @@ describe("app/error.tsx", () => {
 
   it("logs the error to console.error in useEffect", () => {
     const consoleErrorSpy = console.error as jest.Mock;
-    render(<Error error={testError} reset={mockReset} />);
+    render(<ErrorPage error={testError} reset={mockReset} />);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(testError);
   });
 
   it("logs the error again when error prop changes", () => {
     const consoleErrorSpy = console.error as jest.Mock;
-    const { rerender } = render(<Error error={testError} reset={mockReset} />);
+    const { rerender } = render(<ErrorPage error={testError} reset={mockReset} />);
 
     expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
 
     const newError = new Error("Different error");
-    rerender(<Error error={newError} reset={mockReset} />);
+    rerender(<ErrorPage error={newError} reset={mockReset} />);
 
     expect(consoleErrorSpy).toHaveBeenCalledTimes(2);
     expect(consoleErrorSpy).toHaveBeenLastCalledWith(newError);
   });
 
   it("renders with the correct layout classes for centering", () => {
-    const { container } = render(<Error error={testError} reset={mockReset} />);
+    const { container } = render(<ErrorPage error={testError} reset={mockReset} />);
 
     const mainDiv = container.querySelector(".mx-auto.flex.max-w-2xl");
     expect(mainDiv).toBeInTheDocument();

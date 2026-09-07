@@ -23,7 +23,7 @@ export default function Error({
   return (
     <div className="mx-auto flex max-w-2xl flex-col items-center gap-4 px-4 py-24 text-center sm:px-6">
       <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-red-400">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M12 9v4M12 17h.01" strokeLinecap="round" />
           <circle cx="12" cy="12" r="9" />
         </svg>

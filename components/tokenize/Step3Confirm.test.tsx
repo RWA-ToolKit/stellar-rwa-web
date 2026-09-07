@@ -48,7 +48,8 @@ describe("Step3Confirm", () => {
     );
 
     expect(screen.getByText("Registry Property")).toBeInTheDocument();
-    expect(screen.getByText("Real Estate")).toBeInTheDocument();
+    // Rendered both as the asset-type chip and in the summary rows.
+    expect(screen.getAllByText("Real Estate")).not.toHaveLength(0);
     expect(screen.getByText("$250,000")).toBeInTheDocument();
     expect(screen.getByText("GTOKEN")).toBeInTheDocument();
     expect(screen.getAllByText("On-chain Property")).not.toHaveLength(0);

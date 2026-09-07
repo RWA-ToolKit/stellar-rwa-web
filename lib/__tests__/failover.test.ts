@@ -1,157 +1,132 @@
-import { vi, describe, it, expect, beforeEach, afterEach } from "vitest";
-import {
-  getServer,
-  reportServerFailure,
-} from "@/lib/stellar";
-import type { Network } from "@/types";
-
 // ---------------------------------------------------------------------------
 // Issue #255 — RPC failover logic
 // ---------------------------------------------------------------------------
+//
+// NETWORKS (and the server cache keyed off it) is built once at module load
+// from NEXT_PUBLIC_* env vars, so each test re-imports lib/stellar with the
+// env it needs. Without that, every test shares one cache and the suite
+// becomes order-dependent.
+//
+// Failover is also a no-op when only one URL is configured
+// (`cfg.rpcUrls.length <= 1`), so these tests supply fallbacks explicitly.
+
+const PRIMARY = "https://rpc-primary.test";
+const FALLBACKS = "https://rpc-second.test,https://rpc-third.test";
+
+function loadStellar(rpcUrls = { primary: PRIMARY, fallbacks: FALLBACKS }) {
+  jest.resetModules();
+  process.env.NEXT_PUBLIC_TESTNET_RPC_URL = rpcUrls.primary;
+  process.env.NEXT_PUBLIC_TESTNET_RPC_URLS_FALLBACK = rpcUrls.fallbacks;
+  process.env.NEXT_PUBLIC_MAINNET_RPC_URL = rpcUrls.primary;
+  process.env.NEXT_PUBLIC_MAINNET_RPC_URLS_FALLBACK = rpcUrls.fallbacks;
+  return require("@/lib/stellar") as typeof import("@/lib/stellar");
+}
+
+/** Report `n` failures, the unit that drives the failover counter. */
+function fail(
+  stellar: ReturnType<typeof loadStellar>,
+  network: "testnet" | "mainnet",
+  n: number,
+) {
+  for (let i = 0; i < n; i++) stellar.reportServerFailure(network);
+}
+
 describe("RPC failover logic", () => {
-  beforeEach(() => {
-    // Reset server cache before each test
-    vi.resetModules();
-  });
-
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
   describe("FAILOVER_THRESHOLD boundary", () => {
     it("does NOT advance to next URL after fewer than FAILOVER_THRESHOLD (3) failures", () => {
-      // Report 2 failures (below threshold of 3)
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
+      const stellar = loadStellar();
+      const before = stellar.getServer("testnet");
 
-      const server1 = getServer("testnet");
-      expect(server1).toBeDefined();
-      // Verify still on primary URL (first index)
-      // We can't directly check the URL, but we can verify getServer returns consistently
-      const server2 = getServer("testnet");
-      expect(server1).toBe(server2); // Same server instance
+      fail(stellar, "testnet", 2);
+
+      expect(stellar.getServer("testnet")).toBe(before);
     });
 
     it("advances to next URL after exactly FAILOVER_THRESHOLD (3) consecutive failures", () => {
-      const server1 = getServer("testnet");
+      const stellar = loadStellar();
+      const before = stellar.getServer("testnet");
 
-      // Report exactly 3 failures
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
+      fail(stellar, "testnet", 3);
 
-      const server2 = getServer("testnet");
-      // After 3 failures, the server should be different (new instance for next URL)
-      expect(server2).not.toBe(server1);
+      expect(stellar.getServer("testnet")).not.toBe(before);
     });
 
-    it("does NOT advance on fewer failures with a single RPC URL", () => {
-      // This test would require mocking the NETWORKS config to have only 1 URL
-      // The implementation checks: if (failureCount < FAILOVER_THRESHOLD || cfg.rpcUrls.length <= 1)
-      // Skipping direct test as it requires deeper mocking of module-level config
+    it("does NOT advance when only a single RPC URL is configured", () => {
+      // NETWORKS always appends one hard-coded URL, so clearing both env vars
+      // is what leaves exactly one entry in the list.
+      const stellar = loadStellar({ primary: "", fallbacks: "" });
+      const before = stellar.getServer("testnet");
+
+      fail(stellar, "testnet", 6);
+
+      expect(stellar.getServer("testnet")).toBe(before);
     });
   });
 
   describe("wraparound behavior", () => {
-    it("wraps back to primary URL after exhausting the configured list", () => {
-      const server1 = getServer("testnet");
+    it("uses modulo wraparound to return to index 0 after the last URL", () => {
+      const stellar = loadStellar();
+      const first = stellar.getServer("testnet");
 
-      // Cause enough failures to cycle through the RPC URLs multiple times
-      // Assuming testnet has ~3 URLs (based on NETWORKS config in stellar.ts)
-      // Each failover needs exactly 3 failures
-      for (let i = 0; i < 9; i++) {
-        reportServerFailure("testnet");
+      // Four URLs are configured here: the primary, two fallbacks, and the
+      // hard-coded one NETWORKS always appends. Each advance costs three
+      // failures, so a full cycle is four advances.
+      const URL_COUNT = 4;
+      for (let advance = 1; advance < URL_COUNT; advance++) {
+        fail(stellar, "testnet", 3);
+        expect(stellar.getServer("testnet").serverURL.toString()).not.toBe(
+          first.serverURL.toString(),
+        );
       }
 
-      // After 9 failures, we should have cycled through URLs and wrapped back
-      const serverAfterCycle = getServer("testnet");
-      expect(serverAfterCycle).toBeDefined();
-      // Verify behavior is cyclic (this is more of a structural test)
-    });
-
-    it("uses modulo wraparound to return to index 0 after last URL", () => {
-      // Simulate advancing through all URLs
-      const initialServer = getServer("testnet");
-
-      // Report failures to advance multiple times
-      // This assumes the testnet config has at least 2 URLs
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
-      const server1 = getServer("testnet");
-      expect(server1).not.toBe(initialServer);
-
-      // Advance again
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
-      const server2 = getServer("testnet");
-      expect(server2).not.toBe(server1);
+      // Wrapping rebuilds the client, so identity is not a useful signal —
+      // the URL is what must come back around.
+      fail(stellar, "testnet", 3);
+      expect(stellar.getServer("testnet").serverURL.toString()).toBe(
+        first.serverURL.toString(),
+      );
     });
   });
 
   describe("counter behavior", () => {
-    it("does not automatically reset the counter on a successful call", () => {
-      // Note: The current implementation does NOT reset the counter on success.
-      // The counter persists across failures and successes on the same URL.
-      // This is the actual behavior, not the "consecutive" behavior the issue name suggests.
+    it("does not reset the failure counter except when advancing", () => {
+      const stellar = loadStellar();
+      const before = stellar.getServer("testnet");
 
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
+      // The counter is not reset by intervening successes, so the third
+      // failure still trips the threshold.
+      fail(stellar, "testnet", 2);
+      expect(stellar.getServer("testnet")).toBe(before);
 
-      const server1 = getServer("testnet");
-
-      // Call succeeds (we can't directly call through RPC, but the counter isn't reset)
-      // If we report one more failure now, we should hit the threshold because counter is still 2
-      reportServerFailure("testnet");
-
-      const server2 = getServer("testnet");
-      // After 3 total failures (even with a conceptual success in between),
-      // we should have advanced
-      expect(server2).not.toBe(server1);
+      fail(stellar, "testnet", 1);
+      expect(stellar.getServer("testnet")).not.toBe(before);
     });
 
-    it("resets counter to 0 when advancing to the next URL", () => {
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
+    it("resets the counter to 0 when advancing to the next URL", () => {
+      const stellar = loadStellar();
 
-      const server1 = getServer("testnet");
+      fail(stellar, "testnet", 3);
+      const advanced = stellar.getServer("testnet");
 
-      // After advancing, counter is reset to 0
-      // So it should take 3 MORE failures (not 1) to advance again
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
+      // Two more failures is below the threshold measured from the reset.
+      fail(stellar, "testnet", 2);
+      expect(stellar.getServer("testnet")).toBe(advanced);
 
-      const server2 = getServer("testnet");
-      // Still on the second URL (only 2 failures since advancing)
-      expect(server2).toBe(server1);
-
-      reportServerFailure("testnet");
-
-      const server3 = getServer("testnet");
-      // Now we've hit the threshold again (3 failures after advancing)
-      expect(server3).not.toBe(server1);
+      fail(stellar, "testnet", 1);
+      expect(stellar.getServer("testnet")).not.toBe(advanced);
     });
   });
 
   describe("per-network isolation", () => {
     it("maintains separate failure counters per network", () => {
-      const testnetServer1 = getServer("testnet");
-      const mainnetServer1 = getServer("mainnet");
+      const stellar = loadStellar();
+      const testnetBefore = stellar.getServer("testnet");
+      const mainnetBefore = stellar.getServer("mainnet");
 
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
-      reportServerFailure("testnet");
+      fail(stellar, "testnet", 3);
 
-      const testnetServer2 = getServer("testnet");
-      const mainnetServer2 = getServer("mainnet");
-
-      // Testnet should have advanced after 3 failures
-      expect(testnetServer2).not.toBe(testnetServer1);
-
-      // Mainnet should still be on the primary (no failures reported)
-      expect(mainnetServer2).toBe(mainnetServer1);
+      expect(stellar.getServer("testnet")).not.toBe(testnetBefore);
+      expect(stellar.getServer("mainnet")).toBe(mainnetBefore);
     });
   });
 });

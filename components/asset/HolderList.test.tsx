@@ -46,10 +46,13 @@ describe("HolderList", () => {
 
     render(<HolderList asset={asset} />);
 
+    // A listitem takes no accessible name from its content, so assert on the
+    // rendered text instead. useHolders does the sorting; this pins that the
+    // list renders in the order it is given.
     const rows = screen.getAllByRole("listitem");
     expect(rows).toHaveLength(2);
-    expect(screen.getByRole("listitem", { name: /900 TOKEN/ })).toBe(rows[0]);
-    expect(screen.getByRole("listitem", { name: /100 TOKEN/ })).toBe(rows[1]);
+    expect(rows[0]).toHaveTextContent(/900 TOKEN/);
+    expect(rows[1]).toHaveTextContent(/100 TOKEN/);
   });
 
   it("shows an empty state when there are no holders", () => {

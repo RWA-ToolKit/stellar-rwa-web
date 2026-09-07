@@ -4,6 +4,22 @@ import { assetToken, compliance } from "@/lib/contracts";
 import { api } from "@/lib/api";
 import type { AssetEntry } from "@/types";
 
+/** AssetEntry fixture; these tests only vary id, tokenContract and issuer. */
+function makeAsset(overrides: Partial<AssetEntry> = {}): AssetEntry {
+  return {
+    id: 1n,
+    tokenContract: "T1",
+    issuer: "G1",
+    name: "Test Asset",
+    assetType: "real_estate",
+    valuation: 0n,
+    createdAt: 0,
+    active: true,
+    ...overrides,
+  };
+}
+
+
 jest.mock("@/lib/contracts", () => ({
   assetToken: {
     getMetadata: jest.fn(),
@@ -41,14 +57,7 @@ describe("useHolderTotals", () => {
   it("returns totalHolders from api.getStats when stats are available", async () => {
     (api.getStats as jest.Mock).mockResolvedValue({ totalHolders: 42 });
 
-    const dummyAsset: AssetEntry = {
-      id: "1",
-      code: "USDX",
-      tokenContract: "T1",
-      issuer: "G1",
-      supply: 1000n,
-      holders: 5,
-    };
+    const dummyAsset = makeAsset({ id: 1n, tokenContract: "T1", issuer: "G1" });
 
     const { result } = renderHook(() => useHolderTotals([dummyAsset]));
 
@@ -63,9 +72,9 @@ describe("useHolderTotals", () => {
     (api.getStats as jest.Mock).mockResolvedValue(null);
 
     const assets: AssetEntry[] = [
-      { id: "1", code: "USDX", tokenContract: "T1", issuer: "G1", supply: 100n, holders: 2 },
-      { id: "2", code: "GOLD", tokenContract: "T2", issuer: "G1", supply: 200n, holders: 2 },
-      { id: "3", code: "BOND", tokenContract: "T3", issuer: "G2", supply: 300n, holders: 2 },
+      makeAsset({ id: 1n, tokenContract: "T1", issuer: "G1" }),
+      makeAsset({ id: 2n, tokenContract: "T2", issuer: "G1" }),
+      makeAsset({ id: 3n, tokenContract: "T3", issuer: "G2" }),
     ];
 
     // T1 and T2 share compliance contract C1, while T3 uses compliance contract C2
@@ -107,7 +116,7 @@ describe("useHolderTotals", () => {
     (assetToken.getMetadata as jest.Mock).mockRejectedValue(new Error("Failed to read metadata"));
 
     const assets: AssetEntry[] = [
-      { id: "1", code: "USDX", tokenContract: "T1", issuer: "G1", supply: 100n, holders: 2 },
+      makeAsset({ id: 1n, tokenContract: "T1", issuer: "G1" }),
     ];
 
     const { result } = renderHook(() => useHolderTotals(assets));
