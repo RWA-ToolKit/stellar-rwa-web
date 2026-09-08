@@ -16,17 +16,27 @@
  *
  * ── Scoped mock identities ──────────────────────────────────────────────────
  *
- * Two real-looking Stellar addresses are used. They satisfy StrKey validation
- * so the UI doesn't reject them as malformed. They are *not* real funded
- * accounts; the mocked RPC returns everything needed.
+ * Real-looking Stellar addresses are used. They must satisfy StrKey validation
+ * or the UI rejects them as malformed and the SDK cannot encode them into a
+ * simulation request — so they are checksum-valid, not merely plausible. They
+ * are *not* real funded accounts; the mocked RPC returns everything needed.
  */
 
 import type { Page, Route } from "@playwright/test";
+import {
+  Address,
+  Networks,
+  SorobanDataBuilder,
+  TransactionBuilder,
+  nativeToScVal,
+  scValToNative,
+  xdr,
+} from "@stellar/stellar-sdk";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 export const WALLET_ADDRESS =
-  "GBXFM6DSYY3SWAKJJXBKZV5UFFVW4WDQR3FJQB6KPDBJXTKPBQTEZWI";
+  "GCFIRY65OQE7DFP5KLNS2PF2LVZMUZYJX4OZIEQ36N2IQANUB5XVYOJR";
 
 export const RECIPIENT_ADDRESS =
   "GDQP2KPQGKIHYJGXNUIYOMHARUARCA7DJT5FO2FFOOKY3B2WSQHG4W37";
@@ -38,7 +48,7 @@ export const COMPLIANCE_CONTRACT =
   "CAR4XY3CEBQWFOL27JEWFW34KXSIZA7RFKDQMEIV7ZU723RWY37I2SYX";
 
 export const PAYMENT_TOKEN =
-  "CCXJ3YEB4VXPEFWYLVHIGG6VHLLEKNF4TFVPGOBHM42YXZF6RKOCXHW";
+  "CADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP5KR";
 
 export const ASSET_ID = "1";
 
@@ -68,6 +78,191 @@ export const ASSET_METADATA = {
   paused: false,
 };
 
+// ── Contract-call simulation ─────────────────────────────────────────────────
+
+/** Values the simulated contract reads resolve to, tunable per test. */
+interface SimConfig {
+  balance: number;
+  walletApproved: boolean;
+  recipientApproved: boolean;
+  claimable: number;
+  hasClaimed: boolean;
+}
+
+/** The invoked function name and arguments, read back out of the envelope. */
+function decodeInvocation(
+  txXdr: string,
+): { fn: string; args: unknown[] } | null {
+  try {
+    const tx = TransactionBuilder.fromXDR(txXdr, Networks.TESTNET);
+    const op = "operations" in tx ? tx.operations[0] : undefined;
+    if (!op || op.type !== "invokeHostFunction") return null;
+
+    // `func` is the SDK's HostFunction wrapper: `invokeContract` is a plain
+    // property holding { contractAddress, functionName, args }, not a method.
+    const invocation = (
+      op.func as unknown as {
+        invokeContract?: { functionName: unknown; args: xdr.ScVal[] };
+      }
+    ).invokeContract;
+    if (!invocation) return null;
+
+    return {
+      fn: String(invocation.functionName),
+      args: invocation.args.map((a) => scValToNative(a)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+const asset = () =>
+  nativeToScVal(
+    {
+      id: BigInt(ASSET_ID),
+      token_contract: new Address(TOKEN_CONTRACT),
+      issuer: new Address(WALLET_ADDRESS),
+      name: ASSET_ENTRY.name,
+      asset_type: ASSET_ENTRY.assetType,
+      valuation: BigInt(ASSET_ENTRY.valuation),
+      created_at: ASSET_ENTRY.createdAt,
+      active: ASSET_ENTRY.active,
+    },
+    {
+      type: {
+        id: ["symbol", "u64"],
+        valuation: ["symbol", "i128"],
+        created_at: ["symbol", "u32"],
+        name: ["symbol", "string"],
+        asset_type: ["symbol", "string"],
+      },
+    },
+  );
+
+const metadata = () =>
+  nativeToScVal(
+    {
+      ...ASSET_METADATA,
+      admin: new Address(ASSET_METADATA.admin),
+      compliance_contract: new Address(ASSET_METADATA.compliance_contract),
+    },
+    {
+      type: {
+        name: ["symbol", "string"],
+        symbol: ["symbol", "string"],
+        asset_type: ["symbol", "string"],
+        asset_description: ["symbol", "string"],
+        total_supply: ["symbol", "i128"],
+        decimals: ["symbol", "u32"],
+        valuation: ["symbol", "i128"],
+      },
+    },
+  );
+
+const distribution = () =>
+  nativeToScVal(
+    {
+      id: 1n,
+      asset_token: new Address(TOKEN_CONTRACT),
+      payment_token: new Address(PAYMENT_TOKEN),
+      total_amount: 100_0000000n,
+      distributed: 25_0000000n,
+      created_at: 120,
+      completed: false,
+    },
+    {
+      type: {
+        id: ["symbol", "u64"],
+        total_amount: ["symbol", "i128"],
+        distributed: ["symbol", "i128"],
+        created_at: ["symbol", "u32"],
+      },
+    },
+  );
+
+const kycRecord = (address: string) =>
+  nativeToScVal(
+    {
+      address: new Address(address),
+      status: nativeToScVal("Approved", { type: "symbol" }),
+      jurisdiction: "NG",
+      verified_at: 100,
+      expires_at: 9_999_999,
+    },
+    {
+      type: {
+        jurisdiction: ["symbol", "string"],
+        verified_at: ["symbol", "u32"],
+        expires_at: ["symbol", "u32"],
+      },
+    },
+  );
+
+/**
+ * Map a contract read onto its return value.
+ *
+ * Every call used to resolve to the same `true`, so anything that decoded a
+ * struct (get_asset, get_metadata) produced a boolean and the asset page fell
+ * through to "Asset not found".
+ */
+function simulatedRetval(
+  fn: string,
+  args: unknown[],
+  cfg: SimConfig,
+): xdr.ScVal {
+  /** Whether any decoded argument is the given address. */
+  const addressed = (want: string) => args.some((a) => a === want);
+
+  switch (fn) {
+    case "get_asset":
+      return asset();
+    case "get_all_assets":
+    case "get_assets_by_issuer":
+    case "get_assets_by_type":
+      return xdr.ScVal.scvVec([asset()]);
+    case "get_metadata":
+      return metadata();
+    case "balance":
+      return nativeToScVal(BigInt(cfg.balance), { type: "i128" });
+    case "allowance":
+      return nativeToScVal(0n, { type: "i128" });
+    case "total_supply":
+      return nativeToScVal(ASSET_METADATA.total_supply, { type: "i128" });
+    case "asset_count":
+      return nativeToScVal(1n, { type: "u64" });
+    case "total_value_locked":
+      return nativeToScVal(BigInt(ASSET_ENTRY.valuation), { type: "i128" });
+    case "is_allowed":
+      return xdr.ScVal.scvBool(
+        addressed(RECIPIENT_ADDRESS)
+          ? cfg.recipientApproved
+          : cfg.walletApproved,
+      );
+    case "get_record":
+      return kycRecord(
+        addressed(RECIPIENT_ADDRESS) ? RECIPIENT_ADDRESS : WALLET_ADDRESS,
+      );
+    case "get_allowlist":
+      return xdr.ScVal.scvVec([
+        nativeToScVal(new Address(WALLET_ADDRESS)),
+        nativeToScVal(new Address(RECIPIENT_ADDRESS)),
+      ]);
+    case "is_jurisdiction_blocked":
+      return xdr.ScVal.scvBool(false);
+    case "get_distributions_for_asset":
+      return xdr.ScVal.scvVec([distribution()]);
+    case "get_distribution":
+      return distribution();
+    case "claimable":
+      return nativeToScVal(BigInt(cfg.claimable), { type: "i128" });
+    case "has_claimed":
+      return xdr.ScVal.scvBool(cfg.hasClaimed);
+    default:
+      // Writes and anything unmodelled: a void return simulates fine.
+      return xdr.ScVal.scvVoid();
+  }
+}
+
 // ── Wallet mock ───────────────────────────────────────────────────────────────
 
 /**
@@ -92,37 +287,59 @@ export async function mockFreighterWallet(
     ({ address, installed }: { address: string; installed: boolean }) => {
       if (!installed) return; // leave window.freighter undefined
 
-      // freighter-api v6 reads from window.freighter (the extension object).
-      // The methods we need: isConnected, isAllowed, requestAccess, getAddress,
-      // getNetwork, signTransaction, WatchWalletChanges.
-      (window as unknown as Record<string, unknown>).freighter = {
-        isConnected: () =>
-          Promise.resolve({ isConnected: true, isAllowed: true, hasPrivateKey: true }),
-        isAllowed: () => Promise.resolve({ isAllowed: true }),
-        requestAccess: () => Promise.resolve({ address }),
-        getAddress: () => Promise.resolve({ address }),
-        getNetwork: () =>
-          Promise.resolve({
-            network: "TESTNET",
-            networkPassphrase: "Test SDF Network ; September 2015",
-          }),
-        getNetworkDetails: () =>
-          Promise.resolve({
-            network: "TESTNET",
-            networkPassphrase: "Test SDF Network ; September 2015",
-            sorobanRpcUrl: "https://soroban-testnet.stellar.org",
-          }),
-        signTransaction: (xdr: string) =>
-          Promise.resolve({ signedTxXdr: xdr, signerAddress: address }),
-        addEventHandler: () => {},
-        removeEventHandler: () => {},
+      // freighter-api v6 only reads window.freighter as an "extension is
+      // present" flag. Every actual call is a window.postMessage round-trip
+      // with the extension's content script, so setting methods here does
+      // nothing on its own — the message channel below is what answers them.
+      (window as unknown as Record<string, unknown>).freighter = true;
+
+      // The provider only probes for an existing connection when this flag is
+      // set by a previous explicit connect, so without it the app stays on
+      // "Connect Wallet" no matter what the wallet replies.
+      try {
+        localStorage.setItem("rwa.wallet.connected", "1");
+      } catch {
+        // storage unavailable — the connect button still works
+      }
+
+      const REQUEST = "FREIGHTER_EXTERNAL_MSG_REQUEST";
+      const RESPONSE = "FREIGHTER_EXTERNAL_MSG_RESPONSE";
+      const networkDetails = {
+        network: "TESTNET",
+        networkPassphrase: "Test SDF Network ; September 2015",
+        sorobanRpcUrl: "https://soroban-testnet.stellar.org",
       };
 
-      // WatchWalletChanges is imported from the package, not from window.freighter.
-      // It's a class. We can't easily override it here, but its fallback in
-      // lib/freighter.ts wraps it in try/catch and returns () => {} on error.
-      // Playwright will call it — the catch will fire and the watcher will
-      // simply be a no-op, which is fine for e2e purposes.
+      window.addEventListener("message", (event: MessageEvent) => {
+        const data = event.data as
+          | { source?: string; messageId?: number; type?: string; transactionXdr?: string }
+          | undefined;
+        if (event.source !== window || data?.source !== REQUEST) return;
+
+        // Field names mirror what the API destructures off each reply; the
+        // response id is `messagedId`, which is not a typo on this side.
+        const payloads: Record<string, Record<string, unknown>> = {
+          REQUEST_CONNECTION_STATUS: { isConnected: true },
+          REQUEST_ALLOWED_STATUS: { isAllowed: true },
+          REQUEST_ACCESS: { publicKey: address },
+          REQUEST_PUBLIC_KEY: { publicKey: address },
+          REQUEST_NETWORK_DETAILS: { networkDetails },
+          REQUEST_USER_INFO: { userInfo: { publicKey: address } },
+          SIGN_TRANSACTION: {
+            signedTransaction: data?.transactionXdr ?? "",
+            signerAddress: address,
+          },
+        };
+
+        window.postMessage(
+          {
+            source: RESPONSE,
+            messagedId: data?.messageId,
+            ...(payloads[data?.type ?? ""] ?? {}),
+          },
+          window.location.origin,
+        );
+      });
     },
     { address, installed },
   );
@@ -211,8 +428,18 @@ export async function mockRpc(
       }
 
       if (method === "simulateTransaction") {
-        // For e2e we return an empty-retval success. The hooks interpret this
-        // as the loaded state depending on the method.
+        const params = body.params as { transaction?: string } | undefined;
+        const invocation = decodeInvocation(params?.transaction ?? "");
+        const retval = invocation
+          ? simulatedRetval(invocation.fn, invocation.args, {
+              balance,
+              walletApproved,
+              recipientApproved,
+              claimable,
+              hasClaimed,
+            })
+          : xdr.ScVal.scvVoid();
+
         return route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -220,14 +447,14 @@ export async function mockRpc(
             jsonrpc: "2.0",
             id: body.id,
             result: {
-              // A successful simulation with no return value (void methods)
-              transactionData:
-                "AAAAAAAAAAIAAAAGAAAAASBVNnkqpikF2OX0e7yS0g4P4sNHXE6D4yVmHZyOHNVAAAAAEAAAAABAAAABgAAAAEAAAAAAAAABAAAAASAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              // Built by the SDK rather than pasted: a hard-coded blob here
+              // carried a footprint the SDK could no longer parse, which
+              // failed every read before it reached the hooks.
+              transactionData: new SorobanDataBuilder().build().toXDR("base64"),
               events: [],
               minResourceFee: "100",
-              results: [{ xdr: "AAAAAQAAAAE=" /* bool true */ }],
-              cost: { cpuInsns: "0", memBytes: "0" },
-              latestLedger: "1234",
+              results: [{ xdr: retval.toXDR("base64"), auth: [] }],
+              latestLedger: 1234,
             },
           }),
         });
