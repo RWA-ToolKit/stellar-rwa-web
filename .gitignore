@@ -32,3 +32,8 @@ yarn-error.log*
 !.vscode/extensions.json
 .idea
 .vercel
+
+# playwright
+/test-results/
+/playwright-report/
+/blob-report/
