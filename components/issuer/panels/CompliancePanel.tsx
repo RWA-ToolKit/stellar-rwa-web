@@ -6,6 +6,8 @@ import type { AssetDetail } from "@/types";
 import { compliance } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useAllowlist } from "@/hooks/useCompliance";
+import { useWallet } from "@/hooks/useWallet";
+import { getLatestLedger } from "@/lib/stellar";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 import { TxProgress } from "@/components/ui/TxProgress";
@@ -42,6 +44,7 @@ function AddToAllowlistCard({
   onChanged?: () => void;
 }) {
   const tx = useTx();
+  const { network } = useWallet();
   const [address, setAddress] = useState("");
   const [jurisdiction, setJurisdiction] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
@@ -66,6 +69,25 @@ function AddToAllowlistCard({
       if (isNaN(expiry) || expiry < 0) {
         setFormError("Expiry ledger must be a non-negative integer (0 = never expires).");
         return;
+      }
+      // #322: Reject ledger numbers that are already in the past. A KYC record
+      // with an expiry <= the current ledger is dead on arrival — the contract
+      // will treat it as expired immediately, so warn the issuer here instead
+      // of silently creating a useless record.
+      if (expiry > 0) {
+        try {
+          const latestLedger = await getLatestLedger(network);
+          if (expiry <= latestLedger) {
+            setFormError(
+              `Ledger ${expiry} is already in the past (current ledger: ${latestLedger}). Enter a future ledger number or 0 for no expiry.`,
+            );
+            return;
+          }
+        } catch {
+          // If the ledger fetch fails (e.g., offline), allow the submit to
+          // proceed so the user isn't blocked — the contract will enforce its
+          // own rules on submission.
+        }
       }
     }
 
