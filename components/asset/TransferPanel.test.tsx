@@ -77,7 +77,9 @@ function setup(assetOverride: AssetDetail = asset) {
     hash: null,
     error: null,
     pending: false,
+    retryable: false,
     run: jest.fn(),
+    retry: jest.fn(),
     reset: jest.fn(),
   });
 

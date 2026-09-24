@@ -25,7 +25,9 @@ jest.mock("@/hooks/useTx", () => ({
     hash: null,
     error: null,
     pending: false,
+    retryable: false,
     run: mockRun,
+    retry: jest.fn(),
     reset: jest.fn(),
   })),
 }));

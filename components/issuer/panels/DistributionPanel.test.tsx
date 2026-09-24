@@ -131,7 +131,9 @@ const BASE_TX: ReturnType<typeof useTx> = {
   hash: null,
   error: null,
   pending: false,
+  retryable: false,
   run: jest.fn().mockResolvedValue(null),
+  retry: jest.fn(),
   reset: jest.fn(),
 };
 

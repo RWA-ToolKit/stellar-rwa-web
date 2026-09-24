@@ -54,7 +54,9 @@ function setupTx() {
     hash: null,
     error: null,
     pending: false,
+    retryable: false,
     run: mockRun,
+    retry: jest.fn(),
     reset: mockReset,
   });
 }

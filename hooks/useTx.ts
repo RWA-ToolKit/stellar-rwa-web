@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { TxPhase, TxResult, TxTelemetry } from "@/types";
 import type { WriteCtx } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
@@ -14,11 +14,32 @@ interface RunResult {
   /** True while the transaction is building/signing/submitting/confirming. */
   pending: boolean;
   /**
+   * True when the last error is transient and re-submitting the same action
+   * may succeed (e.g. rate-limit, RPC blip). False for deterministic contract
+   * rejections (auth, invalid state) that will always fail.
+   */
+  retryable: boolean;
+  /**
    * Execute a write. `action` receives a WriteCtx whose onPhase is wired to
    * this hook's phase state. Resolves with the TxResult, or null on failure.
    */
   run: (action: (ctx: WriteCtx) => Promise<TxResult>) => Promise<TxResult | null>;
+  /** Re-run the last action with the same inputs without re-entering the form. */
+  retry: () => Promise<TxResult | null>;
   reset: () => void;
+}
+
+/**
+ * Errors that are deterministic — retrying the same call will always fail, so
+ * the retry affordance should not be offered. These are contract-layer errors
+ * (auth failures, invalid state, insufficient balance, etc.) that originate
+ * from the Soroban contract returning an explicit error code.
+ */
+function isNonRetryableError(error: unknown): boolean {
+  // ContractError wraps every rejection that comes back from the chain itself.
+  // These are deterministic: re-submitting the same transaction will always
+  // produce the same result, so a retry button would mislead the user.
+  return error instanceof ContractError;
 }
 
 /**
@@ -32,6 +53,11 @@ const noopTelemetry: TxTelemetry = {};
  * submitting → confirming → success/error) so the UI can show progress, and
  * exposes the resulting hash. Errors are captured as friendly messages.
  *
+ * After a transient failure (rate limit, RPC blip, network timeout) the hook
+ * sets `retryable: true` and stores the last action so callers can surface a
+ * retry control without re-entering the form. Deterministic contract rejections
+ * (auth errors, invalid state) set `retryable: false`.
+ *
  * @param telemetry Optional lifecycle callbacks for product analytics or error
  * monitoring (e.g. Sentry). Each phase change, success and error emit to the
  * provided callbacks without blocking the transaction flow.
@@ -42,18 +68,25 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
   const [phase, setPhase] = useState<TxPhase>("idle");
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [retryable, setRetryable] = useState(false);
+  /** Holds the last submitted action so `retry()` can re-run it. */
+  const lastActionRef = useRef<((ctx: WriteCtx) => Promise<TxResult>) | null>(null);
   const t = telemetry ?? noopTelemetry;
 
   const reset = useCallback(() => {
     setPhase("idle");
     setHash(null);
     setError(null);
+    setRetryable(false);
+    lastActionRef.current = null;
   }, []);
 
   const run = useCallback(
     async (action: (ctx: WriteCtx) => Promise<TxResult>) => {
+      lastActionRef.current = action;
       setError(null);
       setHash(null);
+      setRetryable(false);
       setPhase("building");
       t.onPhase?.("building");
       try {
@@ -74,6 +107,8 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
         }
         setError(msg);
         setPhase("error");
+        // Only offer retry for errors that are not deterministic contract rejections.
+        setRetryable(!isNonRetryableError(e));
         addToast({ title: "Transaction failed", description: msg, tone: "error" });
         t.onPhase?.("error", msg);
         t.onError?.(msg, "error");
@@ -83,12 +118,20 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     [addToast, writeCtx, t],
   );
 
+  const retry = useCallback(async () => {
+    const action = lastActionRef.current;
+    if (!action) return null;
+    return run(action);
+  }, [run]);
+
   return {
     phase,
     hash,
     error,
     pending: phase === "building" || phase === "signing" || phase === "submitting" || phase === "confirming",
+    retryable,
     run,
+    retry,
     reset,
   };
 }
