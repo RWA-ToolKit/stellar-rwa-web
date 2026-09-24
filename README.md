@@ -105,6 +105,8 @@ default network, Soroban RPC URLs, and the registry / compliance / dividend
 contract ids per network. Asset-token contract ids are discovered at runtime
 from the registry.
 
+For help with wallet errors, see [Freighter Troubleshooting](docs/freighter-troubleshooting.md).
+
 ## Architecture
 
 ```
