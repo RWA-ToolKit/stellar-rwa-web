@@ -99,6 +99,7 @@ export type TxPhase =
   | "submitting"
   | "confirming"
   | "success"
+  | "timeout"
   | "error";
 
 /** Optional telemetry callbacks for the transaction lifecycle. */

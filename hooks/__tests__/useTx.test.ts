@@ -5,6 +5,7 @@ import { useToast } from "@/components/ui/ToastProvider";
 import type { WriteCtx } from "@/lib/contracts";
 import type { TxPhase } from "@/types";
 import { LockedWalletError } from "@/lib/freighter";
+import { TransactionTimeoutError } from "@/lib/stellar";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 
@@ -157,6 +158,33 @@ describe("useTx", () => {
     expect(onError).toHaveBeenCalledWith(
       expect.stringContaining("locked"),
       "locked-wallet",
+    );
+  });
+
+  it("detects transaction timeout and sets phase to 'timeout' with hash preserved", async () => {
+    const onError = jest.fn();
+    const { result } = renderHook(() => useTx({ onError }));
+
+    const txHash = "0xabcd1234";
+
+    await act(async () => {
+      const res = await result.current.run(async () => {
+        throw new TransactionTimeoutError(txHash);
+      });
+      expect(res).toBeNull();
+    });
+
+    expect(result.current.phase).toBe("timeout");
+    expect(result.current.hash).toBe(txHash); // Hash preserved for explorer link
+    expect(result.current.error).toContain("timed out");
+    expect(mockAddToast).toHaveBeenCalledWith({
+      title: "Transaction failed",
+      description: expect.stringContaining("timed out"),
+      tone: "error",
+    });
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining("timed out"),
+      "timeout",
     );
   });
 });

@@ -331,10 +331,7 @@ async function pollTransaction(
     const res = await server.getTransaction(hash);
     if (res.status !== rpc.Api.GetTransactionStatus.NOT_FOUND) return res;
     if (Date.now() - start > timeoutMs) {
-      throw new ContractError(
-        "Timed out waiting for confirmation. The transaction may still land — check the explorer.",
-        hash,
-      );
+      throw new TransactionTimeoutError(hash);
     }
     await sleep(2000);
   }
@@ -356,6 +353,22 @@ export class ContractError extends Error {
     super(message);
     this.name = "ContractError";
     this.detail = detail;
+  }
+}
+
+/**
+ * Specialized error for when a transaction times out waiting for confirmation.
+ * The transaction hash is stored so the user can check the explorer.
+ */
+export class TransactionTimeoutError extends ContractError {
+  readonly hash: string;
+  constructor(hash: string) {
+    super(
+      "Transaction confirmation timed out. The transaction may still land — check the explorer.",
+      hash,
+    );
+    this.name = "TransactionTimeoutError";
+    this.hash = hash;
   }
 }
 

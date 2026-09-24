@@ -68,6 +68,40 @@ describe("TxProgress", () => {
     expect(onDismiss).toHaveBeenCalled();
   });
 
+  it("renders timeout state with distinct styling and explorer link", () => {
+    const onDismiss = jest.fn();
+    render(
+      <TxProgress
+        phase="timeout"
+        hash="tx123"
+        error={null}
+        onDismiss={onDismiss}
+      />,
+    );
+    const alertEl = screen.getByRole("alert");
+    expect(alertEl).toBeInTheDocument();
+    expect(alertEl).toHaveAttribute("aria-live", "assertive");
+    expect(screen.getByText(/Confirmation timed out/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /check transaction on stellar expert/i })).toHaveAttribute(
+      "href",
+      expect.stringContaining("tx123"),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /dismiss/i }));
+    expect(onDismiss).toHaveBeenCalled();
+  });
+
+  it("renders timeout state without link when hash is null", () => {
+    render(
+      <TxProgress
+        phase="timeout"
+        hash={null}
+        error="Custom timeout message"
+      />,
+    );
+    expect(screen.getByText(/Custom timeout message/)).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("renders success state with explorer link when hash exists and polite live region", () => {
     render(
       <TxProgress

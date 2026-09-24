@@ -12,6 +12,7 @@ const PHASE_LABEL: Record<Exclude<TxPhase, "idle">, string> = {
   submitting: "Submitting to the network…",
   confirming: "Confirming on-chain…",
   success: "Confirmed",
+  timeout: "Confirmation timed out",
   error: "Transaction failed",
 };
 
@@ -91,6 +92,42 @@ export function TxProgress({
         </div>
         {onDismiss && (
           <button onClick={onDismiss} className="shrink-0 text-red-300/60 hover:text-red-300" aria-label="Dismiss">
+            ✕
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // timeout state - visually distinct from error, includes explorer link
+  if (phase === "timeout") {
+    return (
+      <div
+        role="alert"
+        aria-live="assertive"
+        className="flex items-start justify-between gap-3 rounded-xl border border-yellow-500/25 bg-yellow-500/5 px-4 py-3 text-sm"
+      >
+        <div className="flex items-start gap-2.5 text-yellow-300">
+          <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
+          </svg>
+          <div>
+            <p>{error ?? "Confirmation timed out."}</p>
+            {hash && (
+              <a
+                href={explorerTxUrl(network, hash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-0.5 inline-block text-xs text-yellow-400 underline decoration-yellow-400/40 underline-offset-2 hover:decoration-yellow-400"
+              >
+                Check transaction on Stellar Expert ↗
+              </a>
+            )}
+          </div>
+        </div>
+        {onDismiss && (
+          <button onClick={onDismiss} className="shrink-0 text-yellow-300/60 hover:text-yellow-300" aria-label="Dismiss">
             ✕
           </button>
         )}
