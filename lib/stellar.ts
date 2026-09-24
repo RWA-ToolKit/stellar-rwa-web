@@ -21,6 +21,7 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import type { Network, TxResult } from "@/types";
+import { parseContractError } from "@/lib/contractErrors";
 
 interface NetworkConfig {
   /** Ordered candidates; the first is primary, the rest are failover RPCs. */
@@ -355,34 +356,4 @@ export class ContractError extends Error {
   }
 }
 
-/**
- * Map a raw Soroban error string to a friendlier message. Contract errors
- * surface as `Error(Contract, #N)`; we translate the codes we know about.
- */
-function parseContractError(raw: string): string {
-  const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
-  if (codeMatch) {
-    const code = Number(codeMatch[1]);
-    return KNOWN_CONTRACT_ERRORS[code] ?? `Contract rejected the call (code ${code}).`;
-  }
-  if (/trustline|insufficient/i.test(raw)) {
-    return "Insufficient balance or a missing trustline for the payment token.";
-  }
-  return "The contract call could not be completed.";
-}
 
-/**
- * Union of the error enums across the four contracts. Codes overlap between
- * contracts, so messages are written to read sensibly regardless of source.
- */
-const KNOWN_CONTRACT_ERRORS: Record<number, string> = {
-  1: "Already initialized.",
-  2: "Contract is not initialized.",
-  3: "You are not authorized to perform this action.",
-  4: "The requested record was not found.",
-  5: "Invalid amount or valuation.",
-  6: "This asset is currently paused.",
-  7: "The sender is not KYC-approved for this asset.",
-  8: "The recipient is not KYC-approved for this asset.",
-  9: "Amount overflow.",
-};
