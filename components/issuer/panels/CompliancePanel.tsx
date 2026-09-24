@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
 import { compliance } from "@/lib/contracts";
@@ -164,6 +164,12 @@ function AllowlistManageCard({
   const { data, loading, refetch } = useAllowlist(complianceId);
   const records = data ?? [];
 
+  // #320: Serialize allowlist mutations across all rows so the issuer cannot
+  // fire concurrent wallet-signing prompts by rapidly clicking buttons on
+  // different rows. A ref (not state) is used so incrementing/decrementing
+  // does not cause a re-render loop; AllowlistRow reads it at click time.
+  const activeMutationsRef = useRef(0);
+
   const handleChanged = () => {
     refetch();
     onChanged?.();
@@ -196,6 +202,7 @@ function AllowlistManageCard({
               record={r}
               complianceId={complianceId}
               onChanged={handleChanged}
+              activeMutationsRef={activeMutationsRef}
             />
           ))}
         </ul>
@@ -208,23 +215,43 @@ function AllowlistRow({
   record,
   complianceId,
   onChanged,
+  activeMutationsRef,
 }: {
   record: { address: string; status: string; jurisdiction: string };
   complianceId: string;
   onChanged?: () => void;
+  /** #320: Shared ref counting in-flight mutations across all rows in the list.
+   *  Prevents burst concurrent wallet-signing prompts when the issuer rapidly
+   *  clicks buttons on different rows. */
+  activeMutationsRef: React.MutableRefObject<number>;
 }) {
   const suspendTx = useTx();
   const removeTx = useTx();
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
 
   const isSuspended = record.status === "Suspended";
+  // Disable this row's buttons if THIS row has a pending tx OR if any other
+  // row in the list is already signing/submitting.
   const isPending = suspendTx.pending || removeTx.pending;
+
+  async function runWithSerialize(fn: () => Promise<unknown>) {
+    // Block if any mutation across all rows is already in flight.
+    if (activeMutationsRef.current > 0) return;
+    activeMutationsRef.current += 1;
+    try {
+      await fn();
+    } finally {
+      activeMutationsRef.current -= 1;
+    }
+  }
 
   async function doRemove() {
     setRemoveConfirmOpen(false);
-    removeTx
-      .run((ctx) => compliance.remove(ctx, complianceId, record.address))
-      .then((r) => r && onChanged?.());
+    await runWithSerialize(() =>
+      removeTx
+        .run((ctx) => compliance.remove(ctx, complianceId, record.address))
+        .then((r) => r && onChanged?.()),
+    );
   }
 
   return (
@@ -252,9 +279,11 @@ function AllowlistRow({
             {!isSuspended && (
               <button
                 onClick={() =>
-                  suspendTx
-                    .run((ctx) => compliance.suspend(ctx, complianceId, record.address))
-                    .then((r) => r && onChanged?.())
+                  runWithSerialize(() =>
+                    suspendTx
+                      .run((ctx) => compliance.suspend(ctx, complianceId, record.address))
+                      .then((r) => r && onChanged?.()),
+                  )
                 }
                 disabled={isPending}
                 className="btn-ghost py-1 text-xs text-amber-300 hover:bg-amber-500/10"
@@ -265,11 +294,13 @@ function AllowlistRow({
             {isSuspended && (
               <button
                 onClick={() =>
-                  suspendTx
-                    .run((ctx) =>
-                      compliance.addToAllowlist(ctx, complianceId, record.address, record.jurisdiction, 0),
-                    )
-                    .then((r) => r && onChanged?.())
+                  runWithSerialize(() =>
+                    suspendTx
+                      .run((ctx) =>
+                        compliance.addToAllowlist(ctx, complianceId, record.address, record.jurisdiction, 0),
+                      )
+                      .then((r) => r && onChanged?.()),
+                  )
                 }
                 disabled={isPending}
                 className="btn-ghost py-1 text-xs text-brand-300 hover:bg-brand-500/10"
