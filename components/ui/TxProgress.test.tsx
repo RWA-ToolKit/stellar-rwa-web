@@ -19,7 +19,6 @@ describe("TxProgress", () => {
 
   it.each([
     ["building", /Preparing transaction…/],
-    ["signing", /Awaiting signature in Freighter…/],
     ["submitting", /Submitting to the network…/],
     ["confirming", /Confirming on-chain…/],
   ])("shows pending text for %s phase with polite live region", (phase, expected) => {
@@ -28,6 +27,28 @@ describe("TxProgress", () => {
     expect(statusEl).toBeInTheDocument();
     expect(statusEl).toHaveAttribute("aria-live", "polite");
     expect(screen.getByText(expected)).toBeInTheDocument();
+  });
+
+  it("shows signing phase without fee estimate when fee is not available", () => {
+    render(<TxProgress phase="signing" hash={null} error={null} />);
+    const statusEl = screen.getByRole("status");
+    expect(statusEl).toBeInTheDocument();
+    expect(screen.getByText(/Awaiting signature in Freighter…/)).toBeInTheDocument();
+    expect(screen.queryByText(/Estimated fee/i)).not.toBeInTheDocument();
+  });
+
+  it("shows estimated fee during signing phase when available", () => {
+    render(
+      <TxProgress
+        phase="signing"
+        hash={null}
+        error={null}
+        estimatedFee={100_000n}
+      />,
+    );
+    expect(screen.getByText(/Awaiting signature in Freighter…/)).toBeInTheDocument();
+    expect(screen.getByText("Estimated fee:")).toBeInTheDocument();
+    expect(screen.getByText("0.01 XLM")).toBeInTheDocument();
   });
 
   it("renders error state with message, dismiss button, and assertive live region", () => {

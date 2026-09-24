@@ -2,6 +2,7 @@
 
 import { useWallet } from "@/hooks/useWallet";
 import { explorerTxUrl } from "@/lib/stellar";
+import { formatStroopsToXLM } from "@/lib/format";
 import type { TxPhase } from "@/types";
 import { Spinner } from "./Spinner";
 
@@ -18,6 +19,8 @@ interface TxProgressProps {
   phase: TxPhase;
   hash: string | null;
   error: string | null;
+  /** Estimated network fee in stroops from simulation. */
+  estimatedFee?: bigint | null;
   /** Called when the user dismisses a success/error result. */
   onDismiss?: () => void;
   successMessage?: string;
@@ -26,12 +29,14 @@ interface TxProgressProps {
 /**
  * Renders the live status of an on-chain action driven by `useTx`: a spinner
  * with the current phase while pending, then a success (with explorer link) or
- * error result.
+ * error result. When the phase reaches "signing", displays the estimated fee
+ * so the user can review it before approving the transaction.
  */
 export function TxProgress({
   phase,
   hash,
   error,
+  estimatedFee,
   onDismiss,
   successMessage = "Your transaction is confirmed.",
 }: TxProgressProps) {
@@ -45,14 +50,27 @@ export function TxProgress({
     phase === "confirming";
 
   if (pending) {
+    // Show fee estimate during the signing phase
+    const showFeeEstimate = phase === "signing" && estimatedFee !== undefined && estimatedFee !== null;
+
     return (
       <div
         role="status"
         aria-live="polite"
-        className="flex items-center gap-3 rounded-xl border border-brand-500/20 bg-brand-500/5 px-4 py-3 text-sm text-base-100/80"
+        className="flex flex-col gap-3 rounded-xl border border-brand-500/20 bg-brand-500/5 px-4 py-3 text-sm text-base-100/80"
       >
-        <Spinner size={18} decorative />
-        <span>{PHASE_LABEL[phase]}</span>
+        <div className="flex items-center gap-3">
+          <Spinner size={18} decorative />
+          <span>{PHASE_LABEL[phase]}</span>
+        </div>
+        {showFeeEstimate && (
+          <div className="border-t border-brand-500/10 pt-2 text-xs text-base-100/60">
+            <div className="flex items-center justify-between gap-2">
+              <span>Estimated fee:</span>
+              <code className="font-mono">{formatStroopsToXLM(estimatedFee)}</code>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

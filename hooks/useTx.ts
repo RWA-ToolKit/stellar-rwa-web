@@ -11,6 +11,8 @@ interface RunResult {
   phase: TxPhase;
   hash: string | null;
   error: string | null;
+  /** Estimated network fee in stroops from simulation. */
+  estimatedFee: bigint | null;
   /** True while the transaction is building/signing/submitting/confirming. */
   pending: boolean;
   /**
@@ -42,18 +44,21 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
   const [phase, setPhase] = useState<TxPhase>("idle");
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
   const t = telemetry ?? noopTelemetry;
 
   const reset = useCallback(() => {
     setPhase("idle");
     setHash(null);
     setError(null);
+    setEstimatedFee(null);
   }, []);
 
   const run = useCallback(
     async (action: (ctx: WriteCtx) => Promise<TxResult>) => {
       setError(null);
       setHash(null);
+      setEstimatedFee(null);
       setPhase("building");
       t.onPhase?.("building");
       try {
@@ -63,6 +68,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
         });
         const result = await action(ctx);
         setHash(result.hash);
+        setEstimatedFee(result.estimatedFee ?? null);
         setPhase("success");
         t.onPhase?.("success");
         t.onSuccess?.(result.hash, result);
@@ -87,6 +93,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     phase,
     hash,
     error,
+    estimatedFee,
     pending: phase === "building" || phase === "signing" || phase === "submitting" || phase === "confirming",
     run,
     reset,

@@ -87,6 +87,8 @@ export interface TxResult {
   hash: string;
   /** scValToNative-decoded return value, when the method returns one. */
   returnValue?: unknown;
+  /** Estimated network fee in stroops from the simulation, when available. */
+  estimatedFee?: bigint;
 }
 
 /** Phases surfaced to the user while a transaction is in flight. */

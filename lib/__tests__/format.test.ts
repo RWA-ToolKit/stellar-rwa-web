@@ -1,7 +1,53 @@
-import { formatUsdCents, formatTokenAmount, parseTokenAmount, formatRawPlain, compactNumber } from "@/lib/format";
+import { formatUsdCents, formatTokenAmount, parseTokenAmount, formatRawPlain, compactNumber, formatStroopsToXLM } from "@/lib/format";
 
 // ---------------------------------------------------------------------------
-// Issue #35 — formatUsdCents
+// formatStroopsToXLM
+// ---------------------------------------------------------------------------
+describe("formatStroopsToXLM", () => {
+  it("formats zero stroops", () => {
+    expect(formatStroopsToXLM(0n)).toBe("0 XLM");
+  });
+
+  it("formats 1 stroop", () => {
+    expect(formatStroopsToXLM(1n)).toBe("0.0000001 XLM");
+  });
+
+  it("formats 10,000,000 stroops (1 XLM) as whole unit", () => {
+    expect(formatStroopsToXLM(10_000_000n)).toBe("1 XLM");
+  });
+
+  it("formats 15,000,000 stroops (1.5 XLM)", () => {
+    expect(formatStroopsToXLM(15_000_000n)).toBe("1.5 XLM");
+  });
+
+  it("formats 10,100,000 stroops with leading zeros", () => {
+    expect(formatStroopsToXLM(10_100_000n)).toBe("1.01 XLM");
+  });
+
+  it("formats 10,000,100 stroops with trailing precision", () => {
+    expect(formatStroopsToXLM(10_000_100n)).toBe("1.00001 XLM");
+  });
+
+  it("formats 100,000,000 stroops (10 XLM)", () => {
+    expect(formatStroopsToXLM(100_000_000n)).toBe("10 XLM");
+  });
+
+  it("handles number input", () => {
+    expect(formatStroopsToXLM(10_000_000)).toBe("1 XLM");
+  });
+
+  it("handles large network fees (few hundred stroops)", () => {
+    // Typical Soroban fee is around 100,000 stroops
+    expect(formatStroopsToXLM(100_000n)).toBe("0.01 XLM");
+  });
+
+  it("removes trailing zeros in fractional part", () => {
+    expect(formatStroopsToXLM(50_000_000n)).toBe("5 XLM");
+    expect(formatStroopsToXLM(51_000_000n)).toBe("5.1 XLM");
+    expect(formatStroopsToXLM(51_100_000n)).toBe("5.11 XLM");
+  });
+});
+
 // ---------------------------------------------------------------------------
 describe("formatUsdCents", () => {
   // --- whole dollar amounts ------------------------------------------------

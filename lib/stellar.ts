@@ -285,6 +285,9 @@ export async function invokeContract(
   }
   const prepared = rpc.assembleTransaction(built, sim).build();
 
+  // Extract the estimated fee from simulation for display to the user
+  const estimatedFee = sim.minResourceFee ? BigInt(sim.minResourceFee) : undefined;
+
   onPhase?.("signing");
   const signedXdr = await sign(prepared.toXDR());
   const signedTx = TransactionBuilder.fromXDR(signedXdr, passphrase);
@@ -313,7 +316,7 @@ export async function invokeContract(
   } catch {
     // A missing/undecodable return value is non-fatal for void methods.
   }
-  return { hash: sent.hash, returnValue };
+  return { hash: sent.hash, returnValue, estimatedFee };
 }
 
 async function pollTransaction(

@@ -53,6 +53,7 @@ function setupTx() {
     phase: "idle",
     hash: null,
     error: null,
+    estimatedFee: null,
     pending: false,
     run: mockRun,
     reset: mockReset,

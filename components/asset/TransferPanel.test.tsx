@@ -76,6 +76,7 @@ function setup(assetOverride: AssetDetail = asset) {
     phase: "idle",
     hash: null,
     error: null,
+    estimatedFee: null,
     pending: false,
     run: jest.fn(),
     reset: jest.fn(),
