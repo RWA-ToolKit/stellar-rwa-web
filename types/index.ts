@@ -105,5 +105,7 @@ export type TxPhase =
 export interface TxTelemetry {
   onPhase?: (phase: TxPhase, detail?: string) => void;
   onSuccess?: (hash: string, result: TxResult) => void;
-  onError?: (error: string, phase: TxPhase) => void;
+  /** Called on transaction error. Phase parameter can be 'error', 'signing', 'submitting', 'confirming',
+   * or a special value like 'locked-wallet' for specific error types. */
+  onError?: (error: string, phase: string) => void;
 }

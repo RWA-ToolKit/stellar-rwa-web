@@ -6,6 +6,7 @@ import type { WriteCtx } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
 import { ContractError } from "@/lib/stellar";
+import { LockedWalletError } from "@/lib/freighter";
 
 interface RunResult {
   phase: TxPhase;
@@ -74,15 +75,25 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
         t.onSuccess?.(result.hash, result);
         return result;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Transaction failed.";
-        if (e instanceof ContractError && e.detail) {
-          console.error("Transaction failed:", e.detail);
+        // Detect locked wallet errors specifically
+        let msg: string;
+        let errorType: "locked-wallet" | "error" = "error";
+
+        if (e instanceof LockedWalletError) {
+          msg = e.message;
+          errorType = "locked-wallet";
+        } else {
+          msg = e instanceof Error ? e.message : "Transaction failed.";
+          if (e instanceof ContractError && e.detail) {
+            console.error("Transaction failed:", e.detail);
+          }
         }
+
         setError(msg);
         setPhase("error");
         addToast({ title: "Transaction failed", description: msg, tone: "error" });
         t.onPhase?.("error", msg);
-        t.onError?.(msg, "error");
+        t.onError?.(msg, errorType);
         return null;
       }
     },

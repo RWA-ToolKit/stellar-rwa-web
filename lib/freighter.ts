@@ -25,6 +25,16 @@ export class WalletError extends Error {
   }
 }
 
+/** Specialized error for when the Freighter wallet is locked. */
+export class LockedWalletError extends WalletError {
+  constructor() {
+    super(
+      "Wallet is locked. Please unlock Freighter and try again.",
+    );
+    this.name = "LockedWalletError";
+  }
+}
+
 /** Whether the Freighter extension is installed and reachable. */
 export async function isFreighterInstalled(): Promise<boolean> {
   try {
@@ -94,7 +104,20 @@ export async function signTx(
     networkPassphrase,
     address,
   });
-  if (res.error) throw new WalletError(String(res.error));
+  if (res.error) {
+    // Detect locked wallet errors. Freighter returns specific error strings
+    // when the extension is locked.
+    const errorMsg = String(res.error).toLowerCase();
+    if (
+      errorMsg.includes("locked") ||
+      errorMsg.includes("unlock") ||
+      errorMsg.includes("not connected") ||
+      errorMsg.includes("not allowed")
+    ) {
+      throw new LockedWalletError();
+    }
+    throw new WalletError(String(res.error));
+  }
   if (!res.signedTxXdr) throw new WalletError("Freighter returned no signature.");
   return res.signedTxXdr;
 }

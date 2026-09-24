@@ -4,6 +4,7 @@ import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
 import type { WriteCtx } from "@/lib/contracts";
 import type { TxPhase } from "@/types";
+import { LockedWalletError } from "@/lib/freighter";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 
@@ -133,5 +134,29 @@ describe("useTx", () => {
     expect(onPhase).toHaveBeenCalledWith("signing");
     expect(onPhase).toHaveBeenCalledWith("success");
     expect(onSuccess).toHaveBeenCalledWith("0xHASH", { hash: "0xHASH", status: "SUCCESS" });
+  });
+
+  it("detects locked wallet errors and calls onError with 'locked-wallet' phase", async () => {
+    const onError = jest.fn();
+    const { result } = renderHook(() => useTx({ onError }));
+
+    await act(async () => {
+      const res = await result.current.run(async () => {
+        throw new LockedWalletError();
+      });
+      expect(res).toBeNull();
+    });
+
+    expect(result.current.phase).toBe("error");
+    expect(result.current.error).toContain("locked");
+    expect(mockAddToast).toHaveBeenCalledWith({
+      title: "Transaction failed",
+      description: expect.stringContaining("locked"),
+      tone: "error",
+    });
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining("locked"),
+      "locked-wallet",
+    );
   });
 });
