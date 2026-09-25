@@ -52,4 +52,17 @@ npm run test
 npm run typecheck
 ```
 
+### Coverage floor and bundle budget
+
+CI fails when unit-test coverage drops below the floor in `jest.config.js`
+(`coverageThreshold`): **80% statements, 70% branches, 68% functions, 81%
+lines** — about two points under the measured 82.0 / 71.8 / 70.6 / 83.2. Check
+locally with `npm run test:ci`. Raise the floor when coverage rises; do not
+lower it to get a PR through.
+
+`npm run size` enforces the gzip budgets in `.size-limit.json` (440 kB for all
+JS chunks, 48 kB for the framework chunk), set ~7% above the measured
+411.8 kB / 44.8 kB. If a change legitimately grows the bundle, raise the budget
+in the same PR and explain why.
+
 If you add UI changes, prefer updating or adding a focused component test alongside the implementation.

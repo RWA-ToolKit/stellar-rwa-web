@@ -27,6 +27,7 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Also enforces the coverage floor in jest.config.js (see CONTRIBUTING.md).
       - name: Test
         run: npm run test:ci
 
@@ -41,11 +42,14 @@ jobs:
       # of @stellar/stellar-sdk or recharts (see issues #96 / #97 / #235).
       # size-limit reads .size-limit.json; adjust budgets there when the
       # baseline legitimately changes, so reviewers can see the intent.
+      # Budgets are kept ~7% above the measured gzip sizes (411.8 kB total,
+      # 44.8 kB framework) so a real regression fails instead of hiding in
+      # slack; bump them in the same PR as the change that grows the bundle.
       - name: Bundle size check
         run: npm run size
 
   # ── End-to-end tests ────────────────────────────────────────────────────────
-  # Exercises the transfer and claim flows in a real browser against a dev
+  # Exercises the transfer, claim, tokenize and issuer-gating flows in a real browser against a dev
   # server, with all Soroban RPC and REST API calls intercepted by Playwright
   # route handlers. Runs in a separate job so a slow e2e suite doesn't block
   # the unit-test result, and so its resource requirements are isolated.
