@@ -57,6 +57,8 @@ export function IssuerDashboard() {
   // demand after mutating actions.
   const assetDetail = useAsset(selectedAsset?.id ?? null);
 
+  const isAdmin = assetDetail.data?.metadata.admin === address;
+
   const handleAssetSelect = useCallback((asset: AssetEntry) => {
     setSelectedAsset(asset);
     setActiveTab("token");
@@ -166,6 +168,18 @@ export function IssuerDashboard() {
               />
             ) : assetDetail.data ? (
               <>
+                {!isAdmin && (
+                  <p
+                    role="alert"
+                    className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm text-amber-200/90"
+                  >
+                    The connected wallet is not the on-chain admin of this asset, so
+                    issuer actions are disabled. Connect the admin wallet to mint,
+                    pause, manage compliance or create distributions.
+                  </p>
+                )}
+                {/* A disabled fieldset natively disables every control inside it. */}
+                <fieldset disabled={!isAdmin} className="min-w-0 space-y-5 border-0 p-0">
                 {activeTab === "token" && (
                   <TokenPanel
                     asset={assetDetail.data}
@@ -185,6 +199,7 @@ export function IssuerDashboard() {
                     onCreated={handleMutated}
                   />
                 )}
+                </fieldset>
               </>
             ) : null}
           </div>
