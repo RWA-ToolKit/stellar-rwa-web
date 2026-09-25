@@ -9,6 +9,7 @@ import { useTx } from "@/hooks/useTx";
 import { useCompliance } from "@/hooks/useCompliance";
 import { formatTokenAmount, formatRawPlain, parseTokenAmount } from "@/lib/format";
 import { TxProgress } from "@/components/ui/TxProgress";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 
 interface TransferPanelProps {
@@ -132,8 +133,18 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
         )}
       </div>
 
+      {/* A failed compliance read is not the same as "not approved". */}
+      {compliance.error && (
+        <ErrorState
+          title="Couldn't check your compliance status"
+          message={compliance.error}
+          onRetry={compliance.refetch}
+          className="py-6"
+        />
+      )}
+
       {/* Explicit gating messages. */}
-      {!compliance.loading && !approved && (
+      {!compliance.loading && !compliance.error && !approved && (
         <p role="alert" aria-live="polite" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 text-xs text-amber-200/90">
           {status === "None"
             ? "Your address isn't on this asset's KYC allowlist. Ask the issuer to approve you before you can hold or transfer it."

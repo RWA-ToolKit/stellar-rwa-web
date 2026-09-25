@@ -15,12 +15,14 @@ export function PlatformStats() {
 
   const holderCount = stats.data?.totalHolders ?? holders.data ?? null;
 
-  if (stats.error) {
+  const failure = stats.error ?? holders.error;
+  if (failure) {
     return (
       <ErrorState
         title="Couldn't load platform stats"
-        message={stats.error}
-        onRetry={stats.refetch}
+        message={failure}
+        // Retry only the load that failed.
+        onRetry={stats.error ? stats.refetch : holders.refetch}
       />
     );
   }

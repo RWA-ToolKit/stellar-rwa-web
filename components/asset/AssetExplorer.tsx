@@ -10,7 +10,6 @@ import {
   type TypeFilter,
   type SortKey,
 } from "./AssetFilter";
-import { CardSkeletonGrid } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ASSET_TYPES } from "@/types";
@@ -139,7 +138,7 @@ export function AssetExplorer() {
       <AssetFilter value={filter} onChange={updateFilter} counts={counts} />
 
       {loading ? (
-        <CardSkeletonGrid count={6} />
+        <AssetGrid assets={[]} loading skeletonCount={PAGE_SIZE} />
       ) : error ? (
         <ErrorState message={error} onRetry={refetch} />
       ) : filtered.length === 0 ? (

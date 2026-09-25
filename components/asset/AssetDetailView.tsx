@@ -34,12 +34,24 @@ export function AssetDetailView({ id }: { id: bigint }) {
       </div>
     );
   }
+  if (asset.notFound) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
+        <h1 className="text-2xl font-bold text-base-100">Asset not found</h1>
+        <p className="mt-2 text-base-100/50">
+          No registered asset with id {id.toString()}. The link may be wrong or the asset
+          may have been removed.
+        </p>
+        <Link href="/explore" className="btn-secondary mt-6">← Back to Explore</Link>
+      </div>
+    );
+  }
   if (asset.error || !asset.data) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <ErrorState
-          title="Asset not found"
-          message={asset.error ?? `No registered asset with id ${id.toString()}.`}
+          title="Couldn't load asset"
+          message={asset.error ?? "Something went wrong loading this asset."}
           onRetry={asset.refetch}
         />
         <div className="mt-6 text-center">

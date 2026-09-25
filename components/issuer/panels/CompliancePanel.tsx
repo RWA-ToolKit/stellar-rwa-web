@@ -10,6 +10,7 @@ import { ActionCard } from "@/components/issuer/ActionCard";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { truncateAddress } from "@/lib/format";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -161,7 +162,7 @@ function AllowlistManageCard({
   complianceId: string;
   onChanged?: () => void;
 }) {
-  const { data, loading, refetch } = useAllowlist(complianceId);
+  const { data, loading, error, refetch } = useAllowlist(complianceId);
   const records = data ?? [];
 
   const handleChanged = () => {
@@ -186,6 +187,13 @@ function AllowlistManageCard({
         <div className="flex items-center gap-2 py-4 text-sm text-base-100/40">
           <Spinner size={14} /> Loading allowlist…
         </div>
+      ) : error ? (
+        <ErrorState
+          title="Couldn't load allowlist"
+          message={error}
+          onRetry={refetch}
+          className="py-6"
+        />
       ) : records.length === 0 ? (
         <p className="py-2 text-sm text-base-100/40">No addresses on the allowlist yet.</p>
       ) : (
