@@ -108,6 +108,8 @@ export function Step3Confirm({ validated, formData, onBack, onRegistered }: Step
               hash={tx.hash}
               error={tx.error}
               onDismiss={tx.reset}
+              onRetry={tx.retry}
+              retryable={tx.retryable}
               successMessage="Asset registered successfully."
             />
           )}

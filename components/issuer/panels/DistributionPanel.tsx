@@ -220,6 +220,8 @@ function CreateDistributionCard({
             hash={tx.hash}
             error={tx.error}
             onDismiss={tx.reset}
+            onRetry={tx.retry}
+            retryable={tx.retryable}
             successMessage="Distribution created. Holders can now claim their share."
           />
         )}

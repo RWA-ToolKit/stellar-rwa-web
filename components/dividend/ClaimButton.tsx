@@ -67,6 +67,8 @@ export function ClaimButton({ distributionId, claimable, claimed, onClaimed }: C
           hash={tx.hash}
           error={tx.error}
           onDismiss={tx.reset}
+          onRetry={tx.retry}
+          retryable={tx.retryable}
           successMessage="Dividend claimed to your wallet."
         />
       )}

@@ -148,6 +148,8 @@ function MintCard({
             hash={tx.hash}
             error={tx.error}
             onDismiss={tx.reset}
+            onRetry={tx.retry}
+            retryable={tx.retryable}
             successMessage="Tokens minted successfully."
           />
         )}
@@ -241,6 +243,8 @@ function PauseCard({
             hash={tx.hash}
             error={tx.error}
             onDismiss={tx.reset}
+            onRetry={tx.retry}
+            retryable={tx.retryable}
             successMessage={paused ? "Token unpaused." : "Token paused."}
           />
         )}

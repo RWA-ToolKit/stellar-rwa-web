@@ -247,6 +247,8 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             hash={tx.hash}
             error={tx.error}
             onDismiss={tx.reset}
+            onRetry={tx.retry}
+            retryable={tx.retryable}
             successMessage="Transfer confirmed."
           />
         )}

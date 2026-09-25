@@ -144,6 +144,8 @@ function AddToAllowlistCard({
             hash={tx.hash}
             error={tx.error}
             onDismiss={tx.reset}
+            onRetry={tx.retry}
+            retryable={tx.retryable}
             successMessage="Address approved on the KYC allowlist."
           />
         )}
@@ -294,6 +296,8 @@ function AllowlistRow({
               hash={suspendTx.hash}
               error={suspendTx.error}
               onDismiss={suspendTx.reset}
+              onRetry={suspendTx.retry}
+              retryable={suspendTx.retryable}
               successMessage="Status updated."
             />
           </div>
@@ -305,6 +309,8 @@ function AllowlistRow({
               hash={removeTx.hash}
               error={removeTx.error}
               onDismiss={removeTx.reset}
+              onRetry={removeTx.retry}
+              retryable={removeTx.retryable}
               successMessage="Address removed from allowlist."
             />
           </div>
@@ -401,6 +407,8 @@ function JurisdictionCard({
               hash={blockTx.hash}
               error={blockTx.error}
               onDismiss={blockTx.reset}
+              onRetry={blockTx.retry}
+              retryable={blockTx.retryable}
               successMessage="Jurisdiction blocked."
             />
           )}
@@ -430,6 +438,8 @@ function JurisdictionCard({
               hash={unblockTx.hash}
               error={unblockTx.error}
               onDismiss={unblockTx.reset}
+              onRetry={unblockTx.retry}
+              retryable={unblockTx.retryable}
               successMessage="Jurisdiction unblocked."
             />
           )}
