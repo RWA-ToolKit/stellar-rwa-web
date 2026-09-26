@@ -33,6 +33,8 @@ const config: Config = {
           600: "#059669",
           700: "#047857",
         },
+        // Keyboard focus ring — emerald-300, ~13:1 against base-950 (WCAG 1.4.11 needs 3:1).
+        focus: "#6ee7b7",
         // Secondary — amber, used for valuation / premium emphasis.
         gold: {
           300: "#fcd34d",

@@ -28,7 +28,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h4 className="font-semibold text-base-100">Distribution #{d.id.toString()}</h4>
+            <h3 className="font-semibold text-base-100">Distribution #{d.id.toString()}</h3>
             {d.completed ? (
               <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">
                 Complete

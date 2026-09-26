@@ -60,19 +60,31 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
     );
   }
 
+  // Address / balance / share is genuinely tabular data, so a real table gives
+  // assistive tech column headers instead of a bare list of rows.
   return (
-    <ul className="divide-y divide-white/5">
-      {holders.map((h) => (
-        <HolderRow
-          key={h.address}
-          holder={h}
-          decimals={metadata.decimals}
-          symbol={metadata.symbol}
-          supply={metadata.totalSupply}
-          isYou={h.address === address}
-        />
-      ))}
-    </ul>
+    <table className="w-full text-left">
+      <caption className="sr-only">Token holders with balance and share of supply</caption>
+      <thead>
+        <tr className="border-b border-white/5 text-xs uppercase tracking-wide text-base-100/40">
+          <th scope="col" className="py-2 pr-3 font-medium">Address</th>
+          <th scope="col" className="py-2 pr-3 text-right font-medium">Balance</th>
+          <th scope="col" className="py-2 text-right font-medium">Share of supply</th>
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-white/5">
+        {holders.map((h) => (
+          <HolderRow
+            key={h.address}
+            holder={h}
+            decimals={metadata.decimals}
+            symbol={metadata.symbol}
+            supply={metadata.totalSupply}
+            isYou={h.address === address}
+          />
+        ))}
+      </tbody>
+    </table>
   );
 }
 
@@ -91,22 +103,22 @@ function HolderRow({
 }) {
   const share = percent(holder.balance, supply);
   return (
-    <li className="flex items-center justify-between gap-3 py-3">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-sm text-base-100/80">
-          {truncateAddress(holder.address, 6, 6)}
-        </span>
-        {isYou && (
-          <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">You</span>
-        )}
-        <CopyButton value={holder.address} />
-      </div>
-      <div className="text-right">
-        <p className="text-sm font-semibold text-base-100">
-          {formatTokenAmount(holder.balance, decimals)} {symbol}
-        </p>
-        <p className="text-xs text-base-100/40">{share.toFixed(2)}% of supply</p>
-      </div>
-    </li>
+    <tr>
+      <th scope="row" className="py-3 pr-3 text-left font-normal">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm text-base-100/80">
+            {truncateAddress(holder.address, 6, 6)}
+          </span>
+          {isYou && (
+            <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">You</span>
+          )}
+          <CopyButton value={holder.address} />
+        </div>
+      </th>
+      <td className="py-3 pr-3 text-right text-sm font-semibold text-base-100">
+        {formatTokenAmount(holder.balance, decimals)} {symbol}
+      </td>
+      <td className="py-3 text-right text-xs text-base-100/40">{share.toFixed(2)}%</td>
+    </tr>
   );
 }

@@ -85,6 +85,7 @@ export function PortfolioView() {
   if (error) {
     return (
       <ErrorState
+        headingLevel={2}
         title="Failed to load portfolio"
         message={error}
         onRetry={refetch}
@@ -95,6 +96,7 @@ export function PortfolioView() {
   if (!data || data.holdings.length === 0) {
     return (
       <EmptyState
+        headingLevel={2}
         title="No holdings yet"
         description="You don't hold any tokenized assets on this network. Browse the explore page to discover available assets."
         icon={

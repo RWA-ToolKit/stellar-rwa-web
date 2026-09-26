@@ -21,6 +21,18 @@ body {
   color: #e5e7eb;
 }
 
+/*
+ * #402 a11y: one consistent, high-contrast keyboard focus style for every
+ * interactive element. :where() keeps specificity at zero so components that
+ * draw their own ring (.btn, .input, .card-hover) still override it.
+ */
+@layer base {
+  :where(a, button, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
+    outline: 2px solid theme("colors.focus");
+    outline-offset: 2px;
+  }
+}
+
 /* Thin, unobtrusive scrollbars that match the dark surface. */
 * {
   scrollbar-width: thin;
@@ -45,7 +57,7 @@ body {
    */
   .card-hover {
     @apply transition-all duration-200 hover:border-brand-500/40 hover:bg-base-850/80
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
   }
   /*
    * #215 a11y: base .btn utility now includes a keyboard-reachable focus ring
@@ -54,7 +66,7 @@ body {
    */
   .btn {
     @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50
-           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
   }
   .btn-primary {
     @apply btn bg-brand-500 text-base-950 hover:bg-brand-400 shadow-lg shadow-brand-500/20;
@@ -72,7 +84,7 @@ body {
    */
   .input {
     @apply w-full rounded-xl border border-white/10 bg-base-950/60 px-3.5 py-2.5 text-sm text-base-100 placeholder:text-base-100/30 outline-none transition-colors focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20
-           focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
+           focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
   }
   /*
    * #218 a11y: .label was text-base-100/50 (~#96989c on #0c0e13 ≈ 4.5:1,

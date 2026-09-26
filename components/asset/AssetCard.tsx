@@ -10,10 +10,13 @@ interface AssetCardProps {
   holders?: number;
   /** Optional total supply string when metadata has been loaded. */
   supply?: string;
+  /** Heading level for the asset name; 2 when the card sits directly under an h1. */
+  headingLevel?: 2 | 3;
 }
 
 /** Summary card linking to an asset's detail page. */
-export function AssetCard({ asset, holders, supply }: AssetCardProps) {
+export function AssetCard({ asset, holders, supply, headingLevel = 3 }: AssetCardProps) {
+  const Heading = `h${headingLevel}` as const;
   return (
     <Link
       href={assetHref(asset.id)}
@@ -27,9 +30,9 @@ export function AssetCard({ asset, holders, supply }: AssetCardProps) {
       </div>
 
       <div>
-        <h3 className="text-lg font-semibold leading-tight text-base-100 transition-colors group-hover:text-brand-300">
+        <Heading className="text-lg font-semibold leading-tight text-base-100 transition-colors group-hover:text-brand-300">
           {getDisplayText(asset.name, "Unnamed asset")}
-        </h3>
+        </Heading>
         <p className="mt-0.5 text-xs text-base-100/40">Asset #{asset.id.toString()}</p>
       </div>
 

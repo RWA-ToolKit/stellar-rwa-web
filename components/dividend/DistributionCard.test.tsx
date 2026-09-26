@@ -92,7 +92,7 @@ describe("DistributionCard", () => {
         currentLedger={null}
       />,
     );
-    expect(screen.getByRole("heading", { level: 4 })).toHaveTextContent(
+    expect(screen.getByRole("heading", { level: 3 })).toHaveTextContent(
       "Distribution #42",
     );
   });

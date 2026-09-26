@@ -18,6 +18,7 @@ export function PlatformStats() {
   if (stats.error) {
     return (
       <ErrorState
+        headingLevel={2}
         title="Couldn't load platform stats"
         message={stats.error}
         onRetry={stats.refetch}

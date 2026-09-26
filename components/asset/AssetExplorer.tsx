@@ -141,9 +141,10 @@ export function AssetExplorer() {
       {loading ? (
         <CardSkeletonGrid count={6} />
       ) : error ? (
-        <ErrorState message={error} onRetry={refetch} />
+        <ErrorState message={error} onRetry={refetch} headingLevel={2} />
       ) : filtered.length === 0 ? (
         <EmptyState
+          headingLevel={2}
           title={filter.type === "all" ? "No assets tokenized yet" : "No assets of this type"}
           description={
             filter.type === "all"
@@ -153,7 +154,7 @@ export function AssetExplorer() {
         />
       ) : (
         <>
-          <AssetGrid assets={visible} />
+          <AssetGrid assets={visible} headingLevel={2} />
           {totalPages > 1 && (
             <PaginationBar
               page={currentPage}
