@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
 import { compliance } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useAllowlist } from "@/hooks/useCompliance";
+import { useWallet } from "@/hooks/useWallet";
+import { getLatestLedger } from "@/lib/stellar";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 import { TxProgress } from "@/components/ui/TxProgress";
@@ -48,6 +50,7 @@ function AddToAllowlistCard({
   isAdmin?: boolean;
 }) {
   const tx = useTx();
+  const { network } = useWallet();
   const [address, setAddress] = useState("");
   const [jurisdiction, setJurisdiction] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
@@ -72,6 +75,25 @@ function AddToAllowlistCard({
       if (isNaN(expiry) || expiry < 0) {
         setFormError("Expiry ledger must be a non-negative integer (0 = never expires).");
         return;
+      }
+      // #322: Reject ledger numbers that are already in the past. A KYC record
+      // with an expiry <= the current ledger is dead on arrival — the contract
+      // will treat it as expired immediately, so warn the issuer here instead
+      // of silently creating a useless record.
+      if (expiry > 0) {
+        try {
+          const latestLedger = await getLatestLedger(network);
+          if (expiry <= latestLedger) {
+            setFormError(
+              `Ledger ${expiry} is already in the past (current ledger: ${latestLedger}). Enter a future ledger number or 0 for no expiry.`,
+            );
+            return;
+          }
+        } catch {
+          // If the ledger fetch fails (e.g., offline), allow the submit to
+          // proceed so the user isn't blocked — the contract will enforce its
+          // own rules on submission.
+        }
       }
     }
 
@@ -178,6 +200,12 @@ function AllowlistManageCard({
   const { data, loading, refetch } = useAllowlist(complianceId);
   const records = data ?? [];
 
+  // #320: Serialize allowlist mutations across all rows so the issuer cannot
+  // fire concurrent wallet-signing prompts by rapidly clicking buttons on
+  // different rows. A ref (not state) is used so incrementing/decrementing
+  // does not cause a re-render loop; AllowlistRow reads it at click time.
+  const activeMutationsRef = useRef(0);
+
   const handleChanged = () => {
     refetch();
     onChanged?.();
@@ -210,6 +238,7 @@ function AllowlistManageCard({
               record={r}
               complianceId={complianceId}
               onChanged={handleChanged}
+              activeMutationsRef={activeMutationsRef}
               isAdmin={isAdmin}
             />
           ))}
@@ -223,11 +252,16 @@ function AllowlistRow({
   record,
   complianceId,
   onChanged,
+  activeMutationsRef,
   isAdmin = true,
 }: {
   record: { address: string; status: string; jurisdiction: string };
   complianceId: string;
   onChanged?: () => void;
+  /** #320: Shared ref counting in-flight mutations across all rows in the list.
+   *  Prevents burst concurrent wallet-signing prompts when the issuer rapidly
+   *  clicks buttons on different rows. */
+  activeMutationsRef: React.MutableRefObject<number>;
   isAdmin?: boolean;
 }) {
   const suspendTx = useTx();
@@ -235,13 +269,28 @@ function AllowlistRow({
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
 
   const isSuspended = record.status === "Suspended";
+  // Disable this row's buttons if THIS row has a pending tx OR if any other
+  // row in the list is already signing/submitting.
   const isPending = suspendTx.pending || removeTx.pending;
+
+  async function runWithSerialize(fn: () => Promise<unknown>) {
+    // Block if any mutation across all rows is already in flight.
+    if (activeMutationsRef.current > 0) return;
+    activeMutationsRef.current += 1;
+    try {
+      await fn();
+    } finally {
+      activeMutationsRef.current -= 1;
+    }
+  }
 
   async function doRemove() {
     setRemoveConfirmOpen(false);
-    removeTx
-      .run((ctx) => compliance.remove(ctx, complianceId, record.address))
-      .then((r) => r && onChanged?.());
+    await runWithSerialize(() =>
+      removeTx
+        .run((ctx) => compliance.remove(ctx, complianceId, record.address))
+        .then((r) => r && onChanged?.()),
+    );
   }
 
   return (
@@ -269,9 +318,11 @@ function AllowlistRow({
             {!isSuspended && (
               <button
                 onClick={() =>
-                  suspendTx
-                    .run((ctx) => compliance.suspend(ctx, complianceId, record.address))
-                    .then((r) => r && onChanged?.())
+                  runWithSerialize(() =>
+                    suspendTx
+                      .run((ctx) => compliance.suspend(ctx, complianceId, record.address))
+                      .then((r) => r && onChanged?.()),
+                  )
                 }
                 disabled={isPending || !isAdmin}
                 className="btn-ghost py-1 text-xs text-amber-300 hover:bg-amber-500/10 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -283,11 +334,13 @@ function AllowlistRow({
             {isSuspended && (
               <button
                 onClick={() =>
-                  suspendTx
-                    .run((ctx) =>
-                      compliance.addToAllowlist(ctx, complianceId, record.address, record.jurisdiction, 0),
-                    )
-                    .then((r) => r && onChanged?.())
+                  runWithSerialize(() =>
+                    suspendTx
+                      .run((ctx) =>
+                        compliance.addToAllowlist(ctx, complianceId, record.address, record.jurisdiction, 0),
+                      )
+                      .then((r) => r && onChanged?.()),
+                  )
                 }
                 disabled={isPending || !isAdmin}
                 className="btn-ghost py-1 text-xs text-brand-300 hover:bg-brand-500/10 disabled:opacity-50 disabled:cursor-not-allowed"

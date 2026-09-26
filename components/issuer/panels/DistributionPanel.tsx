@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
+import type { Network } from "@/types";
 import { assetToken, contractIds, dividend } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useAsync } from "@/hooks/useAsync";
@@ -16,6 +17,42 @@ import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { percent } from "@/lib/format";
+
+// ---- Known-token presets (#323) ----
+//
+// Issuers most commonly pay dividends in the native XLM Stellar Asset Contract
+// (SAC) or in a USDC-equivalent stablecoin. Hard-coding the well-known
+// testnet/mainnet contract IDs here lets the form surface a one-click shortcut
+// so the issuer doesn't have to find and paste the address manually.
+//
+// The XLM SAC is deterministic: on testnet it is the SEP-41 wrapper for the
+// native XLM asset deployed by the Stellar Development Foundation.
+// Sources:
+//   Testnet  – https://stellar.expert/explorer/testnet/contract/CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCN4
+//   Mainnet  – https://stellar.expert/explorer/public/contract/CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA
+
+interface KnownToken {
+  label: string;
+  symbol: string;
+  contractId: string;
+}
+
+const KNOWN_TOKENS: Record<Network, KnownToken[]> = {
+  testnet: [
+    {
+      label: "Native XLM (SAC)",
+      symbol: "XLM",
+      contractId: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCN4",
+    },
+  ],
+  mainnet: [
+    {
+      label: "Native XLM (SAC)",
+      symbol: "XLM",
+      contractId: "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA",
+    },
+  ],
+};
 
 interface DistributionPanelProps {
   asset: AssetDetail;
@@ -148,6 +185,33 @@ function CreateDistributionCard({
           <p className="mt-1 text-[11px] text-base-100/40">
             This is the token used to pay holders — typically a stablecoin or XLM SAC.
           </p>
+
+          {/* #323: Known-token preset buttons so the issuer doesn't have to paste
+              the XLM SAC address (or other well-known tokens) manually. */}
+          {KNOWN_TOKENS[network] && KNOWN_TOKENS[network].length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-base-100/30">Presets:</span>
+              {KNOWN_TOKENS[network].map((token) => (
+                <button
+                  key={token.contractId}
+                  type="button"
+                  disabled={tx.pending}
+                  onClick={() => setPaymentToken(token.contractId)}
+                  aria-label={`Use ${token.label} (${token.contractId})`}
+                  className={[
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                    paymentToken.trim() === token.contractId
+                      ? "border-brand-500/50 bg-brand-500/10 text-brand-300"
+                      : "border-white/10 bg-white/[0.04] text-base-100/50 hover:border-white/20 hover:text-base-100/80",
+                  ].join(" ")}
+                >
+                  <span>{token.symbol}</span>
+                  <span className="text-base-100/30">·</span>
+                  <span>{token.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* #293: surface balance + allowance so the issuer knows before submitting */}
