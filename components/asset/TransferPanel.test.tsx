@@ -124,6 +124,28 @@ describe("TransferPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("explains that transfers are paused and never submits a paused transfer", () => {
+    const pausedAsset = {
+      ...asset,
+      metadata: { ...asset.metadata, paused: true },
+    } as AssetDetail;
+    setup(pausedAsset);
+    const run = mockUseTx.mock.results[0].value.run;
+
+    expect(
+      screen.getByText(/transfers are paused by the issuer.*unpauses the token/i),
+    ).toBeInTheDocument();
+    const submit = screen.getByRole("button", { name: "Transfers paused" });
+    expect(submit).toBeDisabled();
+
+    fireEvent.submit(submit.closest("form")!);
+
+    expect(
+      screen.getByText("Transfers are paused by the issuer for this asset."),
+    ).toBeInTheDocument();
+    expect(run).not.toHaveBeenCalled();
+  });
+
   // ── Issue #231: decimals-aware inline validation ─────────────────────────
 
   describe("decimals-aware inline validation", () => {
