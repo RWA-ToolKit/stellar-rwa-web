@@ -153,8 +153,9 @@ explicit "you are not the admin" notice before letting an action be attempted.
 | `/`            | ✅     | Landing: live platform stats, featured assets, how-it-works |
 | `/explore`     | ✅     | Browse assets — filter by type, sort, paginate         |
 | `/asset/[id]`  | ✅     | Asset detail: stats, holders, dividends, gated transfer |
-| `/asset/new`   | ⏳     | Tokenize a new asset (multi-step)                      |
-| `/issuer`      | ⏳     | Issuer dashboard                                        |
-| `/issuer/compliance` | ⏳ | Manage KYC allowlist                                  |
-| `/issuer/dividends`  | ⏳ | Create/manage distributions                          |
-| `/portfolio`   | ⏳     | Investor holdings                                      |
+| `/asset/new`   | ✅     | Tokenize a new asset (four-step registration wizard)   |
+| `/issuer`      | ✅     | Issuer dashboard: token, compliance, and distributions |
+| `/portfolio`   | ✅     | Investor holdings                                      |
+
+Compliance and distribution management are tabs in the `/issuer` dashboard,
+not separate `/issuer/compliance` or `/issuer/dividends` URL routes.
