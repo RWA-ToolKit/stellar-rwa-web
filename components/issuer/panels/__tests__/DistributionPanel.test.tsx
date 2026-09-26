@@ -354,4 +354,40 @@ describe("DistributionPanel – CreateDistributionCard known-token presets (#323
     expect(screen.getByRole("alert")).toHaveTextContent(/not approved to spend enough/i);
     expect(screen.getByRole("button", { name: /create distribution/i })).toBeDisabled();
   });
+
+  it("blocks creation when the requested pool exceeds the payment-token balance", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
+    const run = jest.fn();
+    const { useTx: mockUseTxFn } = require("@/hooks/useTx") as { useTx: jest.Mock };
+    mockUseTxFn.mockReturnValue({
+      phase: "idle",
+      hash: null,
+      error: null,
+      errorType: "generic",
+      pending: false,
+      run,
+      reset: jest.fn(),
+    });
+    mockUseAsync.mockImplementation((_loader: unknown, deps: unknown[]) => ({
+      data: deps.length === 4 ? 100_0000000n : 5_0000000n,
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    }));
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    fireEvent.change(screen.getByLabelText(/payment token contract/i), {
+      target: { value: XLM_SAC_TESTNET },
+    });
+    fireEvent.change(screen.getByLabelText(/total pool amount/i), {
+      target: { value: "10" },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/holds less than the requested/i);
+    const submitButton = screen.getByRole("button", { name: /create distribution/i });
+    expect(submitButton).toBeDisabled();
+    fireEvent.submit(submitButton.closest("form")!);
+    expect(screen.getByText(/exceeds your payment-token balance/i)).toBeInTheDocument();
+    expect(run).not.toHaveBeenCalled();
+  });
 });

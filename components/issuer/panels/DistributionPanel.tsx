@@ -148,6 +148,10 @@ function CreateDistributionCard({
       setFormError("Total amount must be greater than zero.");
       return;
     }
+    if (balance !== null && raw > balance) {
+      setFormError("Total amount exceeds your payment-token balance.");
+      return;
+    }
     if (allowance !== null && raw > allowance) {
       setFormError("The dividend contract allowance is insufficient. Approve it to spend at least the requested amount before creating this distribution.");
       return;
@@ -289,14 +293,16 @@ function CreateDistributionCard({
         {tx.phase === "idle" ? (
           <button
             type="submit"
-            disabled={tx.pending || !isAdmin || needsApproval}
+            disabled={tx.pending || !isAdmin || insufficientBalance || needsApproval}
             className="btn-primary"
             title={
               !isAdmin
                 ? "Only the asset admin can create distributions"
-                : needsApproval
-                  ? "Approve the dividend contract before creating this distribution"
-                  : ""
+                : insufficientBalance
+                  ? "The requested amount exceeds your payment-token balance"
+                  : needsApproval
+                    ? "Approve the dividend contract before creating this distribution"
+                    : ""
             }
           >
             Create distribution
