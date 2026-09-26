@@ -1,8 +1,12 @@
+"use client";
+
 import Link from "next/link";
 import type { AssetEntry } from "@/types";
 import { assetHref, formatUsdCents, truncateAddress } from "@/lib/format";
 import { getDisplayText } from "@/lib/display";
 import { AssetTypeBadge } from "./AssetTypeBadge";
+import { useWallet } from "@/hooks/useWallet";
+import { prefetchAssetMetadata } from "@/lib/assetCache";
 
 interface AssetCardProps {
   asset: AssetEntry;
@@ -14,9 +18,24 @@ interface AssetCardProps {
 
 /** Summary card linking to an asset's detail page. */
 export function AssetCard({ asset, holders, supply }: AssetCardProps) {
+  const { network } = useWallet();
+
+  const prefetchMetadata = () => {
+    void prefetchAssetMetadata(network, asset.tokenContract).catch(
+      (error: unknown) => {
+        console.warn(
+          "Could not prefetch asset metadata; it will be retried on open.",
+          error,
+        );
+      },
+    );
+  };
+
   return (
     <Link
       href={assetHref(asset.id)}
+      onMouseEnter={prefetchMetadata}
+      onFocus={prefetchMetadata}
       className="card card-hover group flex flex-col gap-4 p-5"
     >
       <div className="flex items-start justify-between gap-3">
