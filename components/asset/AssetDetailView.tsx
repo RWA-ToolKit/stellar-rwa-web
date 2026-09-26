@@ -14,6 +14,7 @@ import { TransferPanel } from "./TransferPanel";
 import { CompliancePanel } from "./CompliancePanel";
 import { HolderList } from "./HolderList";
 import { DistributionCard } from "@/components/dividend/DistributionCard";
+import { ClaimAllButton } from "@/components/dividend/ClaimAllButton";
 import { ActivityPanel } from "./ActivityPanel";
 import { LoadingPanel } from "@/components/ui/Spinner";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -111,6 +112,13 @@ export function AssetDetailView({ id }: { id: bigint }) {
               />
             ) : (
               <div className="space-y-4">
+                <ClaimAllButton
+                  distributions={dividends.data}
+                  onClaimed={() => {
+                    dividends.refetch();
+                    balance.refetch();
+                  }}
+                />
                 {dividends.data.map((d) => (
                   <DistributionCard
                     key={d.id.toString()}

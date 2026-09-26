@@ -67,6 +67,10 @@ jest.mock("@/components/dividend/DistributionCard", () => ({
   DistributionCard: () => <p>Distribution card</p>,
 }));
 
+jest.mock("@/components/dividend/ClaimAllButton", () => ({
+  ClaimAllButton: () => null,
+}));
+
 const mockUseAsset = useAsset as jest.MockedFunction<typeof useAsset>;
 const mockUseBalance = useBalance as jest.MockedFunction<typeof useBalance>;
 const mockUseComplianceOverview = useComplianceOverview as jest.MockedFunction<
