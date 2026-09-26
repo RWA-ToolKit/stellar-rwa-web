@@ -97,6 +97,12 @@ Install the [Freighter](https://freighter.app) browser extension and point it at
 | `npm run start`   | Serve the production build       |
 | `npm run lint`    | Next.js ESLint                   |
 | `npm run typecheck` | `tsc --noEmit`                 |
+| `npm run size`    | Check the configured bundle-size budgets |
+
+The CI build also generates module-level Webpack Bundle Analyzer reports and
+uploads them as the `bundle-analysis` artifact, including when the size-budget
+check fails. To generate them locally, run `ANALYZE=true npm run build`; the
+reports are written to `.next/analyze/`.
 
 ## Configuration
 
