@@ -44,9 +44,14 @@ jobs:
       - name: Bundle size check
         run: npm run size
 
+      - name: Install Chromium for Lighthouse
+        run: npx playwright install --with-deps chromium
+
       # Lighthouse category score floors complement the JavaScript bundle budget.
       - name: Performance and accessibility budgets
-        run: npx --yes @lhci/cli@0.14.0 autorun
+        run: |
+          export CHROME_PATH="$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')"
+          npx --yes @lhci/cli@0.14.0 autorun
 
   # ── End-to-end tests ────────────────────────────────────────────────────────
   # Exercises the transfer and claim flows in a real browser against a dev
