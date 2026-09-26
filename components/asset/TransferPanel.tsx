@@ -71,6 +71,11 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
     e.preventDefault();
     setFormError(null);
 
+    if (paused) {
+      setFormError("Transfers are paused by the issuer for this asset.");
+      return;
+    }
+
     const recipient = to.trim();
     if (!StrKey.isValidEd25519PublicKey(recipient) && !StrKey.isValidContract(recipient)) {
       setFormError("Enter a valid Stellar address (starts with G or C).");
@@ -146,7 +151,8 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
       )}
       {paused && (
         <p role="alert" aria-live="polite" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 text-xs text-amber-200/90">
-          Transfers are paused by the issuer for this asset.
+          Transfers are paused by the issuer for this asset. You can transfer once
+          the issuer unpauses the token.
         </p>
       )}
 
@@ -237,6 +243,8 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
           >
             {complianceLoading
               ? "Checking compliance…"
+              : paused
+                ? "Transfers paused"
               : canTransfer
                 ? "Transfer"
                 : "Transfer unavailable"}
