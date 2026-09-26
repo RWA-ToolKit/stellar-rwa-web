@@ -179,6 +179,61 @@ describe("AssetExplorer", () => {
     expect(screen.getByText("Gold Reserve")).toBeInTheDocument();
   });
 
+  it("searches asset names without regard to case", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] });
+    render(<AssetExplorer />);
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search assets" }), {
+      target: { value: "lagos" },
+    });
+
+    expect(screen.getByText("Lagos Office Tower")).toBeInTheDocument();
+    expect(screen.queryByText("Trade Invoice #42")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gold Reserve")).not.toBeInTheDocument();
+  });
+
+  it("searches asset IDs, issuer addresses, and token contract addresses", () => {
+    setupMock({
+      assets: [
+        {
+          ...REAL_ESTATE_ASSET,
+          issuer: "GISSUERABC",
+          tokenContract: "CTOKENABC",
+        },
+        {
+          ...INVOICE_ASSET,
+          issuer: "GISSUERXYZ",
+          tokenContract: "CTOKENXYZ",
+        },
+      ],
+    });
+    render(<AssetExplorer />);
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "2" } });
+    expect(screen.getByText("Trade Invoice #42")).toBeInTheDocument();
+    expect(screen.queryByText("Lagos Office Tower")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "gissuerxyz" } });
+    expect(screen.getByText("Trade Invoice #42")).toBeInTheDocument();
+    expect(screen.queryByText("Lagos Office Tower")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "ctokenxyz" } });
+    expect(screen.getByText("Trade Invoice #42")).toBeInTheDocument();
+    expect(screen.queryByText("Lagos Office Tower")).not.toBeInTheDocument();
+  });
+
+  it("shows a search-specific empty state when there are no matches", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET] });
+    render(<AssetExplorer />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "not an asset" },
+    });
+
+    expect(screen.getByText("No assets found")).toBeInTheDocument();
+    expect(screen.getByText(/clear the search field/i)).toBeInTheDocument();
+  });
+
   // ── URL-based filtering ────────────────────────────────────────────────
 
   it("shows only real-estate assets when type=real_estate is in the URL", () => {

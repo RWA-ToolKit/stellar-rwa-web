@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAssets } from "@/hooks/useAssets";
 import { AssetGrid } from "./AssetGrid";
@@ -39,6 +39,7 @@ export function AssetExplorer() {
   const { assets, loading, error, refetch } = useAssets();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [search, setSearch] = useState("");
 
   // Derive filter and page from URL search params, falling back to defaults.
   const filter: FilterValue = useMemo(() => {
@@ -76,6 +77,18 @@ export function AssetExplorer() {
     if (filter.type !== "all") {
       list = list.filter((a) => a.assetType === filter.type);
     }
+    const term = search.trim().toLowerCase();
+    if (term) {
+      list = list.filter((asset) =>
+        [
+          asset.name,
+          asset.id.toString(),
+          asset.issuer,
+          asset.tokenContract,
+          asset.assetType,
+        ].some((field) => field.toLowerCase().includes(term)),
+      );
+    }
     const sorted = [...list].sort((a, b) => {
       if (filter.sort === "valuation") {
         return a.valuation > b.valuation ? -1 : a.valuation < b.valuation ? 1 : 0;
@@ -83,7 +96,7 @@ export function AssetExplorer() {
       return b.createdAt - a.createdAt;
     });
     return sorted;
-  }, [assets, filter]);
+  }, [assets, filter, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -134,9 +147,23 @@ export function AssetExplorer() {
     [router, buildUrl],
   );
 
+  const updateSearch = useCallback(
+    (next: string) => {
+      setSearch(next);
+      router.push(buildUrl({ page: 1 }));
+    },
+    [router, buildUrl],
+  );
+
   return (
     <div className="space-y-8">
-      <AssetFilter value={filter} onChange={updateFilter} counts={counts} />
+      <AssetFilter
+        value={filter}
+        onChange={updateFilter}
+        search={search}
+        onSearchChange={updateSearch}
+        counts={counts}
+      />
 
       {loading ? (
         <CardSkeletonGrid count={6} />
@@ -144,11 +171,19 @@ export function AssetExplorer() {
         <ErrorState message={error} onRetry={refetch} />
       ) : filtered.length === 0 ? (
         <EmptyState
-          title={filter.type === "all" ? "No assets tokenized yet" : "No assets of this type"}
+          title={
+            search.trim()
+              ? "No assets found"
+              : filter.type === "all"
+                ? "No assets tokenized yet"
+                : "No assets of this type"
+          }
           description={
-            filter.type === "all"
-              ? "Be the first to bring a real-world asset on-chain."
-              : "Try a different asset class or clear the filter."
+            search.trim()
+              ? "Try a different search or clear the search field."
+              : filter.type === "all"
+                ? "Be the first to bring a real-world asset on-chain."
+                : "Try a different asset class or clear the filter."
           }
         />
       ) : (
@@ -163,5 +198,3 @@ export function AssetExplorer() {
     </div>
   );
 }
-
-

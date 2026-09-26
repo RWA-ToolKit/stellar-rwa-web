@@ -13,6 +13,8 @@ export interface FilterValue {
 interface AssetFilterProps {
   value: FilterValue;
   onChange: (next: FilterValue) => void;
+  search: string;
+  onSearchChange: (search: string) => void;
   /** Per-type counts, used to annotate the filter chips. */
   counts?: Record<TypeFilter, number>;
 }
@@ -23,9 +25,25 @@ const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
 ];
 
 /** Filter assets by class and choose a sort order. */
-export function AssetFilter({ value, onChange, counts }: AssetFilterProps) {
+export function AssetFilter({
+  value,
+  onChange,
+  search,
+  onSearchChange,
+  counts,
+}: AssetFilterProps) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <label className="sr-only" htmlFor="asset-search">Search assets</label>
+      <input
+        id="asset-search"
+        type="search"
+        value={search}
+        onChange={(event) => onSearchChange(event.target.value)}
+        placeholder="Search by name, ID, issuer or token"
+        className="input w-full sm:max-w-sm"
+      />
+
       {/* #215 a11y: focus-visible rings added to filter chip buttons.
           #216 a11y: aria-label encodes the count so screen readers announce it
                      alongside the visible badge (e.g. "Real Estate, 12 assets").
