@@ -70,6 +70,7 @@ function setup(assetOverride: AssetDetail = asset) {
       : { allowed: true, status: "Approved", record: null },
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
   }));
   mockUseTx.mockReturnValue({
@@ -212,6 +213,7 @@ describe("TransferPanel", () => {
         data: { allowed: true, status: "Approved", record: null },
         loading: false,
         error: null,
+        updatedAt: null,
         refetch: jest.fn(),
       });
 

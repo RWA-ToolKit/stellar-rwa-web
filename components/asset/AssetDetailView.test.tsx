@@ -97,17 +97,18 @@ const asset: AssetDetail = {
 
 function setup() {
   mockUseWallet.mockReturnValue({ network: "testnet", address: null } as ReturnType<typeof useWallet>);
-  mockUseAsset.mockReturnValue({ data: asset, loading: false, error: null, refetch: jest.fn() });
-  mockUseBalance.mockReturnValue({ data: 0n, loading: false, error: null, refetch: jest.fn() });
-  mockUseDividends.mockReturnValue({ data: [], loading: false, error: null, refetch: jest.fn() });
-  mockUseHolders.mockReturnValue({ data: [], loading: false, error: null, refetch: jest.fn() });
+  mockUseAsset.mockReturnValue({ data: asset, loading: false, error: null, updatedAt: Date.now(), refetch: jest.fn() });
+  mockUseBalance.mockReturnValue({ data: 0n, loading: false, error: null, updatedAt: null, refetch: jest.fn() });
+  mockUseDividends.mockReturnValue({ data: [], loading: false, error: null, updatedAt: null, refetch: jest.fn() });
+  mockUseHolders.mockReturnValue({ data: [], loading: false, error: null, updatedAt: null, refetch: jest.fn() });
   mockUseComplianceOverview.mockReturnValue({
     data: { allowlistSize: 1, jurisdictions: [] },
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
   });
-  mockUseAsync.mockReturnValue({ data: 123, loading: false, error: null, refetch: jest.fn() });
+  mockUseAsync.mockReturnValue({ data: 123, loading: false, error: null, updatedAt: Date.now(), refetch: jest.fn() });
 }
 
 describe("AssetDetailView", () => {
@@ -132,6 +133,7 @@ describe("AssetDetailView", () => {
       data: null,
       loading: false,
       error: "Dividend service unavailable",
+      updatedAt: null,
       refetch: jest.fn(),
     });
 
@@ -148,6 +150,7 @@ describe("AssetDetailView", () => {
       data: null,
       loading: false,
       error: "Holder service unavailable",
+      updatedAt: null,
       refetch: jest.fn(),
     });
 
@@ -165,6 +168,7 @@ describe("AssetDetailView", () => {
       data: null,
       loading: false,
       error: "Compliance service unavailable",
+      updatedAt: null,
       refetch: jest.fn(),
     });
 
