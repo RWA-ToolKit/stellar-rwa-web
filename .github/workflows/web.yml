@@ -44,6 +44,10 @@ jobs:
       - name: Bundle size check
         run: npm run size
 
+      # Lighthouse category score floors complement the JavaScript bundle budget.
+      - name: Performance and accessibility budgets
+        run: npx --yes @lhci/cli@0.14.0 autorun
+
   # ── End-to-end tests ────────────────────────────────────────────────────────
   # Exercises the transfer and claim flows in a real browser against a dev
   # server, with all Soroban RPC and REST API calls intercepted by Playwright
