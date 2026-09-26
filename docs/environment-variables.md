@@ -134,14 +134,14 @@ All three Mainnet contract IDs default to empty strings, meaning the app **will 
 
 ### `NEXT_PUBLIC_API_URL`
 
-- **Purpose:** Optional URL of a Stellar RWA API server that provides faster read aggregations (list views, statistics, holder counts). When set, the app reads these aggregations from this endpoint instead of simulating every read directly against Soroban RPC, which is slower and more expensive. **Writes (signing transactions) always go through RPC regardless of this setting.**
+- **Purpose:** Optional URL of a Stellar RWA API server that provides faster read aggregations (list views, statistics, holder counts) and recent indexed contract events. When set, the app reads these aggregations from this endpoint instead of simulating every read directly against Soroban RPC, which is slower and more expensive. **Writes (signing transactions) always go through RPC regardless of this setting.**
 - **Required:** No (defaults to empty; all reads fall back to direct RPC simulations)
-- **Format:** HTTPS URL (base URL; the app appends paths like `/assets`, `/stats`, `/holders`)
+- **Format:** HTTPS URL (base URL; the app appends paths like `/assets`, `/stats`, `/holders`, `/events`)
 - **Example:**
   ```
   NEXT_PUBLIC_API_URL=https://rwa-api.example.com
   ```
-- **Fallback behavior:** When `NEXT_PUBLIC_API_URL` is not set or the API is unreachable, the app automatically falls back to reading directly from Soroban RPC. No UI change is visible to the user—reads simply take longer.
+- **Fallback behavior:** Asset lists, statistics, and holders fall back to Soroban RPC when the API is not set or unreachable. Transfer history requires the indexer's `/events` feed; the asset page shows an unavailable state when it cannot be loaded.
 
 ## App Metadata (Optional)
 
