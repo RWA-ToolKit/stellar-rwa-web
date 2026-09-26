@@ -83,6 +83,7 @@ const serverCache = new Map<Network, ServerCacheEntry>();
 
 function buildServer(cfg: NetworkConfig, urlIndex: number): rpc.Server {
   const url = cfg.rpcUrls[urlIndex] ?? cfg.rpcUrls[0];
+  if (!url) throw new Error("No RPC URLs are configured for this network.");
   return new rpc.Server(url, { allowHttp: url.startsWith("http://") });
 }
 
@@ -360,7 +361,7 @@ export class ContractError extends Error {
   constructor(message: string, detail?: string, isAuth: boolean = false) {
     super(message);
     this.name = "ContractError";
-    this.detail = detail;
+    if (detail !== undefined) this.detail = detail;
     this.isAuth = isAuth;
   }
 }

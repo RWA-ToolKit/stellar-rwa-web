@@ -24,7 +24,13 @@ function renderFilter(
   onChange = jest.fn(),
   counts?: Record<string, number>,
 ) {
-  render(<AssetFilter value={value} onChange={onChange} counts={counts} />);
+  render(
+    <AssetFilter
+      value={value}
+      onChange={onChange}
+      {...(counts !== undefined ? { counts } : {})}
+    />,
+  );
   return { onChange };
 }
 

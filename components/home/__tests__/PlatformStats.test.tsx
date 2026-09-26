@@ -76,7 +76,7 @@ describe("PlatformStats", () => {
   // ── tile labels always present ─────────────────────────────────────────
   it("renders all three tile labels when data is loading", () => {
     setupMocks(
-      { data: undefined, loading: true, error: null },
+      { loading: true, error: null },
       { data: null, loading: true, error: null },
     );
 
@@ -90,7 +90,7 @@ describe("PlatformStats", () => {
   // ── loading state ──────────────────────────────────────────────────────
   it("renders skeleton placeholders while data is loading", () => {
     setupMocks(
-      { data: undefined, loading: true, error: null },
+      { loading: true, error: null },
       { data: null, loading: true, error: null },
     );
 
@@ -213,7 +213,7 @@ describe("PlatformStats", () => {
   // ── three tiles rendered ───────────────────────────────────────────────
   it("renders exactly 3 stat tiles when data is loading", () => {
     setupMocks(
-      { data: undefined, loading: true, error: null },
+      { loading: true, error: null },
       { data: null, loading: true, error: null },
     );
 

@@ -69,7 +69,7 @@ export function DistributionPanel({ asset, onCreated, isAdmin = true }: Distribu
       </div>
       <CreateDistributionCard
         tokenContract={asset.tokenContract}
-        onCreated={onCreated}
+        {...(onCreated !== undefined ? { onCreated } : {})}
         isAdmin={isAdmin}
       />
       <ExistingDistributionsCard tokenContract={asset.tokenContract} />

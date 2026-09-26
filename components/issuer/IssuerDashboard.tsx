@@ -128,9 +128,13 @@ export function IssuerDashboard() {
             <AssetContextBar
               asset={selectedAsset}
               loading={assetDetail.loading}
-              paused={assetDetail.data?.metadata.paused}
               error={assetDetail.error}
-              admin={assetDetail.data?.metadata.admin}
+              {...(assetDetail.data
+                ? {
+                    paused: assetDetail.data.metadata.paused,
+                    admin: assetDetail.data.metadata.admin,
+                  }
+                : {})}
             />
 
             {/* Tab bar */}

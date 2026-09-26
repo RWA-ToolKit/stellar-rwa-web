@@ -129,7 +129,7 @@ export function HoldingRow({ holding, onClaimed }: HoldingRowProps) {
               key={d.id.toString()}
               distribution={d}
               currentLedger={null}
-              onClaimed={onClaimed}
+              {...(onClaimed !== undefined ? { onClaimed } : {})}
             />
           ))}
         </div>

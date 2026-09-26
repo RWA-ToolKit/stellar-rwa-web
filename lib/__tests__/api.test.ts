@@ -96,6 +96,15 @@ const mockFetch = jest.fn() as unknown as {
   mock: { calls: unknown[][] };
 };
 
+function getRequestedUrl(): string {
+  const call = mockFetch.mock.calls[0];
+  const url = call?.[0];
+  if (typeof url !== "string") {
+    throw new Error("Expected fetch to be called with a URL string.");
+  }
+  return url;
+}
+
 beforeAll(() => {
   // Cast needed because our mock returns a minimal { ok, json } shape rather
   // than a full Response object. fetchJson only reads those two properties.
@@ -188,7 +197,7 @@ describe("api.getAssets", () => {
     await api.getAssets(2, 10, "real_estate", "valuation");
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    const url = mockFetch.mock.calls[0][0] as string;
+    const url = getRequestedUrl();
     expect(url).toContain("page=2");
     expect(url).toContain("pageSize=10");
     expect(url).toContain("type=real_estate");
@@ -224,7 +233,7 @@ describe("api.getAllAssets", () => {
 
     // Only one fetch call — no pagination loop.
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    const url = mockFetch.mock.calls[0][0] as string;
+    const url = getRequestedUrl();
     expect(url).toContain("pageSize=500");
 
     // Only the assets from the single page are returned.
@@ -240,8 +249,9 @@ describe("api.getAllAssets", () => {
 
     const result = await api.getAllAssets();
 
-    expect(result![0].id).toBe(42n);
-    expect(result![0].valuation).toBe(9007199254740993n);
+    expect(
+      result?.map(({ id, valuation }) => [id, valuation]),
+    ).toEqual([[42n, 9007199254740993n]]);
   });
 
   it("returns null for a non-OK response", async () => {
@@ -311,7 +321,7 @@ describe("api.getAssetsByIssuer", () => {
     await api.getAssetsByIssuer("GISSUER+SPECIAL");
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    const url = mockFetch.mock.calls[0][0] as string;
+    const url = getRequestedUrl();
     expect(url).toContain("pageSize=500");
     expect(url).toContain(encodeURIComponent("GISSUER+SPECIAL"));
   });
@@ -364,8 +374,10 @@ describe("api.getHolders", () => {
 
     const result = await api.getHolders("CTOKEN");
 
-    expect(result![0].balance).toBe(9007199254740993n);
-    expect(result![1].balance).toBe(0n);
+    expect(result?.map(({ balance }) => balance)).toEqual([
+      9007199254740993n,
+      0n,
+    ]);
   });
 
   it("returns null for a non-OK response", async () => {

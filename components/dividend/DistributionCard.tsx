@@ -77,7 +77,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             distributionId={d.id}
             claimable={d.claimable}
             claimed={d.claimed}
-            onClaimed={onClaimed}
+            {...(onClaimed !== undefined ? { onClaimed } : {})}
           />
         </div>
       )}

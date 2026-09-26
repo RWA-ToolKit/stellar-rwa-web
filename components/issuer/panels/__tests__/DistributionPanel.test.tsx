@@ -230,8 +230,7 @@ describe("DistributionPanel – ExistingDistributionsCard progress bar clamping"
       document.querySelectorAll<HTMLElement>(".bg-gradient-to-r"),
     );
     expect(bars).toHaveLength(2);
-    expect(bars[0].style.width).toBe("25%");
-    expect(bars[1].style.width).toBe("100%");
+    expect(bars.map((bar) => bar.style.width)).toEqual(["25%", "100%"]);
   });
 
   it("shows an empty state when there are no distributions", () => {

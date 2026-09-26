@@ -131,7 +131,10 @@ export function AssetDetailView({ id }: { id: bigint }) {
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-base-100/50">
               Overview
             </h2>
-            <AssetStats asset={detail} holders={holderCount} />
+            <AssetStats
+              asset={detail}
+              {...(holderCount !== undefined ? { holders: holderCount } : {})}
+            />
           </div>
 
           <div className="card p-6">
