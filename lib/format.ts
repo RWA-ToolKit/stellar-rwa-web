@@ -50,11 +50,23 @@ function trimZero(n: number): string {
  * large cents value would), then the small quotient is formatted.
  */
 function compactBigint(n: bigint): string {
-  const abs = n < 0n ? -n : n;
-  if (abs >= 1_000_000_000n) return trimZero(Number(n) / 1_000_000_000) + "B";
-  if (abs >= 1_000_000n) return trimZero(Number(n) / 1_000_000) + "M";
-  if (abs >= 1_000n) return trimZero(Number(n) / 1_000) + "K";
-  return n.toString();
+  const units = [
+    { threshold: 1_000_000_000n, divisor: 1_000_000_000n, suffix: "B" },
+    { threshold: 1_000_000n, divisor: 1_000_000n, suffix: "M" },
+    { threshold: 1_000n, divisor: 1_000n, suffix: "K" },
+  ];
+  let unitIndex = units.findIndex(({ threshold }) => n >= threshold);
+  if (unitIndex < 0) return n.toString();
+
+  let { divisor, suffix } = units[unitIndex];
+  let tenths = (n * 10n + divisor / 2n) / divisor;
+  while (tenths >= 10_000n && unitIndex > 0) {
+    ({ divisor, suffix } = units[--unitIndex]);
+    tenths = (n * 10n + divisor / 2n) / divisor;
+  }
+  const whole = (tenths / 10n).toLocaleString("en-US");
+  const fraction = tenths % 10n;
+  return `${whole}${fraction === 0n ? "" : `.${fraction}`}${suffix}`;
 }
 
 /**

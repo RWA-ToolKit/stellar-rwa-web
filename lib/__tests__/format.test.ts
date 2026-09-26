@@ -10,6 +10,10 @@ describe("formatUsdCents", () => {
     expect(formatUsdCents(0n)).toBe("$0");
   });
 
+  it("formats zero cents in compact mode as $0", () => {
+    expect(formatUsdCents(0n, { compact: true })).toBe("$0");
+  });
+
   it("formats exactly $1 (100 cents)", () => {
     expect(formatUsdCents(100n)).toBe("$1");
   });
@@ -60,6 +64,15 @@ describe("formatUsdCents", () => {
     expect(formatUsdCents(1_230_000_000n, { compact: true })).toBe("$12.3M");
   });
 
+  it("rounds compact values to one decimal without promoting early", () => {
+    expect(formatUsdCents(104_999_999n, { compact: true })).toBe("$1M");
+    expect(formatUsdCents(105_000_000n, { compact: true })).toBe("$1.1M");
+  });
+
+  it("promotes a rounded compact value at the next unit boundary", () => {
+    expect(formatUsdCents(99_999_999_900n, { compact: true })).toBe("$1B");
+  });
+
   it("formats $2,000,000,000 in compact mode as $2B", () => {
     expect(formatUsdCents(200_000_000_000n, { compact: true })).toBe("$2B");
   });
@@ -81,6 +94,18 @@ describe("formatUsdCents", () => {
     // 10_000_000_000_000_000n cents = $100,000,000,000,000 (~$100 trillion)
     // Converting via Number() would silently round; bigint math does not.
     expect(formatUsdCents(10_000_000_000_000_000n)).toBe("$100,000,000,000,000");
+  });
+
+  it("formats the maximum positive i128 with exact separators and cents", () => {
+    expect(formatUsdCents(170141183460469231731687303715884105727n)).toBe(
+      "$1,701,411,834,604,692,317,316,873,037,158,841,057.27",
+    );
+  });
+
+  it("formats compact maximum i128 values without floating-point notation", () => {
+    expect(formatUsdCents(170141183460469231731687303715884105727n, { compact: true })).toBe(
+      "$1,701,411,834,604,692,317,316,873,037.2B",
+    );
   });
 });
 
