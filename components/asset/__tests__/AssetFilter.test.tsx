@@ -33,6 +33,18 @@ function renderFilter(
 describe("AssetFilter", () => {
   // ── type chips rendered ──────────────────────────────────────────────
 
+  it("chips are real, keyboard-reachable buttons inside a named group", () => {
+    renderFilter();
+    const group = screen.getByRole("group", { name: /filter by asset type/i });
+    const chips = group.querySelectorAll("button");
+    expect(chips.length).toBeGreaterThan(1);
+    chips.forEach((chip) => {
+      expect(chip).toHaveAttribute("type", "button");
+      expect(chip).toHaveAttribute("aria-pressed");
+      expect(chip).not.toHaveAttribute("tabindex", "-1");
+    });
+  });
+
   it("renders all type filter chips", () => {
     renderFilter();
     expect(screen.getByRole("button", { name: /all assets/i })).toBeInTheDocument();

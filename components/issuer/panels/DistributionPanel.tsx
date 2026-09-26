@@ -57,15 +57,20 @@ const KNOWN_TOKENS: Record<Network, KnownToken[]> = {
 interface DistributionPanelProps {
   asset: AssetDetail;
   onCreated?: () => void;
+  isAdmin?: boolean;
 }
 
 /** Create new dividend distributions and view existing ones for the asset. */
-export function DistributionPanel({ asset, onCreated }: DistributionPanelProps) {
+export function DistributionPanel({ asset, onCreated, isAdmin = true }: DistributionPanelProps) {
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-base-100/50">
+        <strong>Required role:</strong> dividend contract caller must be registered issuer for this asset
+      </div>
       <CreateDistributionCard
         tokenContract={asset.tokenContract}
         onCreated={onCreated}
+        isAdmin={isAdmin}
       />
       <ExistingDistributionsCard tokenContract={asset.tokenContract} />
     </div>
@@ -77,9 +82,11 @@ export function DistributionPanel({ asset, onCreated }: DistributionPanelProps) 
 function CreateDistributionCard({
   tokenContract,
   onCreated,
+  isAdmin = true,
 }: {
   tokenContract: string;
   onCreated?: () => void;
+  isAdmin?: boolean;
 }) {
   const tx = useTx();
   const { address, network } = useWallet();
@@ -171,7 +178,7 @@ function CreateDistributionCard({
             value={paymentToken}
             onChange={(e) => setPaymentToken(e.target.value)}
             placeholder="C… (SAC or Soroban token contract)"
-            disabled={tx.pending}
+            disabled={tx.pending || !isAdmin}
             className="input font-mono text-xs"
             spellCheck={false}
           />
@@ -260,7 +267,7 @@ function CreateDistributionCard({
               onChange={(e) => setTotalAmount(e.target.value)}
               placeholder="0.0000000"
               inputMode="decimal"
-              disabled={tx.pending}
+              disabled={tx.pending || !isAdmin}
               className="input pr-16"
             />
             <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
@@ -275,7 +282,12 @@ function CreateDistributionCard({
         {formError && <p className="text-xs text-red-400">{formError}</p>}
 
         {tx.phase === "idle" ? (
-          <button type="submit" disabled={tx.pending} className="btn-primary">
+          <button
+            type="submit"
+            disabled={tx.pending || !isAdmin}
+            className="btn-primary"
+            title={!isAdmin ? "Only the asset admin can create distributions" : ""}
+          >
             Create distribution
           </button>
         ) : (
@@ -283,6 +295,7 @@ function CreateDistributionCard({
             phase={tx.phase}
             hash={tx.hash}
             error={tx.error}
+            errorType={tx.errorType}
             onDismiss={tx.reset}
             successMessage="Distribution created. Holders can now claim their share."
           />

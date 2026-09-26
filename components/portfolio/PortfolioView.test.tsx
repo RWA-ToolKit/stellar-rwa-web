@@ -75,6 +75,8 @@ const PORTFOLIO_WITH_HOLDING: PortfolioData = {
   ],
   totalValueCents: 250000n,
   totalClaimable: 0n,
+  failedAssetCount: 0,
+  isIncomplete: false,
 };
 
 function setup({ address = null, data = PORTFOLIO_WITH_HOLDING }: {
@@ -95,7 +97,7 @@ describe("PortfolioView", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("prompts disconnected users to connect their wallet", () => {
-    setup({ data: { holdings: [], totalValueCents: 0n, totalClaimable: 0n } });
+    setup({ data: { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false } });
 
     expect(
       screen.getByRole("heading", { name: /connect your wallet/i }),

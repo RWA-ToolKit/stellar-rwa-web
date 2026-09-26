@@ -232,7 +232,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
         {tx.phase === "idle" ? (
           <button
             type="submit"
-            disabled={!canTransfer || complianceLoading || !formValid}
+            disabled={!canTransfer || complianceLoading || !formValid || tx.pending}
             className="btn-primary w-full"
           >
             {complianceLoading

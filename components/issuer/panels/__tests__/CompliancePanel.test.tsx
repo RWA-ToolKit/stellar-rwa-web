@@ -27,7 +27,7 @@ jest.mock("@stellar/stellar-sdk", () => ({
 
 // ── mock getLatestLedger ───────────────────────────────────────────────────
 
-const mockGetLatestLedger = jest.fn<Promise<number>, [unknown]>();
+const mockGetLatestLedger = jest.fn<Promise<number>, unknown[]>();
 
 jest.mock("@/lib/stellar", () => ({
   ...jest.requireActual("@/lib/stellar"),

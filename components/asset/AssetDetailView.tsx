@@ -99,7 +99,7 @@ export function AssetDetailView({ id }: { id: bigint }) {
             ) : !dividends.data || dividends.data.length === 0 ? (
               <EmptyState
                 title="No distributions yet"
-                description="When the issuer distributes yield, past and active distributions show up here with your claimable share."
+                description="The asset issuer creates distributions to share yield with token holders. Completed and active distributions will appear here with your claimable share."
                 className="py-10"
               />
             ) : (

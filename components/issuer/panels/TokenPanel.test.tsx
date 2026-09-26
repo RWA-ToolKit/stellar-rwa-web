@@ -1,8 +1,8 @@
 /**
  * Tests for components/issuer/panels/TokenPanel.tsx
  *
- * Focus: the PauseCard must show a ConfirmDialog before executing the pause
- * transaction, and must execute without confirmation when unpausing.
+ * Focus: the PauseCard must show a ConfirmDialog before executing both pause
+ * and unpause transactions.
  */
 
 import React from "react";
@@ -53,6 +53,7 @@ function setupTx() {
     phase: "idle",
     hash: null,
     error: null,
+    errorType: "generic",
     pending: false,
     run: mockRun,
     reset: mockReset,
@@ -149,14 +150,41 @@ describe("TokenPanel — PauseCard confirmation", () => {
       ).toBeInTheDocument();
     });
 
-    it("executes the unpause tx immediately WITHOUT a confirmation dialog", () => {
+    it("opens a confirmation dialog before unpausing", () => {
+      render(<TokenPanel asset={ASSET_PAUSED} />);
+      fireEvent.click(screen.getByRole("button", { name: /unpause transfers/i }));
+      // Dialog should now be visible
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/unpause transfers\?/i)).toBeInTheDocument();
+    });
+
+    it("does NOT call tx.run before the user confirms", () => {
+      render(<TokenPanel asset={ASSET_PAUSED} />);
+      fireEvent.click(screen.getByRole("button", { name: /unpause transfers/i }));
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+
+    it("calls tx.run after the user confirms in the dialog", () => {
       mockRun.mockResolvedValue(true);
       render(<TokenPanel asset={ASSET_PAUSED} />);
       fireEvent.click(screen.getByRole("button", { name: /unpause transfers/i }));
-      // No dialog should appear
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-      // tx.run should have been called right away
+      fireEvent.click(screen.getByRole("button", { name: /yes, unpause transfers/i }));
       expect(mockRun).toHaveBeenCalledTimes(1);
+    });
+
+    it("dismisses the dialog when cancel is clicked", () => {
+      render(<TokenPanel asset={ASSET_PAUSED} />);
+      fireEvent.click(screen.getByRole("button", { name: /unpause transfers/i }));
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    });
+
+    it("does NOT call tx.run when cancel is clicked", () => {
+      render(<TokenPanel asset={ASSET_PAUSED} />);
+      fireEvent.click(screen.getByRole("button", { name: /unpause transfers/i }));
+      fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+      expect(mockRun).not.toHaveBeenCalled();
     });
   });
 });
