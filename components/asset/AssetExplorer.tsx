@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback, useState } from "react";
+import { useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAssets } from "@/hooks/useAssets";
 import { AssetGrid } from "./AssetGrid";
@@ -32,14 +32,14 @@ function isValidTypeFilter(value: string): value is TypeFilter {
 /**
  * Client island powering /explore: loads all registered assets, applies the
  * type filter and sort, and paginates the results with numbered page controls.
- * Filter and page state are serialised into the URL (type, sort, page) so
- * filtered views can be linked and restored on refresh.
+ * Search, filter and page state are serialised into the URL (q, type, sort,
+ * page) so filtered views can be linked and restored on refresh.
  */
 export function AssetExplorer() {
   const { assets, loading, error, refetch } = useAssets();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState("");
+  const search = searchParams.get("q") ?? "";
 
   // Derive filter and page from URL search params, falling back to defaults.
   const filter: FilterValue = useMemo(() => {
@@ -104,7 +104,7 @@ export function AssetExplorer() {
 
   /** Build a new URL by merging changes into the current search params. */
   const buildUrl = useCallback(
-    (updates: Partial<{ type: TypeFilter; sort: SortKey; page: number }>) => {
+    (updates: Partial<{ type: TypeFilter; sort: SortKey; page: number; q: string }>) => {
       const params = new URLSearchParams(searchParams.toString());
       if (updates.type !== undefined) {
         if (updates.type === "all") {
@@ -125,6 +125,14 @@ export function AssetExplorer() {
           params.delete("page");
         } else {
           params.set("page", String(updates.page));
+        }
+      }
+      if (updates.q !== undefined) {
+        const query = updates.q.trim();
+        if (query) {
+          params.set("q", query);
+        } else {
+          params.delete("q");
         }
       }
       const qs = params.toString();
@@ -149,8 +157,7 @@ export function AssetExplorer() {
 
   const updateSearch = useCallback(
     (next: string) => {
-      setSearch(next);
-      router.push(buildUrl({ page: 1 }));
+      router.replace(buildUrl({ q: next, page: 1 }), { scroll: false });
     },
     [router, buildUrl],
   );
