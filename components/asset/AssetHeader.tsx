@@ -1,7 +1,7 @@
 import type { AssetDetail } from "@/types";
 import { formatUsdCents, truncateAddress } from "@/lib/format";
 import { getDisplayText } from "@/lib/display";
-import { explorerContractUrl } from "@/lib/stellar";
+import { explorerAccountUrl, explorerContractUrl } from "@/lib/stellar";
 import { AssetTypeBadge } from "./AssetTypeBadge";
 import { CopyButton } from "@/components/ui/CopyButton";
 import type { Network } from "@/types";
@@ -69,7 +69,14 @@ export function AssetHeader({ asset, network }: AssetHeaderProps) {
         </span>
         <span className="flex items-center gap-1.5">
           Issuer
-          <span className="font-mono text-base-100/70">{truncateAddress(asset.issuer, 6, 6)}</span>
+          <a
+            href={explorerAccountUrl(network, asset.issuer)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-base-100/70 hover:text-brand-300"
+          >
+            {truncateAddress(asset.issuer, 6, 6)}
+          </a>
           <CopyButton value={asset.issuer} />
         </span>
       </div>

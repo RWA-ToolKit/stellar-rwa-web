@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useHolders, type Holder } from "@/hooks/useHolders";
 import { formatTokenAmount, percent, truncateAddress } from "@/lib/format";
 import { useWallet } from "@/hooks/useWallet";
+import { explorerAddressUrl } from "@/lib/stellar";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -93,9 +94,14 @@ function HolderRow({
   return (
     <li className="flex items-center justify-between gap-3 py-3">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-sm text-base-100/80">
+        <a
+          href={explorerAddressUrl(useWallet().network, holder.address)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-sm text-base-100/80 hover:text-brand-300"
+        >
           {truncateAddress(holder.address, 6, 6)}
-        </span>
+        </a>
         {isYou && (
           <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">You</span>
         )}

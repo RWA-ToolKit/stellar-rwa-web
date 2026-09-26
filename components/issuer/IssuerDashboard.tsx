@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { formatUsdCents } from "@/lib/format";
 import { truncateAddress } from "@/lib/display";
+import { explorerAddressUrl } from "@/lib/stellar";
 import type { AssetEntry } from "@/types";
 
 type Tab = "token" | "compliance" | "distributions";
@@ -51,7 +52,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function IssuerDashboard() {
-  const { address } = useWallet();
+  const { address, network } = useWallet();
   const [selectedAsset, setSelectedAsset] = useState<AssetEntry | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("token");
 
@@ -131,6 +132,7 @@ export function IssuerDashboard() {
               paused={assetDetail.data?.metadata.paused}
               error={assetDetail.error}
               admin={assetDetail.data?.metadata.admin}
+              network={network}
             />
 
             {/* Tab bar */}
@@ -223,12 +225,14 @@ function AssetContextBar({
   paused,
   error,
   admin,
+  network,
 }: {
   asset: AssetEntry;
   loading: boolean;
   paused?: boolean;
   error?: string | null;
   admin?: string;
+  network: import("@/types").Network;
 }) {
   return (
     <div className="card space-y-3 px-5 py-3.5">
@@ -257,7 +261,14 @@ function AssetContextBar({
         <div className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
           <div>
             <p className="text-xs font-medium text-base-100/60">Controlled by</p>
-            <p className="font-mono text-xs text-base-100/80">{truncateAddress(admin)}</p>
+            <a
+              href={explorerAddressUrl(network, admin)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs text-base-100/80 hover:text-brand-300"
+            >
+              {truncateAddress(admin)}
+            </a>
           </div>
           <CopyButton value={admin} label="" className="shrink-0" />
         </div>

@@ -202,6 +202,12 @@ export function explorerAccountUrl(network: Network, account: string): string {
   return `${explorerBase(network)}/account/${account}`;
 }
 
+export function explorerAddressUrl(network: Network, address: string): string {
+  return address.startsWith("C")
+    ? explorerContractUrl(network, address)
+    : explorerAccountUrl(network, address);
+}
+
 // ---- scVal argument builders (typed to match the contract signatures) ----
 
 export const arg = {
