@@ -79,6 +79,9 @@ To point the app at different deployments (e.g., local, alternative RPC, or Main
 
 > This project is currently configured for Stellar Testnet only. Mainnet contract IDs are intentionally left blank in [.env.example](.env.example), so the app will not expose fully working mainnet routes until those values are populated.
 
+Use Node.js 20 for local development, matching CI. The repository pins this
+major in `.nvmrc` and npm rejects unsupported Node versions during install.
+
 ```bash
 cp .env.example .env.local   # Testnet contract ids are pre-filled
 npm install
