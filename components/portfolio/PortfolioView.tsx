@@ -3,14 +3,44 @@
 import { useCallback } from "react";
 import Link from "next/link";
 import { useWallet } from "@/hooks/useWallet";
-import { usePortfolio } from "@/hooks/usePortfolio";
+import { usePortfolio, type Holding } from "@/hooks/usePortfolio";
 import { PortfolioSummary } from "@/components/portfolio/PortfolioSummary";
 import { HoldingRow } from "@/components/portfolio/HoldingRow";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { truncateAddress } from "@/lib/format";
+import { formatTokenAmount, formatUsdCents, truncateAddress } from "@/lib/format";
+
+function exportHoldingsCsv(holdings: Holding[]) {
+  const rows = holdings.map((holding) => {
+    const { asset, metadata, balance } = holding;
+    const estimatedValue =
+      metadata.totalSupply > 0n
+        ? (asset.valuation * balance) / metadata.totalSupply
+        : 0n;
+    return [
+      asset.name,
+      asset.id.toString(),
+      metadata.symbol,
+      asset.tokenContract,
+      formatTokenAmount(balance, metadata.decimals),
+      formatUsdCents(estimatedValue),
+    ];
+  });
+  const csv = [
+    ["Asset", "Asset ID", "Symbol", "Token Contract", "Balance", "Estimated Value (USD)"],
+    ...rows,
+  ]
+    .map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(","))
+    .join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `stellar-portfolio-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 function HoldingsSkeleton() {
   return (
@@ -124,10 +154,19 @@ export function PortfolioView() {
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-base-100">Your Holdings</h2>
-          <p className="text-sm text-base-100/40">
-            Connected as{" "}
-            <span className="font-mono text-base-100/60">{truncateAddress(address)}</span>
-          </p>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <p className="text-sm text-base-100/40">
+              Connected as{" "}
+              <span className="font-mono text-base-100/60">{truncateAddress(address)}</span>
+            </p>
+            <button
+              type="button"
+              onClick={() => exportHoldingsCsv(data.holdings)}
+              className="btn-secondary py-1.5 text-xs"
+            >
+              Export CSV
+            </button>
+          </div>
         </div>
 
         {withClaimable.length > 0 && (
