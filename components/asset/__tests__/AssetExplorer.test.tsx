@@ -17,6 +17,10 @@ jest.mock("@/hooks/useAssets", () => ({
   useAssets: jest.fn(),
 }));
 
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: () => ({ network: "testnet" }),
+}));
+
 // ── mock Next.js navigation ────────────────────────────────────────────────
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
