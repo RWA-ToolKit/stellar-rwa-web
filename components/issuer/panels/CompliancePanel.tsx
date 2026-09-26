@@ -26,6 +26,9 @@ export function CompliancePanel({ asset, onChanged, isAdmin = true }: Compliance
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-base-100/50">
+        <strong>Required role:</strong> compliance contract <code className="font-mono text-base-100/60">admin</code>
+      </div>
       <AddToAllowlistCard complianceId={complianceId} onChanged={onChanged} isAdmin={isAdmin} />
       <AllowlistManageCard complianceId={complianceId} onChanged={onChanged} isAdmin={isAdmin} />
       <JurisdictionCard complianceId={complianceId} onChanged={onChanged} isAdmin={isAdmin} />
