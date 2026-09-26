@@ -298,7 +298,7 @@ function AllowlistRow({
       <ConfirmDialog
         open={removeConfirmOpen}
         title="Remove address from allowlist?"
-        description={`This will permanently revoke KYC access for ${truncateAddress(record.address, 6, 6)}. The holder will lose the ability to hold or transfer this asset. You can re-approve them later if needed.`}
+        description={`This will remove ${record.address} from the allowlist immediately, preventing it from holding, sending, or receiving this asset. You can re-approve it later if needed.`}
         confirmLabel="Remove address"
         onConfirm={doRemove}
         onCancel={() => setRemoveConfirmOpen(false)}
