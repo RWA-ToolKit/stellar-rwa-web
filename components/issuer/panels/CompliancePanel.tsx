@@ -255,7 +255,7 @@ function AllowlistRow({
   activeMutationsRef,
   isAdmin = true,
 }: {
-  record: { address: string; status: string; jurisdiction: string };
+  record: { address: string; status: string; jurisdiction: string; expiresAt: number };
   complianceId: string;
   onChanged?: () => void;
   /** #320: Shared ref counting in-flight mutations across all rows in the list.
@@ -313,6 +313,9 @@ function AllowlistRow({
             <CopyButton value={record.address} />
             <ComplianceBadge status={record.status as never} />
             <span className="text-[10px] text-base-100/40">{record.jurisdiction}</span>
+            <span className="text-[10px] text-base-100/40">
+              {record.expiresAt === 0 ? "Never expires" : `Expires at ledger ${record.expiresAt}`}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             {!isSuspended && (
@@ -337,7 +340,13 @@ function AllowlistRow({
                   runWithSerialize(() =>
                     suspendTx
                       .run((ctx) =>
-                        compliance.addToAllowlist(ctx, complianceId, record.address, record.jurisdiction, 0),
+                        compliance.addToAllowlist(
+                          ctx,
+                          complianceId,
+                          record.address,
+                          record.jurisdiction,
+                          record.expiresAt,
+                        ),
                       )
                       .then((r) => r && onChanged?.()),
                   )
