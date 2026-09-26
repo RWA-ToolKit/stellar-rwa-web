@@ -1,8 +1,22 @@
 # Environment Variables
 
-All configuration is via `NEXT_PUBLIC_*` environment variables, making them available to the browser. These control the network, RPC endpoints, deployed contract IDs, and an optional read aggregation API.
+App configuration uses `NEXT_PUBLIC_*` environment variables, making these
+settings available to the browser. The complete set of app-configurable
+variables in `.env.example` is listed here; the sections below document each
+variable and its default. Build-provider variables mentioned under app metadata
+are supplied by CI or hosting and do not need to be added to `.env.local`.
 
-Copy [.env.example](.env.example) to `.env.local` and edit as needed.
+Copy [.env.example](../.env.example) to `.env.local` and edit as needed.
+
+| Setting | Variables |
+|---|---|
+| App metadata | `NEXT_PUBLIC_APP_VERSION`, `NEXT_PUBLIC_APP_COMMIT` |
+| Network | `NEXT_PUBLIC_DEFAULT_NETWORK` |
+| Primary RPC endpoints | `NEXT_PUBLIC_TESTNET_RPC_URL`, `NEXT_PUBLIC_MAINNET_RPC_URL` |
+| RPC failover endpoints | `NEXT_PUBLIC_TESTNET_RPC_URLS_FALLBACK`, `NEXT_PUBLIC_MAINNET_RPC_URLS_FALLBACK` |
+| Testnet contract IDs | `NEXT_PUBLIC_TESTNET_REGISTRY_ID`, `NEXT_PUBLIC_TESTNET_COMPLIANCE_ID`, `NEXT_PUBLIC_TESTNET_DIVIDEND_ID` |
+| Mainnet contract IDs | `NEXT_PUBLIC_MAINNET_REGISTRY_ID`, `NEXT_PUBLIC_MAINNET_COMPLIANCE_ID`, `NEXT_PUBLIC_MAINNET_DIVIDEND_ID` |
+| Optional read API | `NEXT_PUBLIC_API_URL` |
 
 ## Network & RPC Configuration
 
