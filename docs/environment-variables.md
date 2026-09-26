@@ -134,14 +134,16 @@ All three Mainnet contract IDs default to empty strings, meaning the app **will 
 
 ### `NEXT_PUBLIC_API_URL`
 
-- **Purpose:** Optional URL of a Stellar RWA API server that provides faster read aggregations (list views, statistics, holder counts). When set, the app reads these aggregations from this endpoint instead of simulating every read directly against Soroban RPC, which is slower and more expensive. **Writes (signing transactions) always go through RPC regardless of this setting.**
+- **Purpose:** Optional base URL of the Stellar RWA indexing API. When configured, supported aggregate views (asset lists, platform statistics, and holder lists/counts) are fetched from the API instead of being calculated through direct Soroban RPC simulations. **Writes always use Soroban RPC regardless of this setting.**
 - **Required:** No (defaults to empty; all reads fall back to direct RPC simulations)
 - **Format:** HTTPS URL (base URL; the app appends paths like `/assets`, `/stats`, `/holders`)
 - **Example:**
   ```
   NEXT_PUBLIC_API_URL=https://rwa-api.example.com
   ```
-- **Fallback behavior:** When `NEXT_PUBLIC_API_URL` is not set or the API is unreachable, the app automatically falls back to reading directly from Soroban RPC. No UI change is visible to the user—reads simply take longer.
+- **Benefits:** The indexer serves pre-aggregated data, reducing RPC requests and usually making list and statistics views faster.
+- **Tradeoffs:** The app depends on the indexer's availability and freshness. A successful response may lag behind the latest on-chain state; the app does not compare API results with Soroban or detect stale data.
+- **Fallback behavior:** If the URL is unset, or a request fails (including a non-success HTTP response or invalid JSON), the affected view falls back to direct Soroban RPC reads using `simulateTransaction`. Those reads do not require the indexing API but can be slower and make more RPC requests. A successful but stale API response does not trigger this fallback.
 
 ## App Metadata (Optional)
 
