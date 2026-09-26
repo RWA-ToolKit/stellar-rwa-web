@@ -82,14 +82,15 @@ describe("ConfirmDialog", () => {
 
   it("calls onCancel when the backdrop is clicked", () => {
     render(<ConfirmDialog {...baseProps} open={true} />);
-    // The backdrop is the outer presentation div
-    fireEvent.click(screen.getByRole("presentation"));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Dismiss confirmation dialog" }),
+    );
     expect(baseProps.onCancel).toHaveBeenCalledTimes(1);
   });
 
   it("does NOT call onCancel when the dialog panel itself is clicked", () => {
     render(<ConfirmDialog {...baseProps} open={true} />);
-    // Click directly on the dialog element; click stopPropagation should prevent backdrop firing
+    // The dialog panel is separate from the backdrop button.
     fireEvent.click(screen.getByRole("dialog"));
     expect(baseProps.onCancel).not.toHaveBeenCalled();
   });
