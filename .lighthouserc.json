@@ -4,10 +4,13 @@
       "startServerCommand": "npm run start",
       "startServerReadyPattern": "Ready in",
       "url": [
-        "http://localhost:3000/",
-        "http://localhost:3000/explore"
+        "http://127.0.0.1:3000/",
+        "http://127.0.0.1:3000/explore"
       ],
-      "numberOfRuns": 3
+      "numberOfRuns": 3,
+      "settings": {
+        "chromeFlags": "--headless=new --no-proxy-server"
+      }
     },
     "assert": {
       "assertions": {

@@ -51,7 +51,7 @@ jobs:
       - name: Performance and accessibility budgets
         run: |
           export CHROME_PATH="$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')"
-          npx --yes @lhci/cli@0.14.0 autorun
+          npx --yes @lhci/cli@0.15.1 autorun
 
   # ── End-to-end tests ────────────────────────────────────────────────────────
   # Exercises the transfer and claim flows in a real browser against a dev
