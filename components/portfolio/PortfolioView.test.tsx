@@ -13,6 +13,11 @@ jest.mock("@/components/portfolio/HoldingRow", () => ({
   ),
 }));
 
+jest.mock("@/components/dividend/ClaimAllButton", () => ({
+  ClaimAllButton: ({ distributions }: { distributions: unknown[] }) =>
+    distributions.length >= 2 ? <button>Claim all distributions</button> : null,
+}));
+
 jest.mock("@/components/wallet/ConnectButton", () => ({
   ConnectButton: () => <button>Connect Wallet</button>,
 }));
@@ -115,6 +120,48 @@ describe("PortfolioView", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Harbor View Apartments" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers one action for multiple claimable distributions", () => {
+    const data: PortfolioData = {
+      ...PORTFOLIO_WITH_HOLDING,
+      holdings: [
+        {
+          ...PORTFOLIO_WITH_HOLDING.holdings[0],
+          totalClaimable: 200n,
+          claimableDistributions: [
+            {
+              id: 1n,
+              assetToken: "CABC",
+              paymentToken: "CPAYMENT",
+              totalAmount: 100n,
+              distributed: 0n,
+              createdAt: 1,
+              completed: false,
+              claimable: 100n,
+              claimed: false,
+            },
+            {
+              id: 2n,
+              assetToken: "CABC",
+              paymentToken: "CPAYMENT",
+              totalAmount: 100n,
+              distributed: 0n,
+              createdAt: 2,
+              completed: false,
+              claimable: 100n,
+              claimed: false,
+            },
+          ],
+        },
+      ],
+      totalClaimable: 200n,
+    };
+    setup({ address: "GCONNECTED123456789", data });
+
+    expect(
+      screen.getByRole("button", { name: /claim all distributions/i }),
     ).toBeInTheDocument();
   });
 });

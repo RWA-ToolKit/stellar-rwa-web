@@ -6,6 +6,7 @@ import { useWallet } from "@/hooks/useWallet";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { PortfolioSummary } from "@/components/portfolio/PortfolioSummary";
 import { HoldingRow } from "@/components/portfolio/HoldingRow";
+import { ClaimAllButton } from "@/components/dividend/ClaimAllButton";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -116,6 +117,11 @@ export function PortfolioView() {
   const withClaimable = data.holdings.filter((h) => h.totalClaimable > 0n);
   const withoutClaimable = data.holdings.filter((h) => h.totalClaimable === 0n);
   const ordered = [...withClaimable, ...withoutClaimable];
+  const claimableDistributions = data.holdings.flatMap((holding) =>
+    holding.claimableDistributions.filter(
+      (distribution) => !distribution.claimed && distribution.claimable > 0n,
+    ),
+  );
 
   return (
     <div className="space-y-8">
@@ -131,13 +137,19 @@ export function PortfolioView() {
         </div>
 
         {withClaimable.length > 0 && (
-          <div className="mb-2 flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/20 text-[10px] font-bold text-brand-300">
-              {withClaimable.length}
-            </span>
-            <p className="text-xs text-brand-300/80 font-medium">
-              {withClaimable.length === 1 ? "asset has" : "assets have"} claimable dividends
-            </p>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/20 text-[10px] font-bold text-brand-300">
+                {withClaimable.length}
+              </span>
+              <p className="text-xs text-brand-300/80 font-medium">
+                {withClaimable.length === 1 ? "asset has" : "assets have"} claimable dividends
+              </p>
+            </div>
+            <ClaimAllButton
+              distributions={claimableDistributions}
+              onClaimed={handleClaimed}
+            />
           </div>
         )}
 
