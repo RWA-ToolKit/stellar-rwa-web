@@ -310,7 +310,7 @@ function AllowlistRow({
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <a
-              href={explorerAddressUrl(network, record.address)}
+              href={explorerAddressUrl(network ?? "testnet", record.address)}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-xs text-base-100/80 hover:text-brand-300"

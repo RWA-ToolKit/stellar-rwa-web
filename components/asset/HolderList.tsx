@@ -95,7 +95,7 @@ function HolderRow({
     <li className="flex items-center justify-between gap-3 py-3">
       <div className="flex items-center gap-2">
         <a
-          href={explorerAddressUrl(useWallet().network, holder.address)}
+          href={explorerAddressUrl(useWallet().network ?? "testnet", holder.address)}
           target="_blank"
           rel="noopener noreferrer"
           className="font-mono text-sm text-base-100/80 hover:text-brand-300"

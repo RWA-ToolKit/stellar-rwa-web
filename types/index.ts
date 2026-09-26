@@ -80,6 +80,8 @@ export interface Distribution {
   distributed: bigint;
   createdAt: number;
   completed: boolean;
+  /** Claim deadline ledger; 0 or undefined means no deadline. */
+  claimDeadline?: number;
 }
 
 /** Result of submitting an on-chain transaction. */

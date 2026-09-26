@@ -262,7 +262,7 @@ function AssetContextBar({
           <div>
             <p className="text-xs font-medium text-base-100/60">Controlled by</p>
             <a
-              href={explorerAddressUrl(network, admin)}
+              href={explorerAddressUrl(network ?? "testnet", admin)}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-xs text-base-100/80 hover:text-brand-300"
