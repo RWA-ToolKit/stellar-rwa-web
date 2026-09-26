@@ -26,12 +26,12 @@ export function ClaimButton({ distributionId, claimable, claimed, onClaimed }: C
   const tx = useTx();
 
   if (!address) {
-    return <p className="text-xs text-base-100/40">Connect a wallet to claim.</p>;
+    return <p className="text-xs text-base-100/55">Connect a wallet to claim.</p>;
   }
 
   if (claimed) {
     return (
-      <span className="chip border border-white/10 bg-white/5 text-base-100/50">
+      <span className="chip border border-white/10 bg-white/5 text-base-100/55">
         Claimed
       </span>
     );

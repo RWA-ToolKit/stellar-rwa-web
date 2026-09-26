@@ -83,6 +83,18 @@ function CreateDistributionCard({
   const insufficientBalance = balance !== null && requestedRaw !== null && requestedRaw > balance;
   const needsApproval = allowance !== null && requestedRaw !== null && requestedRaw > allowance;
 
+  // Submit-time errors are attributed to the field they concern.
+  const tokenInvalid = !!formError && /payment token/i.test(formError);
+  const totalFormInvalid = !!formError && !tokenInvalid;
+  const totalInvalid = insufficientBalance || totalFormInvalid;
+  const totalErrorIds =
+    [
+      totalFormInvalid && "dist-form-error",
+      (insufficientBalance || needsApproval) && "dist-total-error",
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
@@ -137,8 +149,10 @@ function CreateDistributionCard({
             disabled={tx.pending}
             className="input font-mono text-xs"
             spellCheck={false}
+            aria-invalid={tokenInvalid || undefined}
+            aria-describedby={tokenInvalid ? "dist-form-error" : undefined}
           />
-          <p className="mt-1 text-[11px] text-base-100/40">
+          <p className="mt-1 text-[11px] text-base-100/55">
             This is the token used to pay holders — typically a stablecoin or XLM SAC.
           </p>
         </div>
@@ -147,7 +161,7 @@ function CreateDistributionCard({
         {isValidPt && address && (
           <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5 space-y-1.5 text-[11px]">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-base-100/50">Your balance</span>
+              <span className="text-base-100/55">Your balance</span>
               {balanceLoading ? (
                 <Spinner size={10} />
               ) : balance !== null ? (
@@ -155,11 +169,11 @@ function CreateDistributionCard({
                   {formatTokenAmount(balance, PAYMENT_TOKEN_DECIMALS)}
                 </span>
               ) : (
-                <span className="text-base-100/30">—</span>
+                <span className="text-base-100/55">—</span>
               )}
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-base-100/50">Dividend contract allowance</span>
+              <span className="text-base-100/55">Dividend contract allowance</span>
               {allowanceLoading ? (
                 <Spinner size={10} />
               ) : allowance !== null ? (
@@ -167,19 +181,19 @@ function CreateDistributionCard({
                   {formatTokenAmount(allowance, PAYMENT_TOKEN_DECIMALS)}
                 </span>
               ) : (
-                <span className="text-base-100/30">—</span>
+                <span className="text-base-100/55">—</span>
               )}
             </div>
           </div>
         )}
 
         {insufficientBalance && (
-          <p role="alert" className="text-xs text-red-400">
+          <p id="dist-total-error" role="alert" className="text-xs text-red-400">
             Insufficient balance — your wallet holds less than the requested distribution amount.
           </p>
         )}
         {needsApproval && !insufficientBalance && (
-          <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90">
+          <p id="dist-total-error" role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90">
             The dividend contract is not approved to spend enough of this token on your behalf.
             Submit an <strong className="font-semibold">approve</strong> transaction for at least{" "}
             {formatTokenAmount(requestedRaw ?? 0n, PAYMENT_TOKEN_DECIMALS)} tokens before funding
@@ -198,17 +212,19 @@ function CreateDistributionCard({
               inputMode="decimal"
               disabled={tx.pending}
               className="input pr-16"
+              aria-invalid={totalInvalid || undefined}
+              aria-describedby={totalErrorIds}
             />
-            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/55">
               tokens
             </span>
           </div>
-          <p className="mt-1 text-[11px] text-base-100/40">
+          <p className="mt-1 text-[11px] text-base-100/55">
             Uses {PAYMENT_TOKEN_DECIMALS} decimals (Stellar standard).
           </p>
         </div>
 
-        {formError && <p className="text-xs text-red-400">{formError}</p>}
+        {formError && <p id="dist-form-error" role="alert" className="text-xs text-red-400">{formError}</p>}
 
         {tx.phase === "idle" ? (
           <button type="submit" disabled={tx.pending} className="btn-primary">
@@ -247,7 +263,7 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
       }
     >
       {loading ? (
-        <div className="flex items-center gap-2 py-4 text-sm text-base-100/40">
+        <div className="flex items-center gap-2 py-4 text-sm text-base-100/55">
           <Spinner size={14} /> Loading distributions…
         </div>
       ) : error ? (
@@ -281,7 +297,7 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
                         <span className="chip border border-gold-500/25 bg-gold-500/10 text-gold-300 text-[10px]">Active</span>
                       )}
                     </div>
-                    <p className="text-[11px] text-base-100/40">
+                    <p className="text-[11px] text-base-100/55">
                       Payment token: {truncateAddress(d.paymentToken)}
                     </p>
                   </div>
@@ -289,7 +305,7 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
                     <p className="text-sm font-bold text-gold-300">
                       {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
                     </p>
-                    <p className="text-[11px] text-base-100/40">{pct.toFixed(1)}% claimed</p>
+                    <p className="text-[11px] text-base-100/55">{pct.toFixed(1)}% claimed</p>
                   </div>
                 </div>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">

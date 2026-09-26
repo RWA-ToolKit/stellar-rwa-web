@@ -80,7 +80,7 @@ export function Step1TokenContract({ onValidated }: Step1Props) {
       <form onSubmit={onSubmit} className="card p-6 space-y-5">
         <div>
           <h2 className="text-lg font-semibold text-base-100">Token contract address</h2>
-          <p className="mt-1 text-sm text-base-100/50">
+          <p className="mt-1 text-sm text-base-100/55">
             The deployed Soroban asset-token contract. We&apos;ll read its on-chain
             metadata to pre-fill the next step.
           </p>
@@ -182,19 +182,19 @@ export function TokenContractPreview({ validated }: { validated: ValidatedToken 
             )}
           </div>
           <p className="mt-1.5 font-semibold text-base-100">{metadata.name}</p>
-          <p className="mt-0.5 font-mono text-[11px] text-base-100/40">
+          <p className="mt-0.5 font-mono text-[11px] text-base-100/55">
             {tokenContract.slice(0, 10)}…{tokenContract.slice(-6)}
           </p>
         </div>
         <dl className="space-y-1 text-right text-xs">
           <div>
-            <dt className="text-base-100/40">Supply</dt>
+            <dt className="text-base-100/55">Supply</dt>
             <dd className="font-semibold text-base-100">
               {formatTokenAmount(metadata.totalSupply, metadata.decimals)} {metadata.symbol}
             </dd>
           </div>
           <div>
-            <dt className="text-base-100/40">Decimals</dt>
+            <dt className="text-base-100/55">Decimals</dt>
             <dd className="font-semibold text-base-100">{metadata.decimals}</dd>
           </div>
         </dl>

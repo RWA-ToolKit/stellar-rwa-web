@@ -35,7 +35,7 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 py-6 text-sm text-base-100/40">
+      <div className="flex items-center gap-2 py-6 text-sm text-base-100/55">
         <Spinner size={16} /> Loading holders…
       </div>
     );
@@ -105,7 +105,7 @@ function HolderRow({
         <p className="text-sm font-semibold text-base-100">
           {formatTokenAmount(holder.balance, decimals)} {symbol}
         </p>
-        <p className="text-xs text-base-100/40">{share.toFixed(2)}% of supply</p>
+        <p className="text-xs text-base-100/55">{share.toFixed(2)}% of supply</p>
       </div>
     </li>
   );

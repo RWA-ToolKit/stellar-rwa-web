@@ -30,7 +30,7 @@ export default function AssetPage({ params }: PageProps) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
         <h1 className="text-2xl font-bold text-base-100">Invalid asset id</h1>
-        <p className="mt-2 text-base-100/50">“{params.id}” is not a valid asset id.</p>
+        <p className="mt-2 text-base-100/55">“{params.id}” is not a valid asset id.</p>
         <Link href="/explore" className="btn-secondary mt-6">← Back to Explore</Link>
       </div>
     );

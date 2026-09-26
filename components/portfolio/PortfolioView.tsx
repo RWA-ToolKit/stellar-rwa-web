@@ -56,7 +56,7 @@ export function PortfolioView() {
         </div>
         <div>
           <h2 className="text-xl font-semibold text-base-100">Connect your wallet</h2>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-base-100/50">
+          <p className="mx-auto mt-2 max-w-sm text-sm text-base-100/55">
             Your holdings and claimable dividends appear here once you connect a
             Freighter wallet.
           </p>
@@ -124,7 +124,7 @@ export function PortfolioView() {
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-base-100">Your Holdings</h2>
-          <p className="text-sm text-base-100/40">
+          <p className="text-sm text-base-100/55">
             Connected as{" "}
             <span className="font-mono text-base-100/60">{truncateAddress(address)}</span>
           </p>

@@ -183,11 +183,11 @@ function AllowlistManageCard({
       }
     >
       {loading ? (
-        <div className="flex items-center gap-2 py-4 text-sm text-base-100/40">
+        <div className="flex items-center gap-2 py-4 text-sm text-base-100/55">
           <Spinner size={14} /> Loading allowlist…
         </div>
       ) : records.length === 0 ? (
-        <p className="py-2 text-sm text-base-100/40">No addresses on the allowlist yet.</p>
+        <p className="py-2 text-sm text-base-100/55">No addresses on the allowlist yet.</p>
       ) : (
         <ul className="divide-y divide-white/5 max-h-80 overflow-y-auto pr-1">
           {records.map((r) => (
@@ -246,7 +246,7 @@ function AllowlistRow({
             </span>
             <CopyButton value={record.address} />
             <ComplianceBadge status={record.status as never} />
-            <span className="text-[10px] text-base-100/40">{record.jurisdiction}</span>
+            <span className="text-[10px] text-base-100/55">{record.jurisdiction}</span>
           </div>
           <div className="flex items-center gap-2">
             {!isSuspended && (

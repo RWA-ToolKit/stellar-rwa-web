@@ -67,4 +67,22 @@ describe("Step2AssetDetails", () => {
       valuation: 100_000_000n,
     });
   });
+
+  it("associates validation errors with their inputs via aria-describedby", () => {
+    renderStep();
+    const name = screen.getByRole("textbox", { name: "Asset name" });
+    const valuation = screen.getByRole("textbox", { name: "Valuation (USD)" });
+    expect(name).not.toHaveAttribute("aria-invalid");
+
+    fireEvent.change(name, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
+
+    for (const [input, text] of [
+      [name, "Asset name is required."],
+      [valuation, "Valuation is required."],
+    ] as const) {
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(document.getElementById(input.getAttribute("aria-describedby")!)).toHaveTextContent(text);
+    }
+  });
 });

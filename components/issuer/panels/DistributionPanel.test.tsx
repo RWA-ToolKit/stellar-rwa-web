@@ -549,4 +549,35 @@ describe("DistributionPanel", () => {
       expect(screen.getByText(/Payment token:/)).toBeInTheDocument();
     });
   });
+
+  describe("aria error association", () => {
+    it("links the payment-token error to its input and sets aria-invalid", async () => {
+      const user = userEvent.setup();
+      render(<DistributionPanel asset={mockAsset} />);
+      const token = screen.getByLabelText(/payment token contract/i);
+      expect(token).not.toHaveAttribute("aria-invalid");
+
+      await user.type(screen.getByPlaceholderText(/^0\.0000000$/), "100");
+      await user.click(screen.getByRole("button", { name: /create distribution/i }));
+
+      expect(token).toHaveAttribute("aria-invalid", "true");
+      expect(document.getElementById(token.getAttribute("aria-describedby")!)).toHaveTextContent(
+        /enter a valid payment token/i,
+      );
+    });
+
+    it("links the amount error to the total input and sets aria-invalid", async () => {
+      const user = userEvent.setup();
+      render(<DistributionPanel asset={mockAsset} />);
+      await user.type(screen.getByLabelText(/payment token contract/i), VALID_PAYMENT_TOKEN);
+      const total = screen.getByLabelText(/total pool amount/i);
+      await user.type(total, "0");
+      await user.click(screen.getByRole("button", { name: /create distribution/i }));
+
+      expect(total).toHaveAttribute("aria-invalid", "true");
+      expect(document.getElementById(total.getAttribute("aria-describedby")!)).toHaveTextContent(
+        /greater than zero/i,
+      );
+    });
+  });
 });

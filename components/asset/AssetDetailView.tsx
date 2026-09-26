@@ -87,7 +87,7 @@ export function AssetDetailView({ id }: { id: bigint }) {
             <div className="mb-2 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-base-100">Dividend history</h2>
               {dividends.data && dividends.data.length > 0 && (
-                <span className="text-sm text-base-100/40">
+                <span className="text-sm text-base-100/55">
                   {dividends.data.length} distribution{dividends.data.length === 1 ? "" : "s"}
                 </span>
               )}
@@ -128,21 +128,21 @@ export function AssetDetailView({ id }: { id: bigint }) {
         {/* Right: stats sidebar + transfer */}
         <aside className="space-y-6 lg:sticky lg:top-20 lg:self-start">
           <div className="card p-6">
-            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-base-100/50">
+            <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-base-100/55">
               Overview
             </h2>
             <AssetStats asset={detail} holders={holderCount} />
           </div>
 
           <div className="card p-6">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-base-100/50">
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-base-100/55">
               Compliance
             </h2>
             <CompliancePanel asset={detail} network={network} />
           </div>
 
           <div className="card p-6">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-base-100/50">
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-base-100/55">
               Your position
             </h2>
             <TransferPanel

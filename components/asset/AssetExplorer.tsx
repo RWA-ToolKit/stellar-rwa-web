@@ -191,7 +191,7 @@ function PaginationBar({
 
   return (
     <div className="flex items-center justify-between border-t border-white/5 pt-5">
-      <p className="text-sm text-base-100/40">
+      <p className="text-sm text-base-100/55">
         Page {page} of {totalPages} · {total} asset{total === 1 ? "" : "s"}
       </p>
       <nav className="flex items-center gap-1" aria-label="Pagination">
@@ -209,7 +209,7 @@ function PaginationBar({
               1
             </button>
             {pages[0] > 2 && (
-              <span className="px-1 text-sm text-base-100/30">…</span>
+              <span className="px-1 text-sm text-base-100/55">…</span>
             )}
           </>
         )}
@@ -230,7 +230,7 @@ function PaginationBar({
         {pages[pages.length - 1] < totalPages && (
           <>
             {pages[pages.length - 1] < totalPages - 1 && (
-              <span className="px-1 text-sm text-base-100/30">…</span>
+              <span className="px-1 text-sm text-base-100/55">…</span>
             )}
             <button onClick={() => onChange(totalPages)} className="btn-secondary px-3 py-2 text-sm">
               {totalPages}

@@ -46,7 +46,7 @@ export function HoldingRow({ holding, onClaimed }: HoldingRowProps) {
           <div className="flex flex-wrap items-center gap-2">
             <AssetTypeBadge type={asset.assetType} />
             {!asset.active && (
-              <span className="chip bg-white/5 text-base-100/40">Inactive</span>
+              <span className="chip bg-white/5 text-base-100/55">Inactive</span>
             )}
           </div>
           <Link
@@ -55,7 +55,7 @@ export function HoldingRow({ holding, onClaimed }: HoldingRowProps) {
           >
             {asset.name}
           </Link>
-          <p className="text-xs text-base-100/40">
+          <p className="text-xs text-base-100/55">
             Asset #{asset.id.toString()} ·{" "}
             <span className="font-mono">{metadata.symbol}</span>
           </p>
@@ -64,21 +64,21 @@ export function HoldingRow({ holding, onClaimed }: HoldingRowProps) {
         {/* Balance + value */}
         <dl className="flex flex-wrap gap-6 text-right">
           <div>
-            <dt className="text-[11px] uppercase tracking-wide text-base-100/40">Balance</dt>
+            <dt className="text-[11px] uppercase tracking-wide text-base-100/55">Balance</dt>
             <dd className="mt-0.5 text-lg font-bold text-base-100">
               {formatTokenAmount(balance, metadata.decimals)}
             </dd>
-            <dd className="text-xs text-base-100/40">{sharePercent.toFixed(2)}% of supply</dd>
+            <dd className="text-xs text-base-100/55">{sharePercent.toFixed(2)}% of supply</dd>
           </div>
           <div>
-            <dt className="text-[11px] uppercase tracking-wide text-base-100/40">Est. Value</dt>
+            <dt className="text-[11px] uppercase tracking-wide text-base-100/55">Est. Value</dt>
             <dd className="mt-0.5 text-lg font-bold text-gold-300">
               {formatUsdCents(estimatedValue, { compact: true })}
             </dd>
           </div>
           {totalClaimable > 0n && (
             <div>
-              <dt className="text-[11px] uppercase tracking-wide text-base-100/40">Claimable</dt>
+              <dt className="text-[11px] uppercase tracking-wide text-base-100/55">Claimable</dt>
               <dd className="mt-0.5 text-lg font-bold text-brand-300">
                 {formatTokenAmount(totalClaimable, PAYMENT_TOKEN_DECIMALS)}
               </dd>
@@ -121,7 +121,7 @@ export function HoldingRow({ holding, onClaimed }: HoldingRowProps) {
       {/* Expanded distribution list */}
       {expanded && hasDistributions && (
         <div className="border-t border-white/5 bg-white/[0.02] px-5 py-4 space-y-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-base-100/40">
+          <p className="text-xs font-medium uppercase tracking-wide text-base-100/55">
             Distributions
           </p>
           {claimableDistributions.map((d) => (

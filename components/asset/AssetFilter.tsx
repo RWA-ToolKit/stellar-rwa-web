@@ -48,7 +48,7 @@ export function AssetFilter({ value, onChange, counts }: AssetFilterProps) {
             >
               {opt.label}
               {count !== undefined && (
-                <span aria-hidden="true" className={active ? "text-brand-300/70" : "text-base-100/40"}>
+                <span aria-hidden="true" className={active ? "text-brand-300/70" : "text-base-100/55"}>
                   {count}
                 </span>
               )}

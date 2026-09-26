@@ -39,7 +39,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-base-100/40">
+          <p className="mt-1 text-xs text-base-100/55">
             {when
               ? `Created ~${formatDistanceToNow(when, { addSuffix: true })}`
               : `Ledger ${d.createdAt}`}
@@ -48,7 +48,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
           </p>
         </div>
         <div className="text-right">
-          <p className="text-xs uppercase tracking-wide text-base-100/40">Total pool</p>
+          <p className="text-xs uppercase tracking-wide text-base-100/55">Total pool</p>
           <p className="text-lg font-bold text-gold-300">
             {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
           </p>
@@ -56,7 +56,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
       </div>
 
       <div className="mt-4">
-        <div className="mb-1.5 flex items-center justify-between text-xs text-base-100/50">
+        <div className="mb-1.5 flex items-center justify-between text-xs text-base-100/55">
           <span>Claimed</span>
           <span>
             {formatTokenAmount(d.distributed, PAYMENT_TOKEN_DECIMALS)} / {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}

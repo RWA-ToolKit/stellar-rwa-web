@@ -44,7 +44,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
 
   if (!address) {
     return (
-      <p className="text-sm text-base-100/50">
+      <p className="text-sm text-base-100/55">
         Connect your wallet to view your balance and transfer this asset.
       </p>
     );
@@ -65,6 +65,9 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   } catch {
     amountValid = false;
   }
+  const recipientInvalid =
+    recipientFormatValid && !recipientCompliance.loading && !recipientCompliance.data?.allowed;
+  const amountInvalid = !!amountError;
   const formValid = recipientFormatValid && amountValid && !amountError;
 
   async function onSubmit(e: React.FormEvent) {
@@ -118,15 +121,15 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <span className="text-sm text-base-100/50">Your balance</span>
+        <span className="text-sm text-base-100/55">Your balance</span>
         <span className="font-semibold text-base-100">
           {formatTokenAmount(balance, metadata.decimals)} {metadata.symbol}
         </span>
       </div>
       <div className="flex items-center justify-between">
-        <span className="text-sm text-base-100/50">Your compliance status</span>
+        <span className="text-sm text-base-100/55">Your compliance status</span>
         {compliance.loading ? (
-          <span className="text-xs text-base-100/40">Checking…</span>
+          <span className="text-xs text-base-100/55">Checking…</span>
         ) : (
           <ComplianceBadge status={status} />
         )}
@@ -161,11 +164,18 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             disabled={!canTransfer || complianceLoading || tx.pending}
             className="input font-mono text-xs"
             spellCheck={false}
+            aria-invalid={recipientInvalid || undefined}
+            aria-describedby={recipientInvalid ? "transfer-to-error" : undefined}
           />
           {recipientFormatValid && (
-            <p role="status" aria-live="polite" className="mt-1.5 text-xs">
+            <p
+              id={recipientInvalid ? "transfer-to-error" : undefined}
+              role="status"
+              aria-live="polite"
+              className="mt-1.5 text-xs"
+            >
               {recipientCompliance.loading ? (
-                <span className="text-base-100/40">Checking recipient compliance…</span>
+                <span className="text-base-100/55">Checking recipient compliance…</span>
               ) : recipientCompliance.data?.allowed ? (
                 <span className="text-brand-300">Recipient is KYC-approved.</span>
               ) : (
@@ -215,13 +225,15 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
               inputMode="decimal"
               disabled={!canTransfer || complianceLoading || tx.pending}
               className="input pr-16"
+              aria-invalid={amountInvalid || undefined}
+              aria-describedby={amountInvalid ? "transfer-amount-error" : undefined}
             />
-            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/55">
               {metadata.symbol}
             </span>
           </div>
           {amountError && (
-            <p role="alert" aria-live="polite" className="mt-1.5 text-xs text-red-400">
+            <p id="transfer-amount-error" role="alert" aria-live="polite" className="mt-1.5 text-xs text-red-400">
               {amountError}
             </p>
           )}

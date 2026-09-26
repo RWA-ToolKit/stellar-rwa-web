@@ -127,11 +127,11 @@ function MintCard({
               disabled={tx.pending}
               className="input pr-20"
             />
-            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/55">
               {metadata.symbol}
             </span>
           </div>
-          <p className="mt-1 text-[11px] text-base-100/40">
+          <p className="mt-1 text-[11px] text-base-100/55">
             Current supply: {formatTokenAmount(metadata.totalSupply, metadata.decimals)} {metadata.symbol}
           </p>
         </div>

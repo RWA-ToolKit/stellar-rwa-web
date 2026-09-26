@@ -60,7 +60,7 @@ export function Step3Confirm({ validated, formData, onBack, onRegistered }: Step
       <div className="card p-6 space-y-5">
         <div>
           <h2 className="text-lg font-semibold text-base-100">Review & confirm</h2>
-          <p className="mt-1 text-sm text-base-100/50">
+          <p className="mt-1 text-sm text-base-100/55">
             Check everything below before submitting. The registry transaction
             cannot be reversed.
           </p>
@@ -69,7 +69,7 @@ export function Step3Confirm({ validated, formData, onBack, onRegistered }: Step
         <dl className="divide-y divide-white/5">
           {rows.map((r) => (
             <div key={r.label} className="flex flex-wrap items-start justify-between gap-2 py-2.5">
-              <dt className="text-sm text-base-100/50">{r.label}</dt>
+              <dt className="text-sm text-base-100/55">{r.label}</dt>
               <dd
                 className={`max-w-[60%] break-all text-right text-sm font-semibold text-base-100 ${
                   r.mono ? "font-mono text-xs text-base-100/80" : ""

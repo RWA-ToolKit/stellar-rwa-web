@@ -93,4 +93,59 @@ describe("ConfirmDialog", () => {
     fireEvent.click(screen.getByRole("dialog"));
     expect(baseProps.onCancel).not.toHaveBeenCalled();
   });
+
+  describe("focus management", () => {
+    it("moves focus to Cancel on open and cycles Tab / Shift+Tab within the dialog", () => {
+      render(<ConfirmDialog {...baseProps} open={true} />);
+      const cancel = screen.getByRole("button", { name: "Cancel" });
+      const confirm = screen.getByRole("button", { name: "Confirm" });
+      expect(cancel).toHaveFocus();
+
+      // Tab on the last control wraps to the first.
+      confirm.focus();
+      fireEvent.keyDown(window, { key: "Tab" });
+      expect(cancel).toHaveFocus();
+
+      // Shift+Tab on the first control wraps to the last.
+      fireEvent.keyDown(window, { key: "Tab", shiftKey: true });
+      expect(confirm).toHaveFocus();
+    });
+
+    it("pulls focus back into the dialog if it escaped", () => {
+      render(
+        <>
+          <button>outside</button>
+          <ConfirmDialog {...baseProps} open={true} />
+        </>,
+      );
+      screen.getByRole("button", { name: "outside" }).focus();
+      fireEvent.keyDown(window, { key: "Tab" });
+      expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    });
+
+    it("returns focus to the triggering element on close", () => {
+      const { rerender } = render(
+        <>
+          <button>trigger</button>
+          <ConfirmDialog {...baseProps} open={false} />
+        </>,
+      );
+      const trigger = screen.getByRole("button", { name: "trigger" });
+      trigger.focus();
+      rerender(
+        <>
+          <button>trigger</button>
+          <ConfirmDialog {...baseProps} open={true} />
+        </>,
+      );
+      expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+      rerender(
+        <>
+          <button>trigger</button>
+          <ConfirmDialog {...baseProps} open={false} />
+        </>,
+      );
+      expect(trigger).toHaveFocus();
+    });
+  });
 });
