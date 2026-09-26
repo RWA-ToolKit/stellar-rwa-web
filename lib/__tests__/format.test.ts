@@ -89,6 +89,12 @@ describe("formatUsdCents", () => {
     // Converting via Number() would silently round; bigint math does not.
     expect(formatUsdCents(10_000_000_000_000_000n)).toBe("$100,000,000,000,000");
   });
+
+  it("preserves compact valuation precision above Number.MAX_SAFE_INTEGER", () => {
+    expect(formatUsdCents(900_719_925_474_099_345n, { compact: true })).toBe(
+      "$9007199.3B",
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
