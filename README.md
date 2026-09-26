@@ -119,6 +119,8 @@ types/          Domain types mirroring the contracts
 ```
 
 - **Reads** simulate a contract invocation via Soroban RPC — no wallet, no fees.
+- Data views show when their figures were last retrieved; values served by the
+  API index may lag behind the latest Stellar ledger while the index catches up.
 - **Writes** build → simulate → assemble → sign (Freighter) → submit → poll,
   surfacing each phase to the UI and mapping contract errors to friendly text.
 - Monetary valuations are stored on-chain as **USD cents** (`i128`); token
