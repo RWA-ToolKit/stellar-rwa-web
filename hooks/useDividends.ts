@@ -1,6 +1,6 @@
 "use client";
 
-import { dividend } from "@/lib/contracts";
+import { assetToken as tokenContract, dividend } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
 import type { Distribution } from "@/types";
@@ -9,6 +9,8 @@ export interface DistributionWithClaim extends Distribution {
   /** Amount the connected wallet can still claim from this distribution. */
   claimable: bigint;
   claimed: boolean;
+  /** Decimal scale reported by this distribution's payment token. */
+  paymentTokenDecimals: number;
 }
 
 /**
@@ -19,27 +21,28 @@ export interface DistributionWithClaim extends Distribution {
  * (see ClaimButton's `onClaimed`) so a distribution's row flips to
  * "claimed" without requiring a manual page refresh.
  */
-export function useDividends(assetToken: string | null) {
+export function useDividends(assetTokenId: string | null) {
   const { network, address } = useWallet();
   return useAsync<DistributionWithClaim[]>(
     async () => {
-      if (!assetToken) return [];
-      const dists = await dividend.getDistributionsForAsset(network, assetToken);
-      if (!address) {
-        return dists.map((d) => ({ ...d, claimable: 0n, claimed: false }));
-      }
+      if (!assetTokenId) return [];
+      const dists = await dividend.getDistributionsForAsset(network, assetTokenId);
       const annotated = await Promise.all(
         dists.map(async (d) => {
+          const paymentTokenDecimals = await tokenContract.decimals(network, d.paymentToken);
+          if (!address) {
+            return { ...d, paymentTokenDecimals, claimable: 0n, claimed: false };
+          }
           const [claimable, claimed] = await Promise.all([
             dividend.claimable(network, d.id, address),
             dividend.hasClaimed(network, d.id, address),
           ]);
-          return { ...d, claimable, claimed };
+          return { ...d, paymentTokenDecimals, claimable, claimed };
         }),
       );
       return annotated;
     },
-    [assetToken, address, network],
-    Boolean(assetToken),
+    [assetTokenId, address, network],
+    Boolean(assetTokenId),
   );
 }

@@ -70,11 +70,11 @@ const PORTFOLIO_WITH_HOLDING: PortfolioData = {
       },
       balance: 10000n,
       claimableDistributions: [],
-      totalClaimable: 0n,
+      totalClaimable: [],
     },
   ],
   totalValueCents: 250000n,
-  totalClaimable: 0n,
+  totalClaimable: [],
   failedAssetCount: 0,
   isIncomplete: false,
 };
@@ -97,7 +97,7 @@ describe("PortfolioView", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("prompts disconnected users to connect their wallet", () => {
-    setup({ data: { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false } });
+    setup({ data: { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false } });
 
     expect(
       screen.getByRole("heading", { name: /connect your wallet/i }),

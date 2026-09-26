@@ -8,7 +8,7 @@ import {
   truncateAddress,
   ledgerToApproxDate as approxDate,
 } from "@/lib/format";
-import { ClaimButton, PAYMENT_TOKEN_DECIMALS } from "./ClaimButton";
+import { ClaimButton } from "./ClaimButton";
 
 interface DistributionCardProps {
   distribution: DistributionWithClaim;
@@ -50,7 +50,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
         <div className="text-right">
           <p className="text-xs uppercase tracking-wide text-base-100/40">Total pool</p>
           <p className="text-lg font-bold text-gold-300">
-            {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
+            {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
           </p>
         </div>
       </div>
@@ -59,7 +59,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
         <div className="mb-1.5 flex items-center justify-between text-xs text-base-100/50">
           <span>Claimed</span>
           <span>
-            {formatTokenAmount(d.distributed, PAYMENT_TOKEN_DECIMALS)} / {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
+            {formatTokenAmount(d.distributed, d.paymentTokenDecimals)} / {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
             {" "}({pct.toFixed(1)}%)
           </span>
         </div>
@@ -77,6 +77,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             distributionId={d.id}
             claimable={d.claimable}
             claimed={d.claimed}
+            decimals={d.paymentTokenDecimals}
             onClaimed={onClaimed}
           />
         </div>

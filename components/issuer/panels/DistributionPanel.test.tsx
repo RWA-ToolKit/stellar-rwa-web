@@ -50,12 +50,18 @@ jest.mock("@/lib/contracts", () => ({
   assetToken: {
     balance: jest.fn().mockResolvedValue(0n),
     allowance: jest.fn().mockResolvedValue(0n),
+    decimals: jest.fn().mockResolvedValue(7),
   },
   contractIds: jest.fn(() => ({ dividend: "CDIVIDEND", registry: "CREGISTRY", compliance: "CCOMPLIANCE" })),
 }));
 
 jest.mock("@/hooks/useAsync", () => ({
-  useAsync: jest.fn(() => ({ data: null, loading: false, error: null, refetch: jest.fn() })),
+  useAsync: jest.fn((loader: () => Promise<unknown>, deps: unknown[]) => ({
+    data: deps.length === 2 ? { token: deps[1], decimals: 7 } : null,
+    loading: false,
+    error: null,
+    refetch: jest.fn(),
+  })),
 }));
 
 // ── mock sub-components ────────────────────────────────────────────────────
@@ -162,6 +168,7 @@ function makeDistribution(
     paymentToken: "CPAYMENT",
     totalAmount: 0n,
     distributed: 0n,
+    paymentTokenDecimals: 7,
     createdAt: 0,
     completed: false,
     claimable: 0n,
@@ -219,7 +226,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       expect(screen.getByPlaceholderText(/^C… \(SAC or Soroban/i)).toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/^0\.0000000$/)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/^Enter amount$/)).toBeInTheDocument();
     });
 
     it("renders helper text for payment token field", () => {
@@ -245,7 +252,7 @@ describe("DistributionPanel", () => {
 
       render(<DistributionPanel asset={mockAsset} />);
 
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
       await user.type(amountInput, "100");
 
       const submitButton = screen.getByRole("button", { name: /create distribution/i });
@@ -263,7 +270,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "not-a-number");
@@ -284,7 +291,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "0");
@@ -306,7 +313,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "100.5");
@@ -327,7 +334,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i) as HTMLInputElement;
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/) as HTMLInputElement;
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/) as HTMLInputElement;
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "100.5");
@@ -350,7 +357,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} onCreated={onCreated} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "100.5");
@@ -371,7 +378,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       expect(tokenInput).toBeDisabled();
       expect(amountInput).toBeDisabled();

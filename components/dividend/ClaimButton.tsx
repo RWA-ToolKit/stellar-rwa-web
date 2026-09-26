@@ -6,13 +6,11 @@ import { useWallet } from "@/hooks/useWallet";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { formatTokenAmount } from "@/lib/format";
 
-/** Stellar classic / SAC payment tokens use 7 decimals. */
-export const PAYMENT_TOKEN_DECIMALS = 7;
-
 interface ClaimButtonProps {
   distributionId: bigint;
   claimable: bigint;
   claimed: boolean;
+  decimals: number;
   onClaimed?: () => void;
 }
 
@@ -21,7 +19,7 @@ interface ClaimButtonProps {
  * (with an explanatory label) when there is nothing to claim or it's already
  * been claimed.
  */
-export function ClaimButton({ distributionId, claimable, claimed, onClaimed }: ClaimButtonProps) {
+export function ClaimButton({ distributionId, claimable, claimed, decimals, onClaimed }: ClaimButtonProps) {
   const { address } = useWallet();
   const tx = useTx();
 
@@ -59,7 +57,7 @@ export function ClaimButton({ distributionId, claimable, claimed, onClaimed }: C
         >
           {nothing
             ? "Nothing to claim"
-            : `Claim ${formatTokenAmount(claimable, PAYMENT_TOKEN_DECIMALS)}`}
+            : `Claim ${formatTokenAmount(claimable, decimals)}`}
         </button>
       ) : (
         <TxProgress

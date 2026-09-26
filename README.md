@@ -122,7 +122,9 @@ types/          Domain types mirroring the contracts
 - **Writes** build → simulate → assemble → sign (Freighter) → submit → poll,
   surfacing each phase to the UI and mapping contract errors to friendly text.
 - Monetary valuations are stored on-chain as **USD cents** (`i128`); token
-  amounts are integers in each token's own `decimals` base.
+  amounts are integers in each token's own `decimals` base. Dividend payment
+  amounts use the payment token's on-chain decimals and portfolio totals remain
+  grouped by token so different units are never added together.
 
 ### Issuer dashboard roles
 

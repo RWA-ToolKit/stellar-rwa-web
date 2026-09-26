@@ -78,12 +78,6 @@ jest.mock("@/components/ui/ErrorState", () => ({
   ErrorState: ({ title }: { title: string }) => <div role="alert">{title}</div>,
 }));
 
-// ── mock ClaimButton constant ─────────────────────────────────────────────
-
-jest.mock("@/components/dividend/ClaimButton", () => ({
-  PAYMENT_TOKEN_DECIMALS: 7,
-}));
-
 // ── mock percent so we can force out-of-range values ──────────────────────
 // By default we proxy to the real implementation; individual tests override.
 
@@ -94,6 +88,7 @@ const percentSpy = jest.spyOn(formatModule, "percent");
 // ── imports after mocks ────────────────────────────────────────────────────
 
 import { useDividends } from "@/hooks/useDividends";
+import type { DistributionWithClaim } from "@/hooks/useDividends";
 import { DistributionPanel } from "../DistributionPanel";
 
 const mockUseDividends = useDividends as jest.MockedFunction<typeof useDividends>;
@@ -125,22 +120,19 @@ function makeAsset(): AssetDetail {
   };
 }
 
-type DistributionItem = ReturnType<typeof useDividends>["data"] extends Array<infer T> | null
-  ? T
-  : never;
-
 function makeDistribution(
   id: bigint,
   distributed: bigint,
   totalAmount: bigint,
   completed = false,
-): DistributionItem {
+): DistributionWithClaim {
   return {
     id,
     assetToken: "CTOKEN123",
     paymentToken: "CPAYTOKEN",
     totalAmount,
     distributed,
+    paymentTokenDecimals: 7,
     createdAt: 100,
     completed,
     claimable: 0n,

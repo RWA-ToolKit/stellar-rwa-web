@@ -39,7 +39,6 @@ jest.mock("./ClaimButton", () => ({
       data-claimable={claimable.toString()}
     />
   ),
-  PAYMENT_TOKEN_DECIMALS: 7,
 }));
 
 // ── mock date-fns to avoid non-deterministic relative times ───────────────
@@ -71,6 +70,7 @@ function makeDistribution(
     paymentToken: "CPAYMENT5678",
     totalAmount: 1000_0000000n, // 1000 tokens @ 7 decimals
     distributed: 250_0000000n, // 250 tokens = 25%
+    paymentTokenDecimals: 7,
     createdAt: 50000,
     completed: false,
     claimable: 0n,
@@ -172,6 +172,22 @@ describe("DistributionCard", () => {
     // 500_0000000 @ 7 decimals = 500 – rendered twice (numerator + total)
     const matches = screen.getAllByText("500");
     expect(matches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("formats distribution amounts using the payment token's decimals", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution({
+          totalAmount: 12_345n,
+          distributed: 1_234n,
+          paymentTokenDecimals: 2,
+        })}
+        currentLedger={null}
+      />,
+    );
+
+    expect(screen.getByText("123.45")).toBeInTheDocument();
+    expect(screen.getByText("12.34 / 123.45 (10.0%)")).toBeInTheDocument();
   });
 
   // ── claim row visibility ─────────────────────────────────────────────────

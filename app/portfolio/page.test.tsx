@@ -60,11 +60,11 @@ const PORTFOLIO_WITH_HOLDING: PortfolioData = {
       },
       balance: 10000n,
       claimableDistributions: [],
-      totalClaimable: 0n,
+      totalClaimable: [],
     },
   ],
   totalValueCents: 250000n,
-  totalClaimable: 0n,
+  totalClaimable: [],
   failedAssetCount: 0,
   isIncomplete: false,
 };
@@ -107,7 +107,7 @@ describe("/portfolio page route", () => {
   });
 
   it("shows empty portfolio state when no holdings", () => {
-    setup({ address: "GCONNECTED123456789", data: { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false } });
+    setup({ address: "GCONNECTED123456789", data: { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false } });
     expect(screen.getByText("Portfolio View")).toBeInTheDocument();
   });
 });
