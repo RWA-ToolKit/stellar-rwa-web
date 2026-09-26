@@ -123,6 +123,8 @@ types/          Domain types mirroring the contracts
   surfacing each phase to the UI and mapping contract errors to friendly text.
 - Monetary valuations are stored on-chain as **USD cents** (`i128`); token
   amounts are integers in each token's own `decimals` base.
+- For the complete contract validation, registry registration, and four-step
+  wizard flow, see [Tokenizing an asset](docs/tokenizing-an-asset.md).
 
 ### Issuer dashboard roles
 
