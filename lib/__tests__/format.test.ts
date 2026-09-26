@@ -1,4 +1,11 @@
-import { formatUsdCents, formatTokenAmount, parseTokenAmount, formatRawPlain, compactNumber } from "@/lib/format";
+import {
+  compactNumber,
+  formatRawPlain,
+  formatTokenAmount,
+  formatUsdCents,
+  holderSharePercentages,
+  parseTokenAmount,
+} from "@/lib/format";
 
 // ---------------------------------------------------------------------------
 // Issue #35 — formatUsdCents
@@ -446,5 +453,28 @@ describe("compactNumber", () => {
   it("keeps single decimal when significant", () => {
     // 1234567 / 1000000 = 1.234567, toFixed(1) = "1.2" (not trimmed)
     expect(compactNumber(1_234_567)).toBe("1.2M");
+  });
+});
+
+describe("holderSharePercentages", () => {
+  it("keeps a small positive holder visible", () => {
+    expect(holderSharePercentages([1n, 999_999n], 1_000_000n)).toEqual([
+      "0.01",
+      "99.99",
+    ]);
+  });
+
+  it("allocates rounding remainder so full-supply shares total 100 percent", () => {
+    expect(holderSharePercentages([1n, 1n, 1n], 3n)).toEqual([
+      "33.34",
+      "33.33",
+      "33.33",
+    ]);
+  });
+
+  it("uses more precision when required to keep a small holder visible", () => {
+    const shares = holderSharePercentages([1n, 1n], 1_000_000n);
+    expect(shares[0]).toBe("0.0001");
+    expect(shares[1]).toBe("0.0001");
   });
 });
