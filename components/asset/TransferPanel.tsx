@@ -131,6 +131,14 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
           <ComplianceBadge status={status} />
         )}
       </div>
+      {compliance.data?.record && (
+        <p className="text-xs text-base-100/40">
+          Approval{" "}
+          {compliance.data.record.expiresAt === 0
+            ? "does not expire."
+            : `expires at ledger ${compliance.data.record.expiresAt}.`}
+        </p>
+      )}
 
       {/* Explicit gating messages. */}
       {!compliance.loading && !approved && (

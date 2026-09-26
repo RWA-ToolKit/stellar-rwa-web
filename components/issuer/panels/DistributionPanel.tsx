@@ -8,6 +8,7 @@ import { assetToken, contractIds, dividend } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useAsync } from "@/hooks/useAsync";
 import { useWallet } from "@/hooks/useWallet";
+import { getLatestLedger } from "@/lib/stellar";
 import { useDividends } from "@/hooks/useDividends";
 import { parseTokenAmount, formatTokenAmount, truncateAddress } from "@/lib/format";
 import { PAYMENT_TOKEN_DECIMALS } from "@/components/dividend/ClaimButton";
@@ -92,6 +93,7 @@ function CreateDistributionCard({
   const { address, network } = useWallet();
   const [paymentToken, setPaymentToken] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
+  const [claimDeadline, setClaimDeadline] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   // Only fetch when the input looks like a valid contract address.
@@ -148,13 +150,33 @@ function CreateDistributionCard({
       setFormError("Total amount must be greater than zero.");
       return;
     }
+    let deadline = 0;
+    if (claimDeadline.trim()) {
+      deadline = Number.parseInt(claimDeadline.trim(), 10);
+      if (!Number.isInteger(deadline) || deadline < 0) {
+        setFormError("Claim deadline must be a non-negative ledger number (0 = no deadline).");
+        return;
+      }
+      if (deadline > 0) {
+        try {
+          const latestLedger = await getLatestLedger(network);
+          if (deadline <= latestLedger) {
+            setFormError(`Ledger ${deadline} has already passed (current ledger: ${latestLedger}).`);
+            return;
+          }
+        } catch {
+          // The contract remains the final authority if the ledger is unavailable.
+        }
+      }
+    }
 
     const res = await tx.run((ctx) =>
-      dividend.createDistribution(ctx, tokenContract, pt, raw),
+      dividend.createDistribution(ctx, tokenContract, pt, raw, deadline),
     );
     if (res) {
       setPaymentToken("");
       setTotalAmount("");
+      setClaimDeadline("");
       onCreated?.();
     }
   }
@@ -212,6 +234,22 @@ function CreateDistributionCard({
               ))}
             </div>
           )}
+        </div>
+
+        <div>
+          <label htmlFor="dist-deadline" className="label">Claim deadline ledger</label>
+          <input
+            id="dist-deadline"
+            value={claimDeadline}
+            onChange={(e) => setClaimDeadline(e.target.value)}
+            placeholder="0 = no deadline"
+            inputMode="numeric"
+            disabled={tx.pending || !isAdmin}
+            className="input"
+          />
+          <p className="mt-1 text-[11px] text-base-100/40">
+            Holders can claim until this ledger. Leave at 0 for unlimited claims.
+          </p>
         </div>
 
         {/* #293: surface balance + allowance so the issuer knows before submitting */}

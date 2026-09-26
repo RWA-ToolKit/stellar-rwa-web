@@ -20,6 +20,8 @@ interface DistributionCardProps {
 export function DistributionCard({ distribution, currentLedger, onClaimed }: DistributionCardProps) {
   const d = distribution;
   const pct = percent(d.distributed, d.totalAmount);
+  const deadline = d.claimDeadline ?? 0;
+  const expired = deadline > 0 && currentLedger !== null && currentLedger >= deadline;
   const when =
     currentLedger !== null ? approxDate(d.createdAt, currentLedger) : null;
 
@@ -46,6 +48,11 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             {" · "}
             Payment token {truncateAddress(d.paymentToken)}
           </p>
+          {deadline > 0 && (
+            <p className={`mt-1 text-xs ${expired ? "text-red-300" : "text-gold-300"}`}>
+              {expired ? "Claim deadline passed" : `Claim by ledger ${deadline}`}
+            </p>
+          )}
         </div>
         <div className="text-right">
           <p className="text-xs uppercase tracking-wide text-base-100/40">Total pool</p>
@@ -77,6 +84,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             distributionId={d.id}
             claimable={d.claimable}
             claimed={d.claimed}
+            expired={expired}
             onClaimed={onClaimed}
           />
         </div>

@@ -13,6 +13,7 @@ interface ClaimButtonProps {
   distributionId: bigint;
   claimable: bigint;
   claimed: boolean;
+  expired?: boolean;
   onClaimed?: () => void;
 }
 
@@ -21,7 +22,7 @@ interface ClaimButtonProps {
  * (with an explanatory label) when there is nothing to claim or it's already
  * been claimed.
  */
-export function ClaimButton({ distributionId, claimable, claimed, onClaimed }: ClaimButtonProps) {
+export function ClaimButton({ distributionId, claimable, claimed, expired = false, onClaimed }: ClaimButtonProps) {
   const { address } = useWallet();
   const tx = useTx();
 
@@ -33,6 +34,13 @@ export function ClaimButton({ distributionId, claimable, claimed, onClaimed }: C
     return (
       <span className="chip border border-white/10 bg-white/5 text-base-100/50">
         Claimed
+      </span>
+    );
+  }
+  if (expired) {
+    return (
+      <span className="chip border border-red-500/25 bg-red-500/10 text-red-300">
+        Claim deadline passed
       </span>
     );
   }
