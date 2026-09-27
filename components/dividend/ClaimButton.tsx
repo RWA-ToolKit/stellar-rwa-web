@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { dividend } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useWallet } from "@/hooks/useWallet";
@@ -14,6 +15,7 @@ interface ClaimButtonProps {
   claimable: bigint;
   claimed: boolean;
   onClaimed?: () => void;
+  onPendingClaim?: (amount: bigint) => void;
 }
 
 /**
@@ -21,9 +23,19 @@ interface ClaimButtonProps {
  * (with an explanatory label) when there is nothing to claim or it's already
  * been claimed.
  */
-export function ClaimButton({ distributionId, claimable, claimed, onClaimed }: ClaimButtonProps) {
+export function ClaimButton({
+  distributionId,
+  claimable,
+  claimed,
+  onClaimed,
+  onPendingClaim,
+}: ClaimButtonProps) {
   const { address } = useWallet();
   const tx = useTx();
+
+  useEffect(() => {
+    onPendingClaim?.(tx.phase === "confirming" ? claimable : 0n);
+  }, [claimable, onPendingClaim, tx.phase]);
 
   if (!address) {
     return <p className="text-xs text-base-100/40">Connect a wallet to claim.</p>;
