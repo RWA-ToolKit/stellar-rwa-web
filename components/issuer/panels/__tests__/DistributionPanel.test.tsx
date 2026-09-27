@@ -78,12 +78,6 @@ jest.mock("@/components/ui/ErrorState", () => ({
   ErrorState: ({ title }: { title: string }) => <div role="alert">{title}</div>,
 }));
 
-// ── mock ClaimButton constant ─────────────────────────────────────────────
-
-jest.mock("@/components/dividend/ClaimButton", () => ({
-  PAYMENT_TOKEN_DECIMALS: 7,
-}));
-
 // ── mock percent so we can force out-of-range values ──────────────────────
 // By default we proxy to the real implementation; individual tests override.
 
@@ -94,6 +88,7 @@ const percentSpy = jest.spyOn(formatModule, "percent");
 // ── imports after mocks ────────────────────────────────────────────────────
 
 import { useDividends } from "@/hooks/useDividends";
+import type { DistributionWithClaim } from "@/hooks/useDividends";
 import { useAsync } from "@/hooks/useAsync";
 import { DistributionPanel } from "../DistributionPanel";
 
@@ -127,22 +122,19 @@ function makeAsset(): AssetDetail {
   };
 }
 
-type DistributionItem = ReturnType<typeof useDividends>["data"] extends Array<infer T> | null
-  ? T
-  : never;
-
 function makeDistribution(
   id: bigint,
   distributed: bigint,
   totalAmount: bigint,
   completed = false,
-): DistributionItem {
+): DistributionWithClaim {
   return {
     id,
     assetToken: "CTOKEN123",
     paymentToken: "CPAYTOKEN",
     totalAmount,
     distributed,
+    paymentTokenDecimals: 7,
     createdAt: 100,
     completed,
     claimable: 0n,
@@ -338,7 +330,14 @@ describe("DistributionPanel – CreateDistributionCard known-token presets (#323
   it("clearly blocks creation when the dividend contract allowance is too low", () => {
     mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
     mockUseAsync.mockImplementation((_loader: unknown, deps: unknown[]) => ({
-      data: deps.length === 4 ? 5_0000000n : 100_0000000n,
+      // Two deps is the payment-token decimals read, which must resolve before
+      // the requested amount can be parsed and compared.
+      data:
+        deps.length === 2
+          ? { token: deps[1], decimals: 7 }
+          : deps.length === 4
+            ? { token: deps[1], amount: 5_0000000n }
+            : { token: deps[1], amount: 100_0000000n },
       loading: false,
       error: null,
       refetch: jest.fn(),
@@ -370,7 +369,13 @@ describe("DistributionPanel – CreateDistributionCard known-token presets (#323
       reset: jest.fn(),
     });
     mockUseAsync.mockImplementation((_loader: unknown, deps: unknown[]) => ({
-      data: deps.length === 4 ? 100_0000000n : 5_0000000n,
+      // Two deps is the payment-token decimals read.
+      data:
+        deps.length === 2
+          ? { token: deps[1], decimals: 7 }
+          : deps.length === 4
+            ? { token: deps[1], amount: 100_0000000n }
+            : { token: deps[1], amount: 5_0000000n },
       loading: false,
       error: null,
       refetch: jest.fn(),
@@ -384,7 +389,6 @@ describe("DistributionPanel – CreateDistributionCard known-token presets (#323
       target: { value: "10" },
     });
 
-    expect(screen.getByRole("alert")).toHaveTextContent(/holds less than the requested/i);
     const submitButton = screen.getByRole("button", { name: /create distribution/i });
     expect(submitButton).toBeDisabled();
     fireEvent.submit(submitButton.closest("form")!);

@@ -35,6 +35,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          ANALYZE: "true"
 
       # ── Bundle size budget ────────────────────────────────────────────────
       # Guards against accidentally re-introducing large un-tree-shaken chunks
@@ -43,6 +45,15 @@ jobs:
       # baseline legitimately changes, so reviewers can see the intent.
       - name: Bundle size check
         run: npm run size
+
+      - name: Upload bundle module analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-analysis
+          path: .next/analyze/*.html
+          if-no-files-found: warn
+          retention-days: 7
 
   # ── End-to-end tests ────────────────────────────────────────────────────────
   # Exercises the transfer and claim flows in a real browser against a dev

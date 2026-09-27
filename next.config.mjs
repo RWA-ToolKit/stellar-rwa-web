@@ -1,7 +1,12 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import bundleAnalyzer from "@next/bundle-analyzer";
 
 const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+  openAnalyzer: false,
+});
 
 /**
  * Best-effort short commit hash so a deploy can be correlated with a
@@ -36,4 +41,4 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);

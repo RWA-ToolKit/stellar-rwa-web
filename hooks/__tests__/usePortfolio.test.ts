@@ -13,6 +13,7 @@ jest.mock("@/lib/contracts", () => ({
   assetToken: {
     balance: jest.fn(),
     getMetadata: jest.fn(),
+    decimals: jest.fn(),
   },
   dividend: {
     getDistributionsForAsset: jest.fn(),
@@ -76,6 +77,7 @@ describe("usePortfolio", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseWallet.mockReturnValue({ network: "testnet", address: "GUSER123" });
+    (assetToken.decimals as jest.Mock).mockResolvedValue(7);
   });
 
   it("returns empty portfolio when wallet is disconnected", async () => {
@@ -125,7 +127,34 @@ describe("usePortfolio", () => {
 
     expect(result.current.data?.holdings).toHaveLength(2);
     expect(result.current.data?.totalValueCents).toBe(10000n);
-    expect(result.current.data?.totalClaimable).toBe(150n);
+    expect(result.current.data?.totalClaimable).toEqual([
+      { paymentToken: "TOKEN_B", decimals: 7, amount: 150n },
+    ]);
+  });
+
+  it("keeps claimable amounts from different payment tokens in separate decimal scales", async () => {
+    const asset = makeAsset({ tokenContract: "TOKEN_A" });
+    const first = makeDistribution({ id: 1n, paymentToken: "PAYMENT_2" });
+    const second = makeDistribution({ id: 2n, paymentToken: "PAYMENT_7" });
+    (registry.getAllAssets as jest.Mock).mockResolvedValue([asset]);
+    (assetToken.balance as jest.Mock).mockResolvedValue(100n);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata({ totalSupply: 100n }));
+    (dividend.getDistributionsForAsset as jest.Mock).mockResolvedValue([first, second]);
+    (dividend.claimable as jest.Mock).mockImplementation((_net, id) =>
+      Promise.resolve(id === 1n ? 125n : 25_000_000n),
+    );
+    (dividend.hasClaimed as jest.Mock).mockResolvedValue(false);
+    (assetToken.decimals as jest.Mock).mockImplementation((_net, token) =>
+      Promise.resolve(token === "PAYMENT_2" ? 2 : 7),
+    );
+
+    const { result } = renderHook(() => usePortfolio());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.data?.totalClaimable).toEqual([
+      { paymentToken: "PAYMENT_2", decimals: 2, amount: 125n },
+      { paymentToken: "PAYMENT_7", decimals: 7, amount: 25_000_000n },
+    ]);
   });
 
   it("returns empty holdings when user balance is 0 for all assets", async () => {
@@ -141,7 +170,7 @@ describe("usePortfolio", () => {
     expect(result.current.data).toEqual({
       holdings: [],
       totalValueCents: 0n,
-      totalClaimable: 0n,
+      totalClaimable: [],
       failedAssetCount: 0,
       isIncomplete: false,
     });
