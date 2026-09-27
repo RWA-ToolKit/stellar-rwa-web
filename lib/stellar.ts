@@ -151,23 +151,28 @@ function isTransientRpcError(err: unknown): boolean {
  * plus jitter, bounded by `RETRY_ATTEMPTS`. Non-transient errors (e.g.
  * contract/simulation errors) are rethrown immediately without retrying,
  * since retrying a deterministic contract rejection just wastes an RPC round
- * trip.
+ * trip. When rate-limit retries are exhausted, throws RateLimitError instead
+ * of the raw error so callers can surface a helpful message.
  */
 async function withRetry<T>(fn: () => Promise<T>): Promise<T> {
   let lastError: unknown;
+  let wasRateLimit = false;
   for (let attempt = 0; attempt < RETRY_ATTEMPTS; attempt++) {
     try {
       return await fn();
     } catch (e) {
       lastError = e;
       const isLastAttempt = attempt === RETRY_ATTEMPTS - 1;
-      if (isLastAttempt || !isTransientRpcError(e)) throw e;
+      const isTransient = isTransientRpcError(e);
+      if (isTransient) wasRateLimit = true;
+      if (isLastAttempt || !isTransient) throw e;
       const backoff = RETRY_BASE_DELAY_MS * 2 ** attempt;
       const jitter = Math.random() * RETRY_BASE_DELAY_MS;
       await sleep(backoff + jitter);
     }
   }
-  // Unreachable: the loop above always either returns or throws.
+  // If we exhausted retries on rate limit, throw a friendlier error
+  if (wasRateLimit) throw new RateLimitError();
   throw lastError;
 }
 
@@ -236,7 +241,8 @@ export async function readContract<T = unknown>(
     withFailover(network, (server) => server.simulateTransaction(tx)),
   );
   if (rpc.Api.isSimulationError(sim)) {
-    throw new ContractError(parseContractError(sim.error), sim.error);
+    const { message, isAuth } = parseContractError(sim.error);
+    throw new ContractError(message, sim.error, isAuth);
   }
   const retval = sim.result?.retval;
   if (!retval) return undefined as T;
@@ -280,7 +286,8 @@ export async function invokeContract(
   // user to sign, and so the transaction carries the right footprint + fees.
   const sim = await server.simulateTransaction(built);
   if (rpc.Api.isSimulationError(sim)) {
-    throw new ContractError(parseContractError(sim.error), sim.error);
+    const { message, isAuth } = parseContractError(sim.error);
+    throw new ContractError(message, sim.error, isAuth);
   }
   const prepared = rpc.assembleTransaction(built, sim).build();
 
@@ -348,10 +355,22 @@ function sleep(ms: number): Promise<void> {
  */
 export class ContractError extends Error {
   detail?: string;
-  constructor(message: string, detail?: string) {
+  isAuth: boolean;
+
+  constructor(message: string, detail?: string, isAuth: boolean = false) {
     super(message);
     this.name = "ContractError";
     this.detail = detail;
+    this.isAuth = isAuth;
+  }
+}
+
+export class RateLimitError extends Error {
+  constructor() {
+    super(
+      "The RPC node is rate limited. Try again in a moment, or configure a custom RPC endpoint to increase capacity.",
+    );
+    this.name = "RateLimitError";
   }
 }
 
@@ -369,17 +388,20 @@ export function isNotFoundError(e: unknown): boolean {
 /**
  * Map a raw Soroban error string to a friendlier message. Contract errors
  * surface as `Error(Contract, #N)`; we translate the codes we know about.
+ * Returns an object with the message and a flag indicating if this is an Auth error.
  */
-function parseContractError(raw: string): string {
+function parseContractError(raw: string): { message: string; isAuth: boolean } {
   const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
   if (codeMatch) {
     const code = Number(codeMatch[1]);
-    return KNOWN_CONTRACT_ERRORS[code] ?? `Contract rejected the call (code ${code}).`;
+    const isAuth = code === 3; // Error code 3 is Auth
+    const message = KNOWN_CONTRACT_ERRORS[code] ?? `Contract rejected the call (code ${code}).`;
+    return { message, isAuth };
   }
   if (/trustline|insufficient/i.test(raw)) {
-    return "Insufficient balance or a missing trustline for the payment token.";
+    return { message: "Insufficient balance or a missing trustline for the payment token.", isAuth: false };
   }
-  return "The contract call could not be completed.";
+  return { message: "The contract call could not be completed.", isAuth: false };
 }
 
 /**

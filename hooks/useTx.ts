@@ -1,16 +1,18 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import type { TxPhase, TxResult, TxTelemetry } from "@/types";
+import type { TxPhase, TxResult, TxTelemetry, TxErrorType } from "@/types";
 import type { WriteCtx } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
 import { ContractError } from "@/lib/stellar";
+import { UserRejectedError } from "@/lib/freighter";
 
 interface RunResult {
   phase: TxPhase;
   hash: string | null;
   error: string | null;
+  errorType: TxErrorType;
   /** True while the transaction is building/signing/submitting/confirming. */
   pending: boolean;
   /**
@@ -42,17 +44,20 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
   const [phase, setPhase] = useState<TxPhase>("idle");
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<TxErrorType>("generic");
   const t = telemetry ?? noopTelemetry;
 
   const reset = useCallback(() => {
     setPhase("idle");
     setHash(null);
     setError(null);
+    setErrorType("generic");
   }, []);
 
   const run = useCallback(
     async (action: (ctx: WriteCtx) => Promise<TxResult>) => {
       setError(null);
+      setErrorType("generic");
       setHash(null);
       setPhase("building");
       t.onPhase?.("building");
@@ -68,15 +73,25 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
         t.onSuccess?.(result.hash, result);
         return result;
       } catch (e) {
+        // Handle user rejection specially: reset to idle without error message
+        if (e instanceof UserRejectedError) {
+          setPhase("idle");
+          t.onPhase?.("idle");
+          return null;
+        }
+
         const msg = e instanceof Error ? e.message : "Transaction failed.";
-        if (e instanceof ContractError && e.detail) {
+        let errType: TxErrorType = "generic";
+        if (e instanceof ContractError) {
           console.error("Transaction failed:", e.detail);
+          errType = e.isAuth ? "auth" : "generic";
         }
         setError(msg);
+        setErrorType(errType);
         setPhase("error");
         addToast({ title: "Transaction failed", description: msg, tone: "error" });
         t.onPhase?.("error", msg);
-        t.onError?.(msg, "error");
+        t.onError?.(msg, errType);
         return null;
       }
     },
@@ -87,6 +102,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     phase,
     hash,
     error,
+    errorType,
     pending: phase === "building" || phase === "signing" || phase === "submitting" || phase === "confirming",
     run,
     reset,

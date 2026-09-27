@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { truncateAddress } from "@/lib/format";
+import { DataFreshness } from "@/components/ui/DataFreshness";
 
 /**
  * Placeholder for the loaded portfolio: mirrors PortfolioSummary, the
@@ -69,7 +70,7 @@ function PortfolioSkeleton() {
 /** The full portfolio UI — requires a connected wallet. */
 export function PortfolioView() {
   const { address } = useWallet();
-  const { data, loading, error, refetch } = usePortfolio();
+  const { data, loading, error, refetch, updatedAt } = usePortfolio();
 
   // Passed to HoldingRow so a successful claim triggers a re-fetch
   const handleClaimed = useCallback(() => {
@@ -137,6 +138,7 @@ export function PortfolioView() {
 
   return (
     <div className="space-y-8">
+      <DataFreshness updatedAt={updatedAt} />
       <PortfolioSummary data={data} />
 
       <section>

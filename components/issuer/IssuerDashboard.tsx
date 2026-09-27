@@ -9,10 +9,13 @@ import { CompliancePanel } from "@/components/issuer/panels/CompliancePanel";
 import { DistributionPanel } from "@/components/issuer/panels/DistributionPanel";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { AssetTypeBadge } from "@/components/asset/AssetTypeBadge";
+import { CopyButton } from "@/components/ui/CopyButton";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { formatUsdCents } from "@/lib/format";
+import { truncateAddress } from "@/lib/display";
 import type { AssetEntry } from "@/types";
+import { DataFreshness } from "@/components/ui/DataFreshness";
 
 type Tab = "token" | "compliance" | "distributions";
 
@@ -128,6 +131,8 @@ export function IssuerDashboard() {
               loading={assetDetail.loading}
               paused={assetDetail.data?.metadata.paused}
               error={assetDetail.error}
+              admin={assetDetail.data?.metadata.admin}
+              updatedAt={assetDetail.updatedAt}
             />
 
             {/* Tab bar */}
@@ -166,23 +171,41 @@ export function IssuerDashboard() {
               />
             ) : assetDetail.data ? (
               <>
+                {/* Issue #367: Warn if connected wallet is not the asset admin */}
+                {address && address !== assetDetail.data.metadata.admin && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-200/90"
+                  >
+                    <p className="font-semibold">You are not the admin of this asset</p>
+                    <p className="mt-1 text-xs text-red-200/70">
+                      This asset is controlled by{" "}
+                      <code className="font-mono">{truncateAddress(assetDetail.data.metadata.admin)}</code>. Only the admin
+                      can perform these actions.
+                    </p>
+                  </div>
+                )}
+
                 {activeTab === "token" && (
                   <TokenPanel
                     asset={assetDetail.data}
                     onMinted={handleMutated}
                     onPauseToggled={handleMutated}
+                    isAdmin={address === assetDetail.data.metadata.admin}
                   />
                 )}
                 {activeTab === "compliance" && (
                   <CompliancePanel
                     asset={assetDetail.data}
                     onChanged={handleMutated}
+                    isAdmin={address === assetDetail.data.metadata.admin}
                   />
                 )}
                 {activeTab === "distributions" && (
                   <DistributionPanel
                     asset={assetDetail.data}
                     onCreated={handleMutated}
+                    isAdmin={address === assetDetail.data.metadata.admin}
                   />
                 )}
               </>
@@ -201,32 +224,51 @@ function AssetContextBar({
   loading,
   paused,
   error,
+  admin,
+  updatedAt,
 }: {
   asset: AssetEntry;
   loading: boolean;
   paused?: boolean;
   error?: string | null;
+  admin?: string;
+  updatedAt: number | null;
 }) {
   return (
-    <div className="card flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <AssetTypeBadge type={asset.assetType} />
-        {loading ? (
-          <Skeleton className="h-4 w-16" />
-        ) : paused ? (
-          <span className="chip border border-amber-500/30 bg-amber-500/10 text-amber-300">
-            Paused
-          </span>
-        ) : null}
-        <span className="text-base font-semibold text-base-100">{asset.name}</span>
-        <span className="text-sm text-base-100/40">#{asset.id.toString()}</span>
+    <div className="space-y-2">
+      <div className="card space-y-3 px-5 py-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <AssetTypeBadge type={asset.assetType} />
+            {loading ? (
+              <Skeleton className="h-4 w-16" />
+            ) : paused ? (
+              <span className="chip border border-amber-500/30 bg-amber-500/10 text-amber-300">
+                Paused
+              </span>
+            ) : null}
+            <span className="text-base font-semibold text-base-100">{asset.name}</span>
+            <span className="text-sm text-base-100/40">#{asset.id.toString()}</span>
+          </div>
+          <div className="text-right">
+            <p className="text-sm font-bold text-gold-300">
+              {formatUsdCents(asset.valuation, { compact: true })}
+            </p>
+            {error && <p className="text-[11px] text-red-400/80">Metadata unavailable</p>}
+          </div>
+        </div>
+        {/* Issue #370: Show the asset's admin address */}
+        {admin && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+            <div>
+              <p className="text-xs font-medium text-base-100/60">Controlled by</p>
+              <p className="font-mono text-xs text-base-100/80">{truncateAddress(admin)}</p>
+            </div>
+            <CopyButton value={admin} label="" className="shrink-0" />
+          </div>
+        )}
       </div>
-      <div className="text-right">
-        <p className="text-sm font-bold text-gold-300">
-          {formatUsdCents(asset.valuation, { compact: true })}
-        </p>
-        {error && <p className="text-[11px] text-red-400/80">Metadata unavailable</p>}
-      </div>
+      <DataFreshness updatedAt={updatedAt} />
     </div>
   );
 }

@@ -97,17 +97,18 @@ const asset: AssetDetail = {
 
 function setup() {
   mockUseWallet.mockReturnValue({ network: "testnet", address: null } as ReturnType<typeof useWallet>);
-  mockUseAsset.mockReturnValue({ data: asset, loading: false, error: null, notFound: false, refetch: jest.fn() });
-  mockUseBalance.mockReturnValue({ data: 0n, loading: false, error: null, refetch: jest.fn() });
-  mockUseDividends.mockReturnValue({ data: [], loading: false, error: null, refetch: jest.fn() });
-  mockUseHolders.mockReturnValue({ data: [], loading: false, error: null, refetch: jest.fn() });
+  mockUseAsset.mockReturnValue({ data: asset, loading: false, error: null, notFound: false, updatedAt: Date.now(), refetch: jest.fn() });
+  mockUseBalance.mockReturnValue({ data: 0n, loading: false, error: null, updatedAt: null, refetch: jest.fn() });
+  mockUseDividends.mockReturnValue({ data: [], loading: false, error: null, updatedAt: null, refetch: jest.fn() });
+  mockUseHolders.mockReturnValue({ data: [], loading: false, error: null, updatedAt: null, refetch: jest.fn() });
   mockUseComplianceOverview.mockReturnValue({
     data: { allowlistSize: 1, jurisdictions: [] },
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
   });
-  mockUseAsync.mockReturnValue({ data: 123, loading: false, error: null, refetch: jest.fn() });
+  mockUseAsync.mockReturnValue({ data: 123, loading: false, error: null, updatedAt: Date.now(), refetch: jest.fn() });
 }
 
 describe("AssetDetailView", () => {
@@ -132,6 +133,7 @@ describe("AssetDetailView", () => {
       data: null,
       loading: false,
       error: "Dividend service unavailable",
+      updatedAt: null,
       refetch: jest.fn(),
     });
 
@@ -148,6 +150,7 @@ describe("AssetDetailView", () => {
       data: null,
       loading: false,
       error: "Holder service unavailable",
+      updatedAt: null,
       refetch: jest.fn(),
     });
 
@@ -165,6 +168,7 @@ describe("AssetDetailView", () => {
       data: null,
       loading: false,
       error: "Compliance service unavailable",
+      updatedAt: null,
       refetch: jest.fn(),
     });
 
@@ -178,7 +182,7 @@ describe("AssetDetailView", () => {
 
   it("shows a not-found state with a link back to explore (no retry)", () => {
     setup();
-    mockUseAsset.mockReturnValue({ data: null, loading: false, error: null, notFound: true, refetch: jest.fn() });
+    mockUseAsset.mockReturnValue({ data: null, loading: false, error: null, notFound: true, updatedAt: null, refetch: jest.fn() });
     render(<AssetDetailView id={42n} />);
     expect(screen.getByRole("heading", { name: "Asset not found" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /back to explore/i })).toHaveAttribute("href", "/explore");
@@ -188,7 +192,7 @@ describe("AssetDetailView", () => {
   it("shows a retryable error state when the asset read fails", () => {
     setup();
     const refetch = jest.fn();
-    mockUseAsset.mockReturnValue({ data: null, loading: false, error: "RPC down", notFound: false, refetch });
+    mockUseAsset.mockReturnValue({ data: null, loading: false, error: "RPC down", notFound: false, updatedAt: null, refetch });
     render(<AssetDetailView id={1n} />);
     expect(screen.getByText("Couldn't load asset")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /try again/i }));

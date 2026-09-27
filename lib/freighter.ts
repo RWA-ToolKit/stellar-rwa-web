@@ -25,6 +25,18 @@ export class WalletError extends Error {
   }
 }
 
+/**
+ * Thrown when the user explicitly rejects a signing prompt in Freighter.
+ * This is distinct from a WalletError (actual failure) and should be handled
+ * as a normal, neutral user choice rather than an error.
+ */
+export class UserRejectedError extends Error {
+  constructor(message: string = "User rejected the request") {
+    super(message);
+    this.name = "UserRejectedError";
+  }
+}
+
 /** Whether the Freighter extension is installed and reachable. */
 export async function isFreighterInstalled(): Promise<boolean> {
   try {
@@ -94,7 +106,19 @@ export async function signTx(
     networkPassphrase,
     address,
   });
-  if (res.error) throw new WalletError(String(res.error));
+  if (res.error) {
+    const errorMsg = String(res.error).toLowerCase();
+    // Detect user rejection: Freighter uses "rejected" or "user denied"
+    if (
+      errorMsg.includes("user") ||
+      errorMsg.includes("reject") ||
+      errorMsg.includes("cancel") ||
+      errorMsg.includes("denied")
+    ) {
+      throw new UserRejectedError(String(res.error));
+    }
+    throw new WalletError(String(res.error));
+  }
   if (!res.signedTxXdr) throw new WalletError("Freighter returned no signature.");
   return res.signedTxXdr;
 }
