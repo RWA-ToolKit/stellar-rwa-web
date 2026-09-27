@@ -26,7 +26,7 @@ export function AssetStats({ asset, holders }: AssetStatsProps) {
     <dl className="divide-y divide-white/5">
       {rows.map((r) => (
         <div key={r.label} className="flex items-center justify-between py-2.5">
-          <dt className="text-sm text-base-100/50">{r.label}</dt>
+          <dt className="text-sm text-base-100/55">{r.label}</dt>
           <dd className="text-sm font-semibold text-base-100">{r.value}</dd>
         </div>
       ))}

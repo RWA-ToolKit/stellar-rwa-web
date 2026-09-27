@@ -17,7 +17,6 @@ jest.mock("@/components/dividend/DistributionCard", () => ({
 // and re-export the constant so HoldingRow's import still resolves.
 jest.mock("@/components/dividend/ClaimButton", () => ({
   ClaimButton: () => <button>Claim</button>,
-  PAYMENT_TOKEN_DECIMALS: 7,
 }));
 
 // next/link renders an <a> in test env, no mock needed
@@ -47,7 +46,7 @@ const BASE_HOLDING: Holding = {
   },
   balance: 100_00n, // 100.00 tokens
   claimableDistributions: [],
-  totalClaimable: 0n,
+  totalClaimable: [],
 };
 
 describe("HoldingRow", () => {
@@ -104,15 +103,15 @@ describe("HoldingRow", () => {
       expect(screen.queryByText(/claimable/i)).not.toBeInTheDocument();
     });
 
-    it("shows the claimable amount formatted with 7 decimals when present", () => {
+    it("shows claimable amounts formatted with their payment token decimals", () => {
       // 1_000_000_0n @ decimals=7 -> "1" XLM-unit
       const holding: Holding = {
         ...BASE_HOLDING,
-        totalClaimable: 1_000_000_0n,
+        totalClaimable: [{ paymentToken: "CPAYMENT", decimals: 7, amount: 1_000_000_0n }],
       };
       render(<HoldingRow holding={holding} />);
 
-      expect(screen.getByText("1")).toBeInTheDocument();
+      expect(screen.getByText("1 CPAYMENT")).toBeInTheDocument();
     });
   });
 
@@ -135,6 +134,7 @@ describe("HoldingRow", () => {
             paymentToken: "CPAYMENT",
             totalAmount: 1000n,
             distributed: 0n,
+            paymentTokenDecimals: 2,
             createdAt: 100,
             completed: false,
             claimable: 500n,
@@ -159,6 +159,7 @@ describe("HoldingRow", () => {
             paymentToken: "CPAYMENT",
             totalAmount: 1000n,
             distributed: 0n,
+            paymentTokenDecimals: 2,
             createdAt: 100,
             completed: false,
             claimable: 500n,
@@ -191,6 +192,7 @@ describe("HoldingRow", () => {
             paymentToken: "CPAYMENT",
             totalAmount: 1000n,
             distributed: 0n,
+            paymentTokenDecimals: 2,
             createdAt: 100,
             completed: false,
             claimable: 0n,

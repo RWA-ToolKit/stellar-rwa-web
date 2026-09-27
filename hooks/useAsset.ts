@@ -1,6 +1,7 @@
 "use client";
 
 import { registry, assetToken } from "@/lib/contracts";
+import { getCachedAsset, takePrefetchedAssetMetadata } from "@/lib/assetCache";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync, type AsyncState } from "@/hooks/useAsync";
 import { isNotFoundError } from "@/lib/stellar";
@@ -24,12 +25,16 @@ export function useAsset(id: bigint | null): AssetState {
       if (id === null) return null;
       let entry;
       try {
-        entry = await registry.getAsset(network, id);
+        entry =
+          getCachedAsset(network, id) ?? (await registry.getAsset(network, id));
       } catch (e) {
         if (isNotFoundError(e)) return null;
         throw e;
       }
-      const metadata = await assetToken.getMetadata(network, entry.tokenContract);
+      const metadata = await (takePrefetchedAssetMetadata(
+        network,
+        entry.tokenContract,
+      ) ?? assetToken.getMetadata(network, entry.tokenContract));
       return { ...entry, metadata };
     },
     [id?.toString(), network],

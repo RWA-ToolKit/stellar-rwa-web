@@ -84,6 +84,7 @@ const serverCache = new Map<Network, ServerCacheEntry>();
 
 function buildServer(cfg: NetworkConfig, urlIndex: number): rpc.Server {
   const url = cfg.rpcUrls[urlIndex] ?? cfg.rpcUrls[0];
+  if (!url) throw new Error("No RPC URLs are configured for this network.");
   return new rpc.Server(url, { allowHttp: url.startsWith("http://") });
 }
 
@@ -201,6 +202,12 @@ export function explorerTxUrl(network: Network, hash: string): string {
 
 export function explorerAccountUrl(network: Network, account: string): string {
   return `${explorerBase(network)}/account/${account}`;
+}
+
+export function explorerAddressUrl(network: Network, address: string): string {
+  return address.startsWith("C")
+    ? explorerContractUrl(network, address)
+    : explorerAccountUrl(network, address);
 }
 
 // ---- scVal argument builders (typed to match the contract signatures) ----
@@ -321,7 +328,11 @@ export async function invokeContract(
   } catch {
     // A missing/undecodable return value is non-fatal for void methods.
   }
-  return { hash: sent.hash, returnValue, estimatedFee };
+  return {
+    hash: sent.hash,
+    returnValue,
+    ...(estimatedFee !== undefined ? { estimatedFee } : {}),
+  };
 }
 
 async function pollTransaction(
@@ -359,7 +370,7 @@ export class ContractError extends Error {
   constructor(message: string, detail?: string, isAuth: boolean = false) {
     super(message);
     this.name = "ContractError";
-    this.detail = detail;
+    if (detail !== undefined) this.detail = detail;
     this.isAuth = isAuth;
   }
 }

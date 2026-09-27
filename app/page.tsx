@@ -81,7 +81,7 @@ export default function HomePage() {
           <h2 className="text-2xl font-bold tracking-tight text-base-100 sm:text-3xl">
             How it works
           </h2>
-          <p className="mx-auto mt-2 max-w-xl text-base-100/50">
+          <p className="mx-auto mt-2 max-w-xl text-base-100/55">
             From a real-world asset to on-chain dividends in four steps.
           </p>
         </div>

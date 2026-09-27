@@ -144,7 +144,7 @@ describe("TransferPanel", () => {
       metadata: { ...asset.metadata, paused: true },
     } as AssetDetail;
     setup(pausedAsset);
-    const run = mockUseTx.mock.results[0].value.run;
+    const run = mockUseTx.mock.results[0]!.value.run;
 
     expect(
       screen.getByText(/transfers are paused by the issuer.*unpauses the token/i),
@@ -238,6 +238,37 @@ describe("TransferPanel", () => {
       expect(
         screen.getByText(/maximum 0 decimal places/i),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("aria error association", () => {
+    it("links the recipient error to the input and marks it invalid", () => {
+      setup();
+      const input = screen.getByLabelText("Recipient address");
+      expect(input).not.toHaveAttribute("aria-invalid");
+
+      fireEvent.change(input, { target: { value: RECIPIENT } });
+
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      const errorId = input.getAttribute("aria-describedby");
+      expect(errorId).toBeTruthy();
+      expect(document.getElementById(errorId!)).toHaveTextContent(/isn't KYC-approved/i);
+    });
+
+    it("links the amount error to the input and marks it invalid", () => {
+      setup(assetWith2Decimals);
+      const input = screen.getByLabelText("Amount");
+
+      fireEvent.change(input, { target: { value: "1.256" } });
+
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(document.getElementById(input.getAttribute("aria-describedby")!)).toHaveTextContent(
+        /maximum 2 decimal places/i,
+      );
+
+      fireEvent.change(input, { target: { value: "1.25" } });
+      expect(input).not.toHaveAttribute("aria-invalid");
+      expect(input).not.toHaveAttribute("aria-describedby");
     });
   });
 

@@ -24,7 +24,8 @@ export function Step2AssetDetails({ validated, initial, onBack, onNext }: Step2P
 
   const [name, setName] = useState(initial.name ?? metadata.name ?? "");
   const [assetType, setAssetType] = useState(
-    initial.assetType ?? (ASSET_TYPES.includes(metadata.assetType as never) ? metadata.assetType : ASSET_TYPES[0]),
+    initial.assetType ??
+      (ASSET_TYPES.find((type) => type === metadata.assetType) ?? "real_estate"),
   );
   const [valuationInput, setValuationInput] = useState(
     initial.valuation ? formatRawPlain(initial.valuation, 2) : "",
@@ -68,7 +69,7 @@ export function Step2AssetDetails({ validated, initial, onBack, onNext }: Step2P
       <form onSubmit={onSubmit} className="card p-6 space-y-5">
         <div>
           <h2 className="text-lg font-semibold text-base-100">Asset details</h2>
-          <p className="mt-1 text-sm text-base-100/50">
+          <p className="mt-1 text-sm text-base-100/55">
             These fields are stored in the registry contract and shown throughout
             the platform.
           </p>
@@ -84,8 +85,14 @@ export function Step2AssetDetails({ validated, initial, onBack, onNext }: Step2P
             placeholder="e.g. Lagos Office Tower — Series A"
             maxLength={100}
             className="input"
+            aria-invalid={errors.name ? true : undefined}
+            aria-describedby={errors.name ? "asset-name-error" : undefined}
           />
-          {errors.name && <p className="mt-1 text-xs text-red-400">{errors.name}</p>}
+          {errors.name && (
+            <p id="asset-name-error" role="alert" className="mt-1 text-xs text-red-400">
+              {errors.name}
+            </p>
+          )}
         </div>
 
         {/* Asset type
@@ -118,7 +125,7 @@ export function Step2AssetDetails({ validated, initial, onBack, onNext }: Step2P
         <div>
           <label htmlFor="asset-valuation" className="label">Valuation (USD)</label>
           <div className="relative">
-            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-base-100/40">
+            <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-base-100/55">
               $
             </span>
             <input
@@ -128,15 +135,19 @@ export function Step2AssetDetails({ validated, initial, onBack, onNext }: Step2P
               placeholder="1,000,000"
               inputMode="decimal"
               className="input pl-7"
+              aria-invalid={errors.valuation ? true : undefined}
+              aria-describedby={errors.valuation ? "asset-valuation-error" : undefined}
             />
           </div>
           {previewCents && previewCents > 0n && (
-            <p className="mt-1 text-xs text-base-100/40">
+            <p className="mt-1 text-xs text-base-100/55">
               {formatUsdCents(previewCents)}
             </p>
           )}
           {errors.valuation && (
-            <p className="mt-1 text-xs text-red-400">{errors.valuation}</p>
+            <p id="asset-valuation-error" role="alert" className="mt-1 text-xs text-red-400">
+              {errors.valuation}
+            </p>
           )}
         </div>
 

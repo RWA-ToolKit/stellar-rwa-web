@@ -47,6 +47,45 @@ body {
   border-radius: 9999px;
 }
 
+/*
+ * #397 contrast: secondary text must be at least text-base-100/55 (≥5.0:1 on
+ * every base-* surface); see the audit table in tailwind.config.ts.
+ */
+
+/*
+ * #398 a11y: honour prefers-reduced-motion. Transitions and one-shot
+ * animations are effectively removed; the spinner stops rotating and instead
+ * pulses gently in opacity so a loading state is still perceivable without
+ * motion.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-spin {
+    animation: rwa-reduced-pulse 1.6s ease-in-out infinite !important;
+  }
+  .animate-pulse,
+  .animate-shimmer {
+    animation: none !important;
+  }
+}
+
+@keyframes rwa-reduced-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 @layer components {
   .card {
     @apply rounded-2xl border border-white/5 bg-base-900/70 backdrop-blur-sm;
@@ -83,11 +122,11 @@ body {
    * aesthetics and added a solid focus-visible ring to meet contrast.
    */
   .input {
-    @apply w-full rounded-xl border border-white/10 bg-base-950/60 px-3.5 py-2.5 text-sm text-base-100 placeholder:text-base-100/30 outline-none transition-colors focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20
+    @apply w-full rounded-xl border border-white/10 bg-base-950/60 px-3.5 py-2.5 text-sm text-base-100 placeholder:text-base-100/55 outline-none transition-colors focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20
            focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-base-950;
   }
   /*
-   * #218 a11y: .label was text-base-100/50 (~#96989c on #0c0e13 ≈ 4.5:1,
+   * #218 a11y: .label was text-base-100/55 (~#96989c on #0c0e13 ≈ 4.5:1,
    * borderline fail for small text). Bumped to /60 (#a5a7ab on #0c0e13 ≈ 5.3:1)
    * to pass WCAG AA for normal-weight small text.
    */

@@ -209,9 +209,7 @@ describe("ConnectButton", () => {
     it("closes the dropdown when the backdrop overlay is clicked", () => {
       openDropdown();
       expect(screen.getByRole("menu")).toBeInTheDocument();
-      // The backdrop is a fixed div rendered directly before the menu
-      const backdrop = document.querySelector("div.fixed.inset-0") as HTMLElement;
-      fireEvent.click(backdrop);
+      fireEvent.click(screen.getByRole("button", { name: "Close wallet menu" }));
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     });
 

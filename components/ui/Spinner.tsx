@@ -11,7 +11,11 @@ interface SpinnerProps {
   decorative?: boolean;
 }
 
-/** Minimal accessible spinner. */
+/**
+ * Minimal accessible spinner. Under `prefers-reduced-motion` (see
+ * app/globals.css) the rotation is replaced by a slow opacity pulse, so the
+ * loading state stays perceivable without spinning motion.
+ */
 export function Spinner({
   size = 20,
   className = "",
@@ -35,7 +39,7 @@ export function LoadingPanel({ label = "Loading…" }: { label?: string }) {
     <div
       role="status"
       aria-live="polite"
-      className="flex flex-col items-center justify-center gap-3 py-16 text-base-100/50"
+      className="flex flex-col items-center justify-center gap-3 py-16 text-base-100/55"
     >
       <Spinner size={28} decorative />
       <p className="text-sm">{label}</p>

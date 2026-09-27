@@ -18,3 +18,12 @@ updates:
           - "@types/jest"
           - "@testing-library/*"
           - "ts-jest"
+      framework:
+        patterns:
+          - "next"
+          - "@next/*"
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+          - "eslint-config-next"

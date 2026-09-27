@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { useAsset } from "../useAsset";
 import { registry, assetToken } from "@/lib/contracts";
+import { cacheAssetEntries, prefetchAssetMetadata } from "@/lib/assetCache";
 import { ContractError } from "@/lib/stellar";
 import type { AssetEntry, AssetMetadata } from "@/types";
 
@@ -54,7 +55,10 @@ function makeMetadata(overrides: Partial<AssetMetadata> = {}): AssetMetadata {
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe("useAsset", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    cacheAssetEntries("testnet", []);
+  });
 
   // ── id = null (disabled) ─────────────────────────────────────────────────
 
@@ -90,6 +94,22 @@ describe("useAsset", () => {
     );
     expect(result.current.data).toEqual({ ...entry, metadata });
     expect(result.current.error).toBeNull();
+  });
+
+  it("reuses the Explore entry and prefetched metadata without repeating those reads", async () => {
+    const entry = makeEntry();
+    const metadata = makeMetadata();
+    cacheAssetEntries("testnet", [entry]);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(metadata);
+
+    await prefetchAssetMetadata("testnet", entry.tokenContract);
+    const { result } = renderHook(() => useAsset(entry.id));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(registry.getAsset).not.toHaveBeenCalled();
+    expect(assetToken.getMetadata).toHaveBeenCalledTimes(1);
+    expect(result.current.data).toEqual({ ...entry, metadata });
   });
 
   // ── unknown / invalid id ─────────────────────────────────────────────────

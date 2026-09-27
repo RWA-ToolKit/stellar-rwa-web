@@ -4,6 +4,7 @@ import { useAsset, useBalance } from "@/hooks/useAsset";
 import { useComplianceOverview } from "@/hooks/useCompliance";
 import { useHolders } from "@/hooks/useHolders";
 import { useDividends } from "@/hooks/useDividends";
+import { useActivity } from "@/hooks/useActivity";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
 import { AssetDetailView } from "./AssetDetailView";
@@ -30,6 +31,10 @@ jest.mock("@/hooks/useHolders", () => ({
 
 jest.mock("@/hooks/useDividends", () => ({
   useDividends: jest.fn(),
+}));
+
+jest.mock("@/hooks/useActivity", () => ({
+  useActivity: jest.fn(),
 }));
 
 jest.mock("@/hooks/useWallet", () => ({
@@ -62,6 +67,10 @@ jest.mock("@/components/dividend/DistributionCard", () => ({
   DistributionCard: () => <p>Distribution card</p>,
 }));
 
+jest.mock("@/components/dividend/ClaimAllButton", () => ({
+  ClaimAllButton: () => null,
+}));
+
 const mockUseAsset = useAsset as jest.MockedFunction<typeof useAsset>;
 const mockUseBalance = useBalance as jest.MockedFunction<typeof useBalance>;
 const mockUseComplianceOverview = useComplianceOverview as jest.MockedFunction<
@@ -69,6 +78,7 @@ const mockUseComplianceOverview = useComplianceOverview as jest.MockedFunction<
 >;
 const mockUseHolders = useHolders as jest.MockedFunction<typeof useHolders>;
 const mockUseDividends = useDividends as jest.MockedFunction<typeof useDividends>;
+const mockUseActivity = useActivity as jest.MockedFunction<typeof useActivity>;
 const mockUseWallet = useWallet as jest.MockedFunction<typeof useWallet>;
 const mockUseAsync = useAsync as jest.MockedFunction<typeof useAsync>;
 
@@ -100,6 +110,7 @@ function setup() {
   mockUseAsset.mockReturnValue({ data: asset, loading: false, error: null, notFound: false, updatedAt: Date.now(), refetch: jest.fn() });
   mockUseBalance.mockReturnValue({ data: 0n, loading: false, error: null, updatedAt: null, refetch: jest.fn() });
   mockUseDividends.mockReturnValue({ data: [], loading: false, error: null, updatedAt: null, refetch: jest.fn() });
+  mockUseActivity.mockReturnValue({ data: [], loading: false, error: null, updatedAt: null, refetch: jest.fn() });
   mockUseHolders.mockReturnValue({ data: [], loading: false, error: null, updatedAt: null, refetch: jest.fn() });
   mockUseComplianceOverview.mockReturnValue({
     data: { allowlistSize: 1, jurisdictions: [] },
@@ -121,6 +132,7 @@ describe("AssetDetailView", () => {
 
     expect(screen.getByRole("heading", { name: "About this asset" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Dividend history" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Transfer history" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Holders" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Overview" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Compliance" })).toBeInTheDocument();
@@ -141,6 +153,22 @@ describe("AssetDetailView", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent("Dividend service unavailable");
     expect(screen.getByRole("heading", { name: "Holders" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Your position" })).toBeInTheDocument();
+  });
+
+  it("keeps the detail view available when activity fails", () => {
+    setup();
+    mockUseActivity.mockReturnValue({
+      data: null,
+      loading: false,
+      error: "Transfer history is unavailable",
+      updatedAt: null,
+      refetch: jest.fn(),
+    });
+
+    render(<AssetDetailView id={1n} />);
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Transfer history is unavailable");
     expect(screen.getByRole("heading", { name: "Your position" })).toBeInTheDocument();
   });
 

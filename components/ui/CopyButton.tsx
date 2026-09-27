@@ -85,7 +85,7 @@ export function CopyButton({ value, label, className = "" }: CopyButtonProps) {
       title={title}
       aria-label={`Copy ${label ?? value}`}
       className={`inline-flex items-center gap-1.5 transition-colors ${
-        failed ? "text-red-400/70" : "text-base-100/50 hover:text-brand-400"
+        failed ? "text-red-400/70" : "text-base-100/55 hover:text-brand-400"
       } ${className}`}
     >
       {copied ? (

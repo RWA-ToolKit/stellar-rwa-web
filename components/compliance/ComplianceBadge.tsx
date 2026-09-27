@@ -36,7 +36,7 @@ const STYLES: Record<Status, Style> = {
   },
   None: {
     bg: "border-white/10 bg-white/5",
-    text: "text-base-100/50",
+    text: "text-base-100/55",
     dot: "bg-base-100/40",
     label: "Not Registered",
   },

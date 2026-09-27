@@ -52,10 +52,14 @@ jest.mock("@/components/ui/TxProgress", () => ({
 
 import { useWallet } from "@/hooks/useWallet";
 import { useTx } from "@/hooks/useTx";
-import { ClaimButton } from "./ClaimButton";
+import { ClaimButton as ClaimButtonComponent } from "./ClaimButton";
 
 const mockUseWallet = useWallet as jest.MockedFunction<typeof useWallet>;
 const mockUseTx = useTx as jest.MockedFunction<typeof useTx>;
+
+function ClaimButton(props: Omit<React.ComponentProps<typeof ClaimButtonComponent>, "decimals"> & { decimals?: number }) {
+  return <ClaimButtonComponent {...props} decimals={props.decimals ?? 7} />;
+}
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -152,6 +156,21 @@ describe("ClaimButton", () => {
 
   // ── 4. Claimable amount present ──────────────────────────────────────────
   describe("when there is a claimable amount", () => {
+    it("formats the claimable amount using the payment token's decimal scale", () => {
+      setupWallet("GABCDEF1234");
+      setupTx();
+      render(
+        <ClaimButton
+          distributionId={DISTRIBUTION_ID}
+          claimable={12_345n}
+          claimed={false}
+          decimals={2}
+        />,
+      );
+
+      expect(screen.getByRole("button", { name: /claim 123\.45/i })).toBeInTheDocument();
+    });
+
     it("renders an enabled 'Claim <amount>' button", () => {
       setupWallet("GABCDEF1234");
       setupTx();

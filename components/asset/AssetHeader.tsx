@@ -28,7 +28,7 @@ export function AssetHeader({ asset, network }: AssetHeaderProps) {
             </span>
           )}
           {!asset.active && (
-            <span className="chip border border-white/10 bg-white/5 text-base-100/40">
+            <span className="chip border border-white/10 bg-white/5 text-base-100/55">
               Delisted
             </span>
           )}
@@ -42,19 +42,19 @@ export function AssetHeader({ asset, network }: AssetHeaderProps) {
 
         <div className="mt-5 flex flex-wrap items-end gap-x-8 gap-y-3">
           <div>
-            <p className="text-xs uppercase tracking-wide text-base-100/40">Valuation</p>
+            <p className="text-xs uppercase tracking-wide text-base-100/55">Valuation</p>
             <p className="mt-1 text-2xl font-bold text-gold-300 sm:text-3xl">
               {formatUsdCents(metadata.valuation)}
             </p>
           </div>
           <div>
-            <p className="text-xs uppercase tracking-wide text-base-100/40">Asset ID</p>
+            <p className="text-xs uppercase tracking-wide text-base-100/55">Asset ID</p>
             <p className="mt-1 text-lg font-semibold text-base-100">#{asset.id.toString()}</p>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3 text-xs text-base-100/50 sm:px-8">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-6 py-3 text-xs text-base-100/55 sm:px-8">
         <span className="flex items-center gap-1.5">
           Token
           <a
@@ -69,7 +69,14 @@ export function AssetHeader({ asset, network }: AssetHeaderProps) {
         </span>
         <span className="flex items-center gap-1.5">
           Issuer
-          <span className="font-mono text-base-100/70">{truncateAddress(asset.issuer, 6, 6)}</span>
+          <a
+            href={explorerContractUrl(network, asset.issuer).replace("/contract/", "/account/")}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-base-100/70 hover:text-brand-300"
+          >
+            {truncateAddress(asset.issuer, 6, 6)}
+          </a>
           <CopyButton value={asset.issuer} />
         </span>
       </div>

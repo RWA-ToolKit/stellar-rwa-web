@@ -1,5 +1,4 @@
-import { formatUsdCents, formatTokenAmount } from "@/lib/format";
-import { PAYMENT_TOKEN_DECIMALS } from "@/components/dividend/ClaimButton";
+import { formatUsdCents, formatTokenAmount, truncateAddress } from "@/lib/format";
 import type { PortfolioData } from "@/hooks/usePortfolio";
 
 interface PortfolioSummaryProps {
@@ -8,6 +7,19 @@ interface PortfolioSummaryProps {
 
 /** Header stat cards: portfolio value, holding count, total claimable dividends. */
 export function PortfolioSummary({ data }: PortfolioSummaryProps) {
+  const claimableValue =
+    data.totalClaimable.length > 0 ? (
+      <span className="flex flex-col items-end">
+        {data.totalClaimable.map(({ paymentToken, decimals, amount }) => (
+          <span key={`${paymentToken}:${decimals}`}>
+            {formatTokenAmount(amount, decimals)} {truncateAddress(paymentToken)}
+          </span>
+        ))}
+      </span>
+    ) : (
+      "—"
+    );
+
   const stats = [
     {
       label: "Estimated Value",
@@ -21,11 +33,8 @@ export function PortfolioSummary({ data }: PortfolioSummaryProps) {
     },
     {
       label: "Claimable Dividends",
-      value:
-        data.totalClaimable > 0n
-          ? formatTokenAmount(data.totalClaimable, PAYMENT_TOKEN_DECIMALS)
-          : "—",
-      accent: data.totalClaimable > 0n ? "text-brand-300" : "text-base-100/40",
+      value: claimableValue,
+      accent: data.totalClaimable.length > 0 ? "text-brand-300" : "text-base-100/55",
     },
   ];
 
@@ -47,7 +56,7 @@ export function PortfolioSummary({ data }: PortfolioSummaryProps) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {stats.map((s) => (
           <div key={s.label} className="card p-5">
-            <dt className="text-[11px] font-medium uppercase tracking-wide text-base-100/40">
+            <dt className="text-[11px] font-medium uppercase tracking-wide text-base-100/55">
               {s.label}
             </dt>
             <dd className={`mt-2 text-2xl font-bold ${s.accent}`}>{s.value}</dd>

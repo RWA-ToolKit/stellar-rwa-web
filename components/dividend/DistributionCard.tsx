@@ -9,7 +9,7 @@ import {
   truncateAddress,
   ledgerToApproxDate as approxDate,
 } from "@/lib/format";
-import { ClaimButton, PAYMENT_TOKEN_DECIMALS } from "./ClaimButton";
+import { ClaimButton } from "./ClaimButton";
 
 interface DistributionCardProps {
   distribution: DistributionWithClaim;
@@ -23,6 +23,8 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
   const [pendingClaim, setPendingClaim] = useState(0n);
   const displayedDistributed = d.distributed + pendingClaim;
   const pct = percent(displayedDistributed, d.totalAmount);
+  const deadline = d.claimDeadline ?? 0;
+  const expired = deadline > 0 && currentLedger !== null && currentLedger >= deadline;
   const when =
     currentLedger !== null ? approxDate(d.createdAt, currentLedger) : null;
 
@@ -42,27 +44,32 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
               </span>
             )}
           </div>
-          <p className="mt-1 text-xs text-base-100/40">
+          <p className="mt-1 text-xs text-base-100/55">
             {when
               ? `Created ~${formatDistanceToNow(when, { addSuffix: true })}`
               : `Ledger ${d.createdAt}`}
             {" · "}
             Payment token {truncateAddress(d.paymentToken)}
           </p>
+          {deadline > 0 && (
+            <p className={`mt-1 text-xs ${expired ? "text-red-300" : "text-gold-300"}`}>
+              {expired ? "Claim deadline passed" : `Claim by ledger ${deadline}`}
+            </p>
+          )}
         </div>
         <div className="text-right">
-          <p className="text-xs uppercase tracking-wide text-base-100/40">Total pool</p>
+          <p className="text-xs uppercase tracking-wide text-base-100/55">Total pool</p>
           <p className="text-lg font-bold text-gold-300">
-            {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
+            {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
           </p>
         </div>
       </div>
 
       <div className="mt-4">
-        <div className="mb-1.5 flex items-center justify-between text-xs text-base-100/50">
+        <div className="mb-1.5 flex items-center justify-between text-xs text-base-100/55">
           <span>{pendingClaim > 0n ? "Claimed (including pending)" : "Claimed"}</span>
           <span>
-            {formatTokenAmount(displayedDistributed, PAYMENT_TOKEN_DECIMALS)} / {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
+            {formatTokenAmount(displayedDistributed, d.paymentTokenDecimals)} / {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
             {" "}({pct.toFixed(1)}%)
           </span>
         </div>
@@ -85,7 +92,9 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             distributionId={d.id}
             claimable={d.claimable}
             claimed={d.claimed}
-            onClaimed={onClaimed}
+            expired={expired}
+            decimals={d.paymentTokenDecimals}
+            {...(onClaimed !== undefined ? { onClaimed } : {})}
             onPendingClaim={setPendingClaim}
           />
         </div>

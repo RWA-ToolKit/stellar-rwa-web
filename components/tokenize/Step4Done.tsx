@@ -72,12 +72,12 @@ export function Step4Done({ validated, name, assetType, valuation, assetId, txHa
 
       {/* Next steps */}
       <div className="border-t border-white/5 bg-white/[0.015] px-6 py-5 sm:px-10">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-base-100/40">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-base-100/55">
           Recommended next steps
         </p>
         <ol className="space-y-2 text-sm text-base-100/60">
           <li className="flex gap-2.5">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] font-bold text-base-100/50">1</span>
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] font-bold text-base-100/55">1</span>
             <span>
               Go to the{" "}
               <Link href="/issuer" className="text-brand-400 hover:underline">
@@ -87,11 +87,11 @@ export function Step4Done({ validated, name, assetType, valuation, assetId, txHa
             </span>
           </li>
           <li className="flex gap-2.5">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] font-bold text-base-100/50">2</span>
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] font-bold text-base-100/55">2</span>
             <span>Mint tokens to KYC-approved holders from the Token tab.</span>
           </li>
           <li className="flex gap-2.5">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] font-bold text-base-100/50">3</span>
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] font-bold text-base-100/55">3</span>
             <span>Create a dividend distribution when yield is ready to distribute.</span>
           </li>
         </ol>
@@ -113,7 +113,7 @@ function Row({
 }) {
   return (
     <div className="flex items-center justify-between py-2.5">
-      <dt className="text-sm text-base-100/50">{label}</dt>
+      <dt className="text-sm text-base-100/55">{label}</dt>
       <dd className={`text-sm font-semibold ${accent ?? "text-base-100"} ${mono ? "font-mono" : ""}`}>
         {value}
       </dd>

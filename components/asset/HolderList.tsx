@@ -4,11 +4,12 @@ import { useEffect } from "react";
 import { useHolders, type Holder } from "@/hooks/useHolders";
 import { formatTokenAmount, holderSharePercentages, truncateAddress } from "@/lib/format";
 import { useWallet } from "@/hooks/useWallet";
+import { explorerAddressUrl } from "@/lib/stellar";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import type { AssetDetail } from "@/types";
+import type { AssetDetail, Network } from "@/types";
 
 interface HolderListProps {
   asset: AssetDetail;
@@ -20,7 +21,7 @@ interface HolderListProps {
 
 export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
   const { metadata } = asset;
-  const { address } = useWallet();
+  const { address, network } = useWallet();
   const { data, loading, error, refetch } = useHolders(
     metadata.complianceContract,
     asset.tokenContract,
@@ -35,7 +36,7 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 py-6 text-sm text-base-100/40">
+      <div className="flex items-center gap-2 py-6 text-sm text-base-100/55">
         <Spinner size={16} /> Loading holders…
       </div>
     );
@@ -60,60 +61,50 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
     );
   }
 
+  const shares = holderSharePercentages(
+    holders.map((holder) => holder.balance),
+    metadata.totalSupply,
+  );
+
   // Address / balance / share is genuinely tabular data, so a real table gives
   // assistive tech column headers instead of a bare list of rows.
   return (
     <table className="w-full text-left">
       <caption className="sr-only">Token holders with balance and share of supply</caption>
       <thead>
-        <tr className="border-b border-white/5 text-xs uppercase tracking-wide text-base-100/40">
+        <tr className="border-b border-white/5 text-xs uppercase tracking-wide text-base-100/55">
           <th scope="col" className="py-2 pr-3 font-medium">Address</th>
           <th scope="col" className="py-2 pr-3 text-right font-medium">Balance</th>
           <th scope="col" className="py-2 text-right font-medium">Share of supply</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-white/5">
-        {holders.map((h) => (
+        {holders.map((h, index) => (
           <HolderRow
             key={h.address}
             holder={h}
+            network={network}
             decimals={metadata.decimals}
             symbol={metadata.symbol}
-            supply={metadata.totalSupply}
+            share={shares[index] ?? "0.00"}
             isYou={h.address === address}
           />
         ))}
       </tbody>
     </table>
-  const shares = holderSharePercentages(
-    holders.map((holder) => holder.balance),
-    metadata.totalSupply,
-  );
-
-  return (
-    <ul className="divide-y divide-white/5">
-      {holders.map((h, index) => (
-        <HolderRow
-          key={h.address}
-          holder={h}
-          decimals={metadata.decimals}
-          symbol={metadata.symbol}
-          share={shares[index]}
-          isYou={h.address === address}
-        />
-      ))}
-    </ul>
   );
 }
 
 function HolderRow({
   holder,
+  network,
   decimals,
   symbol,
   share,
   isYou,
 }: {
   holder: Holder;
+  network: Network;
   decimals: number;
   symbol: string;
   share: string;
@@ -123,9 +114,14 @@ function HolderRow({
     <tr>
       <th scope="row" className="py-3 pr-3 text-left font-normal">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-sm text-base-100/80">
+          <a
+            href={explorerAddressUrl(network ?? "testnet", holder.address)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-sm text-base-100/80 hover:text-brand-300"
+          >
             {truncateAddress(holder.address, 6, 6)}
-          </span>
+          </a>
           {isYou && (
             <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">You</span>
           )}
@@ -135,24 +131,7 @@ function HolderRow({
       <td className="py-3 pr-3 text-right text-sm font-semibold text-base-100">
         {formatTokenAmount(holder.balance, decimals)} {symbol}
       </td>
-      <td className="py-3 text-right text-xs text-base-100/40">{share.toFixed(2)}%</td>
+      <td className="py-3 text-right text-xs text-base-100/55">{share}%</td>
     </tr>
-    <li className="flex items-center justify-between gap-3 py-3">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-sm text-base-100/80">
-          {truncateAddress(holder.address, 6, 6)}
-        </span>
-        {isYou && (
-          <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">You</span>
-        )}
-        <CopyButton value={holder.address} />
-      </div>
-      <div className="text-right">
-        <p className="text-sm font-semibold text-base-100">
-          {formatTokenAmount(holder.balance, decimals)} {symbol}
-        </p>
-        <p className="text-xs text-base-100/40">{share}% of supply</p>
-      </div>
-    </li>
   );
 }

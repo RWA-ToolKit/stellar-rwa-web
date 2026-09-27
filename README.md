@@ -79,6 +79,9 @@ To point the app at different deployments (e.g., local, alternative RPC, or Main
 
 > This project is currently configured for Stellar Testnet only. Mainnet contract IDs are intentionally left blank in [.env.example](.env.example), so the app will not expose fully working mainnet routes until those values are populated.
 
+Use Node.js 20 for local development, matching CI. The repository pins this
+major in `.nvmrc` and npm rejects unsupported Node versions during install.
+
 ```bash
 cp .env.example .env.local   # Testnet contract ids are pre-filled
 npm install
@@ -97,6 +100,12 @@ Install the [Freighter](https://freighter.app) browser extension and point it at
 | `npm run start`   | Serve the production build       |
 | `npm run lint`    | Next.js ESLint                   |
 | `npm run typecheck` | `tsc --noEmit`                 |
+| `npm run size`    | Check the configured bundle-size budgets |
+
+The CI build also generates module-level Webpack Bundle Analyzer reports and
+uploads them as the `bundle-analysis` artifact, including when the size-budget
+check fails. To generate them locally, run `ANALYZE=true npm run build`; the
+reports are written to `.next/analyze/`.
 | `npm test`        | Jest unit and component tests   |
 | `npm run test:e2e` | Playwright browser tests       |
 
@@ -130,6 +139,9 @@ types/          Domain types mirroring the contracts
 - **Writes** build → simulate → assemble → sign (Freighter) → submit → poll,
   surfacing each phase to the UI and mapping contract errors to friendly text.
 - Monetary valuations are stored on-chain as **USD cents** (`i128`); token
+  amounts are integers in each token's own `decimals` base. Dividend payment
+  amounts use the payment token's on-chain decimals and portfolio totals remain
+  grouped by token so different units are never added together.
   amounts are integers in each token's own `decimals` base.
 - For concrete component → hook → API/RPC read paths and the simulate → sign →
   submit write path, see [Application Data Flow](docs/data-flow.md).

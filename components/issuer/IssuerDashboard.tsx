@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { formatUsdCents } from "@/lib/format";
 import { truncateAddress } from "@/lib/display";
+import { explorerAddressUrl } from "@/lib/stellar";
 import type { AssetEntry } from "@/types";
 import { DataFreshness } from "@/components/ui/DataFreshness";
 
@@ -52,7 +53,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function IssuerDashboard() {
-  const { address } = useWallet();
+  const { address, network } = useWallet();
   const [selectedAsset, setSelectedAsset] = useState<AssetEntry | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("token");
 
@@ -81,7 +82,7 @@ export function IssuerDashboard() {
         </div>
         <div>
           <h2 className="text-xl font-semibold text-base-100">Connect your wallet</h2>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-base-100/50">
+          <p className="mx-auto mt-2 max-w-sm text-sm text-base-100/55">
             Connect the wallet used to register your assets. Only the asset admin
             can access issuer controls.
           </p>
@@ -96,7 +97,7 @@ export function IssuerDashboard() {
       {/* Left sidebar: asset selector */}
       <aside className="lg:col-span-1">
         <div className="card p-4">
-          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-base-100/40">
+          <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-base-100/55">
             Your assets
           </h2>
           <IssuerAssetSelector
@@ -121,7 +122,7 @@ export function IssuerDashboard() {
             >
               <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <p className="text-sm text-base-100/40">Select an asset to manage</p>
+            <p className="text-sm text-base-100/55">Select an asset to manage</p>
           </div>
         ) : (
           <div className="space-y-5">
@@ -129,9 +130,14 @@ export function IssuerDashboard() {
             <AssetContextBar
               asset={selectedAsset}
               loading={assetDetail.loading}
-              paused={assetDetail.data?.metadata.paused}
               error={assetDetail.error}
-              admin={assetDetail.data?.metadata.admin}
+              {...(assetDetail.data
+                ? {
+                    paused: assetDetail.data.metadata.paused,
+                    admin: assetDetail.data.metadata.admin,
+                  }
+                : {})}
+              network={network}
               updatedAt={assetDetail.updatedAt}
             />
 
@@ -144,7 +150,7 @@ export function IssuerDashboard() {
                   className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
                     activeTab === tab.id
                       ? "bg-white/10 text-base-100"
-                      : "text-base-100/50 hover:text-base-100"
+                      : "text-base-100/55 hover:text-base-100"
                   }`}
                 >
                   {tab.icon}
@@ -225,6 +231,7 @@ function AssetContextBar({
   paused,
   error,
   admin,
+  network,
   updatedAt,
 }: {
   asset: AssetEntry;
@@ -232,6 +239,7 @@ function AssetContextBar({
   paused?: boolean;
   error?: string | null;
   admin?: string;
+  network: import("@/types").Network;
   updatedAt: number | null;
 }) {
   return (
@@ -248,7 +256,7 @@ function AssetContextBar({
               </span>
             ) : null}
             <span className="text-base font-semibold text-base-100">{asset.name}</span>
-            <span className="text-sm text-base-100/40">#{asset.id.toString()}</span>
+            <span className="text-sm text-base-100/55">#{asset.id.toString()}</span>
           </div>
           <div className="text-right">
             <p className="text-sm font-bold text-gold-300">
@@ -262,7 +270,14 @@ function AssetContextBar({
           <div className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
             <div>
               <p className="text-xs font-medium text-base-100/60">Controlled by</p>
-              <p className="font-mono text-xs text-base-100/80">{truncateAddress(admin)}</p>
+              <a
+                href={explorerAddressUrl(network ?? "testnet", admin)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs text-base-100/80 hover:text-brand-300"
+              >
+                {truncateAddress(admin)}
+              </a>
             </div>
             <CopyButton value={admin} label="" className="shrink-0" />
           </div>

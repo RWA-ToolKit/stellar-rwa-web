@@ -3,15 +3,46 @@
 import { useCallback } from "react";
 import Link from "next/link";
 import { useWallet } from "@/hooks/useWallet";
-import { usePortfolio } from "@/hooks/usePortfolio";
+import { usePortfolio, type Holding } from "@/hooks/usePortfolio";
 import { PortfolioSummary } from "@/components/portfolio/PortfolioSummary";
 import { HoldingRow } from "@/components/portfolio/HoldingRow";
+import { ClaimAllButton } from "@/components/dividend/ClaimAllButton";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import { truncateAddress } from "@/lib/format";
+import { formatTokenAmount, formatUsdCents, truncateAddress } from "@/lib/format";
 import { DataFreshness } from "@/components/ui/DataFreshness";
+
+function exportHoldingsCsv(holdings: Holding[]) {
+  const rows = holdings.map((holding) => {
+    const { asset, metadata, balance } = holding;
+    const estimatedValue =
+      metadata.totalSupply > 0n
+        ? (asset.valuation * balance) / metadata.totalSupply
+        : 0n;
+    return [
+      asset.name,
+      asset.id.toString(),
+      metadata.symbol,
+      asset.tokenContract,
+      formatTokenAmount(balance, metadata.decimals),
+      formatUsdCents(estimatedValue),
+    ];
+  });
+  const csv = [
+    ["Asset", "Asset ID", "Symbol", "Token Contract", "Balance", "Estimated Value (USD)"],
+    ...rows,
+  ]
+    .map((row) => row.map((value) => `"${value.replaceAll('"', '""')}"`).join(","))
+    .join("\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `stellar-portfolio-${new Date().toISOString().slice(0, 10)}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 /**
  * Placeholder for the loaded portfolio: mirrors PortfolioSummary, the
@@ -89,7 +120,7 @@ export function PortfolioView() {
         </div>
         <div>
           <h2 className="text-xl font-semibold text-base-100">Connect your wallet</h2>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-base-100/50">
+          <p className="mx-auto mt-2 max-w-sm text-sm text-base-100/55">
             Your holdings and claimable dividends appear here once you connect a
             Freighter wallet.
           </p>
@@ -134,9 +165,14 @@ export function PortfolioView() {
   }
 
   // Separate holdings with and without claimable dividends for section ordering
-  const withClaimable = data.holdings.filter((h) => h.totalClaimable > 0n);
-  const withoutClaimable = data.holdings.filter((h) => h.totalClaimable === 0n);
+  const withClaimable = data.holdings.filter((h) => h.totalClaimable.length > 0);
+  const withoutClaimable = data.holdings.filter((h) => h.totalClaimable.length === 0);
   const ordered = [...withClaimable, ...withoutClaimable];
+  const claimableDistributions = data.holdings.flatMap((holding) =>
+    holding.claimableDistributions.filter(
+      (distribution) => !distribution.claimed && distribution.claimable > 0n,
+    ),
+  );
 
   return (
     <div className="space-y-8">
@@ -146,20 +182,35 @@ export function PortfolioView() {
       <section>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-base-100">Your Holdings</h2>
-          <p className="text-sm text-base-100/40">
-            Connected as{" "}
-            <span className="font-mono text-base-100/60">{truncateAddress(address)}</span>
-          </p>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <p className="text-sm text-base-100/55">
+              Connected as{" "}
+              <span className="font-mono text-base-100/60">{truncateAddress(address)}</span>
+            </p>
+            <button
+              type="button"
+              onClick={() => exportHoldingsCsv(data.holdings)}
+              className="btn-secondary py-1.5 text-xs"
+            >
+              Export CSV
+            </button>
+          </div>
         </div>
 
         {withClaimable.length > 0 && (
-          <div className="mb-2 flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/20 text-[10px] font-bold text-brand-300">
-              {withClaimable.length}
-            </span>
-            <p className="text-xs text-brand-300/80 font-medium">
-              {withClaimable.length === 1 ? "asset has" : "assets have"} claimable dividends
-            </p>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/20 text-[10px] font-bold text-brand-300">
+                {withClaimable.length}
+              </span>
+              <p className="text-xs text-brand-300/80 font-medium">
+                {withClaimable.length === 1 ? "asset has" : "assets have"} claimable dividends
+              </p>
+            </div>
+            <ClaimAllButton
+              distributions={claimableDistributions}
+              onClaimed={handleClaimed}
+            />
           </div>
         )}
 

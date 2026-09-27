@@ -24,11 +24,11 @@ export function EmptyState({
     <div
       className={`flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-white/10 px-6 py-16 text-center ${className}`}
     >
-      {icon && <div className="text-base-100/30">{icon}</div>}
+      {icon && <div className="text-base-100/55">{icon}</div>}
       <div>
         <Heading className="text-base font-semibold text-base-100">{title}</Heading>
         {description && (
-          <p className="mx-auto mt-1 max-w-sm text-sm text-base-100/50">{description}</p>
+          <p className="mx-auto mt-1 max-w-sm text-sm text-base-100/55">{description}</p>
         )}
       </div>
       {action && <div className="mt-2">{action}</div>}

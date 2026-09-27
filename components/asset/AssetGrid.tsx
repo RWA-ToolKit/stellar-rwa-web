@@ -14,6 +14,8 @@ interface AssetGridProps {
   totalPages?: number;
   total?: number;
   onPageChange?: (page: number) => void;
+  /** Heading level for each card's title, so the page keeps a correct hierarchy. */
+  headingLevel?: 2 | 3;
 }
 
 /** Responsive grid of asset cards, with optional pagination. */
@@ -25,6 +27,7 @@ export function AssetGrid({
   totalPages,
   total,
   onPageChange,
+  headingLevel,
 }: AssetGridProps) {
   // Skeletons stand in for the whole grid, so there is nothing to paginate yet.
   if (loading) return <CardSkeletonGrid count={skeletonCount} />;
@@ -32,24 +35,15 @@ export function AssetGrid({
   const showPagination =
     Boolean(page && totalPages && totalPages > 1 && onPageChange);
 
-/** Responsive grid of asset cards. */
-export function AssetGrid({
-  assets,
-  headingLevel,
-}: {
-  assets: AssetEntry[];
-  headingLevel?: 2 | 3;
-}) {
-  return (
-    <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-      {assets.map((asset) => (
-        <AssetCard key={asset.id.toString()} asset={asset} headingLevel={headingLevel} />
-      ))}
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
         {assets.map((asset) => (
-          <AssetCard key={asset.id.toString()} asset={asset} />
+          <AssetCard
+            key={asset.id.toString()}
+            asset={asset}
+            {...(headingLevel !== undefined ? { headingLevel } : {})}
+          />
         ))}
       </div>
 
@@ -83,6 +77,8 @@ function PaginationBar({
     start = Math.max(1, end - MAX_VISIBLE_PAGES + 1);
   }
   const pages = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  const firstPage = pages[0];
+  const lastPage = pages[pages.length - 1];
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-white/5 pt-5">
@@ -103,7 +99,7 @@ function PaginationBar({
           ←
         </button>
 
-        {pages[0] > 1 && (
+        {firstPage !== undefined && firstPage > 1 && (
           <>
             <button
               type="button"
@@ -113,7 +109,7 @@ function PaginationBar({
             >
               1
             </button>
-            {pages[0] > 2 && (
+            {firstPage > 2 && (
               <span className="px-1 text-sm text-base-100/30" aria-hidden="true">
                 …
               </span>
@@ -141,9 +137,9 @@ function PaginationBar({
           );
         })}
 
-        {pages[pages.length - 1] < totalPages && (
+        {lastPage !== undefined && lastPage < totalPages && (
           <>
-            {pages[pages.length - 1] < totalPages - 1 && (
+            {lastPage < totalPages - 1 && (
               <span className="px-1 text-sm text-base-100/30" aria-hidden="true">
                 …
               </span>
