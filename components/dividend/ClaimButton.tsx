@@ -14,6 +14,7 @@ interface ClaimButtonProps {
   distributionId: bigint;
   claimable: bigint;
   claimed: boolean;
+  decimals: number;
   onClaimed?: () => void;
   onPendingClaim?: (amount: bigint) => void;
 }
@@ -27,6 +28,7 @@ export function ClaimButton({
   distributionId,
   claimable,
   claimed,
+  decimals,
   onClaimed,
   onPendingClaim,
 }: ClaimButtonProps) {
@@ -71,7 +73,7 @@ export function ClaimButton({
         >
           {nothing
             ? "Nothing to claim"
-            : `Claim ${formatTokenAmount(claimable, PAYMENT_TOKEN_DECIMALS)}`}
+            : `Claim ${formatTokenAmount(claimable, decimals)}`}
         </button>
       ) : (
         <TxProgress

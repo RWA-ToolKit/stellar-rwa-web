@@ -133,8 +133,8 @@ export function PortfolioView() {
   }
 
   // Separate holdings with and without claimable dividends for section ordering
-  const withClaimable = data.holdings.filter((h) => h.totalClaimable > 0n);
-  const withoutClaimable = data.holdings.filter((h) => h.totalClaimable === 0n);
+  const withClaimable = data.holdings.filter((h) => h.totalClaimable.length > 0);
+  const withoutClaimable = data.holdings.filter((h) => h.totalClaimable.length === 0);
   const ordered = [...withClaimable, ...withoutClaimable];
   const claimableDistributions = data.holdings.flatMap((holding) =>
     holding.claimableDistributions.filter(

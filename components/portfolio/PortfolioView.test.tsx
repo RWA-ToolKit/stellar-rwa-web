@@ -75,11 +75,11 @@ const PORTFOLIO_WITH_HOLDING: PortfolioData = {
       },
       balance: 10000n,
       claimableDistributions: [],
-      totalClaimable: 0n,
+      totalClaimable: [],
     },
   ],
   totalValueCents: 250000n,
-  totalClaimable: 0n,
+  totalClaimable: [],
   failedAssetCount: 0,
   isIncomplete: false,
 };
@@ -103,7 +103,7 @@ describe("PortfolioView", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("prompts disconnected users to connect their wallet", () => {
-    setup({ data: { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false } });
+    setup({ data: { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false } });
 
     expect(
       screen.getByRole("heading", { name: /connect your wallet/i }),
@@ -130,7 +130,7 @@ describe("PortfolioView", () => {
       holdings: [
         {
           ...PORTFOLIO_WITH_HOLDING.holdings[0]!,
-          totalClaimable: 200n,
+          totalClaimable: [{ paymentToken: "CPAYMENT", decimals: 7, amount: 200n }],
           claimableDistributions: [
             {
               id: 1n,
@@ -140,6 +140,7 @@ describe("PortfolioView", () => {
               distributed: 0n,
               createdAt: 1,
               completed: false,
+              paymentTokenDecimals: 7,
               claimable: 100n,
               claimed: false,
             },
@@ -151,13 +152,14 @@ describe("PortfolioView", () => {
               distributed: 0n,
               createdAt: 2,
               completed: false,
+              paymentTokenDecimals: 7,
               claimable: 100n,
               claimed: false,
             },
           ],
         },
       ],
-      totalClaimable: 200n,
+      totalClaimable: [{ paymentToken: "CPAYMENT", decimals: 7, amount: 200n }],
     };
     setup({ address: "GCONNECTED123456789", data });
 

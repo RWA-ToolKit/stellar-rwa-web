@@ -31,6 +31,7 @@ const distributions: DistributionWithClaim[] = [1n, 2n, 3n].map((id) => ({
   distributed: 0n,
   createdAt: 100,
   completed: false,
+  paymentTokenDecimals: 7,
   claimable: 100n,
   claimed: false,
 }));

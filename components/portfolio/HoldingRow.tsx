@@ -3,8 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Holding } from "@/hooks/usePortfolio";
-import { assetHref, formatTokenAmount, formatUsdCents, percent } from "@/lib/format";
-import { PAYMENT_TOKEN_DECIMALS } from "@/components/dividend/ClaimButton";
+import { assetHref, formatTokenAmount, formatUsdCents, percent, truncateAddress } from "@/lib/format";
 import { AssetTypeBadge } from "@/components/asset/AssetTypeBadge";
 import { DistributionCard } from "@/components/dividend/DistributionCard";
 
@@ -76,12 +75,14 @@ export function HoldingRow({ holding, onClaimed }: HoldingRowProps) {
               {formatUsdCents(estimatedValue, { compact: true })}
             </dd>
           </div>
-          {totalClaimable > 0n && (
+          {totalClaimable.length > 0 && (
             <div>
               <dt className="text-[11px] uppercase tracking-wide text-base-100/40">Claimable</dt>
-              <dd className="mt-0.5 text-lg font-bold text-brand-300">
-                {formatTokenAmount(totalClaimable, PAYMENT_TOKEN_DECIMALS)}
-              </dd>
+              {totalClaimable.map(({ paymentToken, decimals, amount }) => (
+                <dd key={`${paymentToken}:${decimals}`} className="mt-0.5 text-lg font-bold text-brand-300">
+                  {formatTokenAmount(amount, decimals)} {truncateAddress(paymentToken)}
+                </dd>
+              ))}
             </div>
           )}
         </dl>
