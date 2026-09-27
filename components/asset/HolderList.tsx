@@ -69,29 +69,31 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
   // Address / balance / share is genuinely tabular data, so a real table gives
   // assistive tech column headers instead of a bare list of rows.
   return (
-    <table className="w-full text-left">
-      <caption className="sr-only">Token holders with balance and share of supply</caption>
-      <thead>
-        <tr className="border-b border-white/5 text-xs uppercase tracking-wide text-base-100/55">
-          <th scope="col" className="py-2 pr-3 font-medium">Address</th>
-          <th scope="col" className="py-2 pr-3 text-right font-medium">Balance</th>
-          <th scope="col" className="py-2 text-right font-medium">Share of supply</th>
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-white/5">
-        {holders.map((h, index) => (
-          <HolderRow
-            key={h.address}
-            holder={h}
-            network={network}
-            decimals={metadata.decimals}
-            symbol={metadata.symbol}
-            share={shares[index] ?? "0.00"}
-            isYou={h.address === address}
-          />
-        ))}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full text-left">
+        <caption className="sr-only">Token holders with balance and share of supply</caption>
+        <thead>
+          <tr className="border-b border-white/5 text-xs uppercase tracking-wide text-base-100/55">
+            <th scope="col" className="py-2 pr-3 font-medium">Address</th>
+            <th scope="col" className="py-2 pr-3 text-right font-medium">Balance</th>
+            <th scope="col" className="py-2 text-right font-medium">Share of supply</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-white/5">
+          {holders.map((h, index) => (
+            <HolderRow
+              key={h.address}
+              holder={h}
+              network={network}
+              decimals={metadata.decimals}
+              symbol={metadata.symbol}
+              share={shares[index] ?? "0.00"}
+              isYou={h.address === address}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

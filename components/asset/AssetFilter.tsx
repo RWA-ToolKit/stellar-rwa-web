@@ -33,7 +33,7 @@ export function AssetFilter({
   counts,
 }: AssetFilterProps) {
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-4">
       <label className="sr-only" htmlFor="asset-search">Search assets</label>
       <input
         id="asset-search"
@@ -41,14 +41,14 @@ export function AssetFilter({
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
         placeholder="Search by name, ID, issuer or token"
-        className="input w-full sm:max-w-sm"
+        className="input w-full"
       />
 
       {/* #215 a11y: focus-visible rings added to filter chip buttons.
           #216 a11y: aria-label encodes the count so screen readers announce it
                      alongside the visible badge (e.g. "Real Estate, 12 assets").
           #218 a11y: inactive chip text bumped from /60 to /70. */}
-      <div role="group" aria-label="Filter by asset type" className="flex flex-wrap gap-2">
+      <div role="group" aria-label="Filter by asset type" className="flex flex-wrap gap-2 sm:gap-3">
         {TYPE_OPTIONS.map((opt) => {
           const active = value.type === opt.value;
           const count = counts?.[opt.value];
@@ -87,7 +87,7 @@ export function AssetFilter({
           value={value.sort}
           onChange={(e) => onChange({ ...value, sort: e.target.value as SortKey })}
           aria-label="Sort assets"
-          className="input w-auto cursor-pointer py-2 pr-8"
+          className="input w-full sm:w-auto cursor-pointer py-2 pr-8"
         >
           <option value="valuation">Highest valuation</option>
           <option value="newest">Newest</option>
