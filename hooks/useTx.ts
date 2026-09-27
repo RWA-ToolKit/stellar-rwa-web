@@ -59,6 +59,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
       setError(null);
       setErrorType("generic");
       setHash(null);
+      setEstimatedFee(null);
       setPhase("building");
       t.onPhase?.("building");
       try {
@@ -68,6 +69,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
         });
         const result = await action(ctx);
         setHash(result.hash);
+        setEstimatedFee(result.estimatedFee ?? null);
         setPhase("success");
         t.onPhase?.("success");
         t.onSuccess?.(result.hash, result);
@@ -86,6 +88,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
           console.error("Transaction failed:", e.detail);
           errType = e.isAuth ? "auth" : "generic";
         }
+
         setError(msg);
         setErrorType(errType);
         setPhase("error");

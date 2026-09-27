@@ -7,6 +7,26 @@ import type { AssetType, ComplianceStatus } from "@/types";
 import { ASSET_TYPE_LABELS } from "@/types";
 
 /**
+ * Format XLM (in stroops, the atomic unit: 1 XLM = 10,000,000 stroops)
+ * as a currency string, e.g. 1000000n -> "0.1 XLM".
+ * Used for displaying network fees estimated during transaction simulation.
+ */
+export function formatStroopsToXLM(stroops: bigint | number): string {
+  const base = 10_000_000; // Stroops per XLM
+  const xlm = typeof stroops === "bigint" ? stroops : BigInt(stroops);
+  const whole = xlm / BigInt(base);
+  const remainder = xlm % BigInt(base);
+
+  if (remainder === 0n) {
+    return `${whole.toString()} XLM`;
+  }
+
+  // Format fractional part with trailing zeros removed
+  const fracStr = remainder.toString().padStart(7, "0").replace(/0+$/, "");
+  return `${whole}.${fracStr} XLM`;
+}
+
+/**
  * Format USD cents (bigint) as a currency string, e.g. 500000000n -> "$5,000,000".
  * Stays in bigint until the final string conversion so valuations above
  * Number.MAX_SAFE_INTEGER (2^53-1 cents) keep full precision — mirror of how

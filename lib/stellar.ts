@@ -21,6 +21,7 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import type { Network, TxResult } from "@/types";
+import { parseContractError } from "@/lib/contractErrors";
 
 interface NetworkConfig {
   /** Ordered candidates; the first is primary, the rest are failover RPCs. */
@@ -291,6 +292,9 @@ export async function invokeContract(
   }
   const prepared = rpc.assembleTransaction(built, sim).build();
 
+  // Extract the estimated fee from simulation for display to the user
+  const estimatedFee = sim.minResourceFee ? BigInt(sim.minResourceFee) : undefined;
+
   onPhase?.("signing");
   const signedXdr = await sign(prepared.toXDR());
   const signedTx = TransactionBuilder.fromXDR(signedXdr, passphrase);
@@ -319,7 +323,7 @@ export async function invokeContract(
   } catch {
     // A missing/undecodable return value is non-fatal for void methods.
   }
-  return { hash: sent.hash, returnValue };
+  return { hash: sent.hash, returnValue, estimatedFee };
 }
 
 async function pollTransaction(
@@ -334,10 +338,7 @@ async function pollTransaction(
     const res = await server.getTransaction(hash);
     if (res.status !== rpc.Api.GetTransactionStatus.NOT_FOUND) return res;
     if (Date.now() - start > timeoutMs) {
-      throw new ContractError(
-        "Timed out waiting for confirmation. The transaction may still land — check the explorer.",
-        hash,
-      );
+      throw new TransactionTimeoutError(hash);
     }
     await sleep(2000);
   }
@@ -404,18 +405,4 @@ function parseContractError(raw: string): { message: string; isAuth: boolean } {
   return { message: "The contract call could not be completed.", isAuth: false };
 }
 
-/**
- * Union of the error enums across the four contracts. Codes overlap between
- * contracts, so messages are written to read sensibly regardless of source.
- */
-const KNOWN_CONTRACT_ERRORS: Record<number, string> = {
-  1: "Already initialized.",
-  2: "Contract is not initialized.",
-  3: "You are not authorized to perform this action.",
-  4: "The requested record was not found.",
-  5: "Invalid amount or valuation.",
-  6: "This asset is currently paused.",
-  7: "The sender is not KYC-approved for this asset.",
-  8: "The recipient is not KYC-approved for this asset.",
-  9: "Amount overflow.",
-};
+
