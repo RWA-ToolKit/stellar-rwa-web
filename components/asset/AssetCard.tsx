@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import Link from "next/link";
 import type { AssetEntry } from "@/types";
 import { assetHref, formatUsdCents, truncateAddress } from "@/lib/format";
@@ -19,7 +20,7 @@ interface AssetCardProps {
 }
 
 /** Summary card linking to an asset's detail page. */
-export function AssetCard({ asset, holders, supply, headingLevel = 3 }: AssetCardProps) {
+function AssetCardComponent({ asset, holders, supply, headingLevel = 3 }: AssetCardProps) {
   const Heading = `h${headingLevel}` as const;
   const { network } = useWallet();
 
@@ -87,3 +88,5 @@ export function AssetCard({ asset, holders, supply, headingLevel = 3 }: AssetCar
     </Link>
   );
 }
+
+export const AssetCard = memo(AssetCardComponent);

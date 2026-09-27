@@ -17,6 +17,7 @@
 jest.mock("./globals.css", () => {});
 
 import { render, screen, fireEvent } from "@testing-library/react";
+import { renderToStaticMarkup } from "react-dom/server";
 import GlobalError from "./global-error";
 
 describe("app/global-error.tsx", () => {
@@ -32,28 +33,27 @@ describe("app/global-error.tsx", () => {
     (console.error as jest.Mock).mockRestore();
   });
 
+  // GlobalError renders its own <html>/<body>. A plain `render()` mounts into
+  // a detached <div>, where those tags aren't valid children, so React drops
+  // them and their attributes are lost to a DOM query. `renderToStaticMarkup`
+  // serializes the markup as Next.js itself would, without that constraint.
   it("renders the html and body elements", () => {
-    const { container } = render(<GlobalError error={testError} reset={mockReset} />);
+    const html = renderToStaticMarkup(<GlobalError error={testError} reset={mockReset} />);
 
-    const htmlEl = container.querySelector("html");
-    const bodyEl = container.querySelector("body");
-
-    expect(htmlEl).toBeInTheDocument();
-    expect(bodyEl).toBeInTheDocument();
+    expect(html).toMatch(/^<html[^>]*>/);
+    expect(html).toContain("<body");
   });
 
   it("sets the html lang attribute to 'en'", () => {
-    const { container } = render(<GlobalError error={testError} reset={mockReset} />);
+    const html = renderToStaticMarkup(<GlobalError error={testError} reset={mockReset} />);
 
-    const htmlEl = container.querySelector("html");
-    expect(htmlEl).toHaveAttribute("lang", "en");
+    expect(html).toMatch(/<html[^>]*\blang="en"/);
   });
 
   it("applies the dark theme class to html", () => {
-    const { container } = render(<GlobalError error={testError} reset={mockReset} />);
+    const html = renderToStaticMarkup(<GlobalError error={testError} reset={mockReset} />);
 
-    const htmlEl = container.querySelector("html");
-    expect(htmlEl).toHaveClass("dark");
+    expect(html).toMatch(/<html[^>]*\bclass="dark"/);
   });
 
   it("renders the error title", () => {
@@ -105,10 +105,12 @@ describe("app/global-error.tsx", () => {
   });
 
   it("applies centering layout classes to body", () => {
-    const { container } = render(<GlobalError error={testError} reset={mockReset} />);
+    const html = renderToStaticMarkup(<GlobalError error={testError} reset={mockReset} />);
+    const bodyMatch = html.match(/<body class="([^"]*)"/);
 
-    const bodyEl = container.querySelector("body");
-    expect(bodyEl).toHaveClass("flex", "min-h-screen", "flex-col", "items-center", "justify-center");
+    for (const cls of ["flex", "min-h-screen", "flex-col", "items-center", "justify-center"]) {
+      expect(bodyMatch?.[1]).toContain(cls);
+    }
   });
 
   it("renders button with primary styling", () => {

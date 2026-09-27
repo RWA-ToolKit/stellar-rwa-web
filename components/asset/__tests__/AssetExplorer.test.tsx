@@ -212,12 +212,14 @@ describe("AssetExplorer", () => {
   });
 
   it("updates q in the URL, preserves other filters, and resets pagination", () => {
+    jest.useFakeTimers();
     setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET] }, "type=invoice&sort=newest&page=2");
     render(<AssetExplorer />);
 
     fireEvent.change(screen.getByRole("searchbox"), {
       target: { value: "  trade invoice  " },
     });
+    jest.advanceTimersByTime(300);
 
     expect(mockReplace).toHaveBeenCalledTimes(1);
     const url: string = mockReplace.mock.calls[0][0];
@@ -225,15 +227,19 @@ describe("AssetExplorer", () => {
     expect(url).toContain("type=invoice");
     expect(url).toContain("sort=newest");
     expect(url).not.toContain("page=");
+    jest.useRealTimers();
   });
 
   it("removes q from the URL when the search field is cleared", () => {
+    jest.useFakeTimers();
     setupMock({ assets: [REAL_ESTATE_ASSET] }, "q=lagos");
     render(<AssetExplorer />);
 
     fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+    jest.advanceTimersByTime(300);
 
     expect(mockReplace).toHaveBeenCalledWith("/explore", { scroll: false });
+    jest.useRealTimers();
   });
 
   it.each([
@@ -310,27 +316,33 @@ describe("AssetExplorer", () => {
   // ── filter chip interactions push to router ────────────────────────────
 
   it("calls router.push with type param when a filter chip is clicked", () => {
+    jest.useFakeTimers();
     setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] });
     render(<AssetExplorer />);
 
     const realEstateChip = screen.getByRole("button", { name: /real estate/i });
     fireEvent.click(realEstateChip);
+    jest.advanceTimersByTime(300);
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     const url: string = mockPush.mock.calls[0][0];
     expect(url).toContain("type=real_estate");
+    jest.useRealTimers();
   });
 
   it("calls router.push without type param when 'All Assets' chip is clicked", () => {
+    jest.useFakeTimers();
     setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET] }, "type=invoice");
     render(<AssetExplorer />);
 
     fireEvent.click(screen.getByRole("button", { name: /all assets/i }));
+    jest.advanceTimersByTime(300);
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     const url: string = mockPush.mock.calls[0][0];
     // 'all' should not add a type param (clean URL)
     expect(url).not.toContain("type=");
+    jest.useRealTimers();
   });
 
   // ── type filtering ─────────────────────────────────────────────────────
@@ -422,6 +434,7 @@ describe("AssetExplorer", () => {
   });
 
   it("resets to page 1 when a filter chip is clicked", () => {
+    jest.useFakeTimers();
     const manyRealEstate = Array.from({ length: 10 }, (_, i) =>
       makeAsset({
         id: BigInt(i + 1),
@@ -435,10 +448,12 @@ describe("AssetExplorer", () => {
 
     // Apply filter — should call router.push without a page param (resets to 1)
     fireEvent.click(screen.getByRole("button", { name: /real estate/i }));
+    jest.advanceTimersByTime(300);
 
     expect(mockPush).toHaveBeenCalledTimes(1);
     const url: string = mockPush.mock.calls[0][0];
     expect(url).not.toContain("page=");
     expect(url).toContain("type=real_estate");
+    jest.useRealTimers();
   });
 });

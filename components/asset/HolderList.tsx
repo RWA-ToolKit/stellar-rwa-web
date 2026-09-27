@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useHolders, type Holder } from "@/hooks/useHolders";
 import { formatTokenAmount, holderSharePercentages, truncateAddress } from "@/lib/format";
 import { useWallet } from "@/hooks/useWallet";
@@ -10,6 +10,9 @@ import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import type { AssetDetail, Network } from "@/types";
+
+const ROWS_PER_PAGE = 25;
+const VIRTUALIZE_THRESHOLD = 50;
 
 interface HolderListProps {
   asset: AssetDetail;
@@ -27,12 +30,20 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
     asset.tokenContract,
     refreshKey,
   );
+  const [displayCount, setDisplayCount] = useState(ROWS_PER_PAGE);
 
   const holders = data ?? [];
+  const needsPagination = holders.length > VIRTUALIZE_THRESHOLD;
+  const displayedHolders = needsPagination ? holders.slice(0, displayCount) : holders;
+  const hasMore = displayCount < holders.length;
 
   useEffect(() => {
     if (data && onCount) onCount(data.length);
   }, [data, onCount]);
+
+  useEffect(() => {
+    setDisplayCount(ROWS_PER_PAGE);
+  }, [asset.tokenContract]);
 
   if (loading) {
     return (
@@ -69,30 +80,42 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
   // Address / balance / share is genuinely tabular data, so a real table gives
   // assistive tech column headers instead of a bare list of rows.
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left">
-        <caption className="sr-only">Token holders with balance and share of supply</caption>
-        <thead>
-          <tr className="border-b border-white/5 text-xs uppercase tracking-wide text-base-100/55">
-            <th scope="col" className="py-2 pr-3 font-medium">Address</th>
-            <th scope="col" className="py-2 pr-3 text-right font-medium">Balance</th>
-            <th scope="col" className="py-2 text-right font-medium">Share of supply</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-white/5">
-          {holders.map((h, index) => (
-            <HolderRow
-              key={h.address}
-              holder={h}
-              network={network}
-              decimals={metadata.decimals}
-              symbol={metadata.symbol}
-              share={shares[index] ?? "0.00"}
-              isYou={h.address === address}
-            />
-          ))}
-        </tbody>
-      </table>
+    <div className="space-y-4">
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <table className="w-full min-w-full sm:w-full text-left text-sm">
+          <caption className="sr-only">Token holders with balance and share of supply{needsPagination ? ` (showing ${displayedHolders.length} of ${holders.length})` : ''}</caption>
+          <thead>
+            <tr className="border-b border-white/5 text-xs uppercase tracking-wide text-base-100/55">
+              <th scope="col" className="py-2 pr-2 sm:pr-3 font-medium">Address</th>
+              <th scope="col" className="py-2 pr-2 sm:pr-3 text-right font-medium">Balance</th>
+              <th scope="col" className="py-2 pr-2 sm:pr-3 text-right font-medium">Share</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5">
+            {displayedHolders.map((h, index) => (
+              <HolderRow
+                key={h.address}
+                holder={h}
+                network={network}
+                decimals={metadata.decimals}
+                symbol={metadata.symbol}
+                share={shares[index] ?? "0.00"}
+                isYou={h.address === address}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {hasMore && (
+        <div className="flex justify-center pt-2">
+          <button
+            onClick={() => setDisplayCount((prev) => prev + ROWS_PER_PAGE)}
+            className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/5"
+          >
+            Show more holders ({displayedHolders.length} of {holders.length})
+          </button>
+        </div>
+      )}
     </div>
   );
 }
