@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { useAsset } from "../useAsset";
 import { registry, assetToken } from "@/lib/contracts";
+import { ContractError } from "@/lib/stellar";
 import type { AssetEntry, AssetMetadata } from "@/types";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
@@ -93,18 +94,32 @@ describe("useAsset", () => {
 
   // ── unknown / invalid id ─────────────────────────────────────────────────
 
-  it("surfaces an error when the registry does not recognise the id", async () => {
+  it("reports notFound (not an error) when the registry has no such asset", async () => {
     (registry.getAsset as jest.Mock).mockRejectedValue(
-      new Error("Asset not found"),
+      new ContractError("The requested record was not found.", "HostError: Error(Contract, #4)"),
     );
 
     const { result } = renderHook(() => useAsset(BigInt(9999)));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.error).toBe("Asset not found");
+    expect(result.current.notFound).toBe(true);
+    expect(result.current.error).toBeNull();
     expect(result.current.data).toBeNull();
     // Metadata must not have been fetched when the registry call failed
+    expect(assetToken.getMetadata).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a retryable error (not notFound) when the registry read fails", async () => {
+    (registry.getAsset as jest.Mock).mockRejectedValue(new Error("RPC unavailable"));
+
+    const { result } = renderHook(() => useAsset(BigInt(1)));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.notFound).toBe(false);
+    expect(result.current.error).toBe("RPC unavailable");
+    expect(result.current.data).toBeNull();
     expect(assetToken.getMetadata).not.toHaveBeenCalled();
   });
 

@@ -83,6 +83,14 @@ export function CompliancePanel({ asset, network }: CompliancePanelProps) {
             <span className="text-xs text-red-300">{blockedCount} blocked</span>
           )}
         </div>
+        <p
+          role="note"
+          className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-xs leading-relaxed text-amber-200/80"
+        >
+          <strong className="text-amber-200">Important:</strong> Jurisdictions are
+          read from KYC records in the allowlist. A blocked jurisdiction won&apos;t
+          appear here unless an approved address has that jurisdiction.
+        </p>
         {loading ? (
           <div className="flex items-center gap-2 text-xs text-base-100/55">
             <Spinner size={14} /> Checking jurisdictions…

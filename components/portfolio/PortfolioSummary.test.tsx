@@ -36,6 +36,8 @@ const HOLDING = (id: bigint, balance: bigint, supply: bigint, valuation: bigint)
   balance,
   claimableDistributions: [],
   totalClaimable: 0n,
+  failedAssetCount: 0,
+  isIncomplete: false,
 });
 
 describe("PortfolioSummary", () => {
@@ -44,6 +46,8 @@ describe("PortfolioSummary", () => {
       holdings: [],
       totalValueCents: 0n,
       totalClaimable: 0n,
+      failedAssetCount: 0,
+      isIncomplete: false,
     };
 
     it("renders all three stat cards", () => {
@@ -84,6 +88,8 @@ describe("PortfolioSummary", () => {
         ],
         totalValueCents: 8_750_000n,
         totalClaimable: 0n,
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 
@@ -95,6 +101,8 @@ describe("PortfolioSummary", () => {
         holdings: [HOLDING(1n, 1000n, 1000n, 5_000_000_00n)],
         totalValueCents: 5_000_000_00n, // $5,000,000
         totalClaimable: 0n,
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 
@@ -107,6 +115,8 @@ describe("PortfolioSummary", () => {
         holdings: [HOLDING(1n, 100n, 1000n, 250_000n)],
         totalValueCents: 25_000n, // $250
         totalClaimable: 0n,
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 
@@ -121,6 +131,8 @@ describe("PortfolioSummary", () => {
         holdings: [HOLDING(1n, 1000n, 1000n, 1_000_000n)],
         totalValueCents: 1_000_000n,
         totalClaimable: 5_000_000_0n,
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 
@@ -134,6 +146,8 @@ describe("PortfolioSummary", () => {
         holdings: [HOLDING(1n, 1000n, 1000n, 1_000_000n)],
         totalValueCents: 1_000_000n,
         totalClaimable: 1_000_000_0n,
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 

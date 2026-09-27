@@ -33,19 +33,27 @@ export function AssetCard({ asset, holders, supply }: AssetCardProps) {
         <p className="mt-0.5 text-xs text-base-100/55">Asset #{asset.id.toString()}</p>
       </div>
 
-      <dl className="grid grid-cols-2 gap-3 border-t border-white/5 pt-4">
+      <dl className="space-y-3 border-t border-white/5 pt-4">
         <div>
           <dt className="text-[11px] uppercase tracking-wide text-base-100/55">Valuation</dt>
           <dd className="mt-0.5 text-base font-semibold text-gold-300">
             {formatUsdCents(asset.valuation, { compact: true })}
           </dd>
         </div>
+        {supply && (
+          <div>
+            <dt className="text-[11px] uppercase tracking-wide text-base-100/40">Supply</dt>
+            <dd className="mt-0.5 text-base font-semibold text-base-100">{supply}</dd>
+          </div>
+        )}
         <div>
           <dt className="text-[11px] uppercase tracking-wide text-base-100/55">
             {supply ? "Supply" : "Holders"}
           </dt>
+          <dt className="text-[11px] uppercase tracking-wide text-base-100/40">Holders</dt>
+          {/* The count needs a per-asset read, so list views may not have it. */}
           <dd className="mt-0.5 text-base font-semibold text-base-100">
-            {supply ?? (holders !== undefined ? holders.toLocaleString() : "—")}
+            {holders === undefined ? "—" : holders.toLocaleString()}
           </dd>
         </div>
       </dl>

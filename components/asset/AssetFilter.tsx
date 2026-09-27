@@ -30,13 +30,14 @@ export function AssetFilter({ value, onChange, counts }: AssetFilterProps) {
           #216 a11y: aria-label encodes the count so screen readers announce it
                      alongside the visible badge (e.g. "Real Estate, 12 assets").
           #218 a11y: inactive chip text bumped from /60 to /70. */}
-      <div className="flex flex-wrap gap-2">
+      <div role="group" aria-label="Filter by asset type" className="flex flex-wrap gap-2">
         {TYPE_OPTIONS.map((opt) => {
           const active = value.type === opt.value;
           const count = counts?.[opt.value];
           return (
             <button
               key={opt.value}
+              type="button"
               onClick={() => onChange({ ...value, type: opt.value })}
               aria-pressed={active}
               aria-label={count !== undefined ? `${opt.label}, ${count} asset${count === 1 ? "" : "s"}` : opt.label}

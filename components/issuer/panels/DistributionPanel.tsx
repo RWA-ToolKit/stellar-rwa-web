@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
+import type { Network } from "@/types";
 import { assetToken, contractIds, dividend } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useAsync } from "@/hooks/useAsync";
@@ -17,18 +18,59 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { percent } from "@/lib/format";
 
+// ---- Known-token presets (#323) ----
+//
+// Issuers most commonly pay dividends in the native XLM Stellar Asset Contract
+// (SAC) or in a USDC-equivalent stablecoin. Hard-coding the well-known
+// testnet/mainnet contract IDs here lets the form surface a one-click shortcut
+// so the issuer doesn't have to find and paste the address manually.
+//
+// The XLM SAC is deterministic: on testnet it is the SEP-41 wrapper for the
+// native XLM asset deployed by the Stellar Development Foundation.
+// Sources:
+//   Testnet  – https://stellar.expert/explorer/testnet/contract/CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCN4
+//   Mainnet  – https://stellar.expert/explorer/public/contract/CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA
+
+interface KnownToken {
+  label: string;
+  symbol: string;
+  contractId: string;
+}
+
+const KNOWN_TOKENS: Record<Network, KnownToken[]> = {
+  testnet: [
+    {
+      label: "Native XLM (SAC)",
+      symbol: "XLM",
+      contractId: "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCN4",
+    },
+  ],
+  mainnet: [
+    {
+      label: "Native XLM (SAC)",
+      symbol: "XLM",
+      contractId: "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA",
+    },
+  ],
+};
+
 interface DistributionPanelProps {
   asset: AssetDetail;
   onCreated?: () => void;
+  isAdmin?: boolean;
 }
 
 /** Create new dividend distributions and view existing ones for the asset. */
-export function DistributionPanel({ asset, onCreated }: DistributionPanelProps) {
+export function DistributionPanel({ asset, onCreated, isAdmin = true }: DistributionPanelProps) {
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-base-100/50">
+        <strong>Required role:</strong> dividend contract caller must be registered issuer for this asset
+      </div>
       <CreateDistributionCard
         tokenContract={asset.tokenContract}
         onCreated={onCreated}
+        isAdmin={isAdmin}
       />
       <ExistingDistributionsCard tokenContract={asset.tokenContract} />
     </div>
@@ -40,9 +82,11 @@ export function DistributionPanel({ asset, onCreated }: DistributionPanelProps) 
 function CreateDistributionCard({
   tokenContract,
   onCreated,
+  isAdmin = true,
 }: {
   tokenContract: string;
   onCreated?: () => void;
+  isAdmin?: boolean;
 }) {
   const tx = useTx();
   const { address, network } = useWallet();
@@ -116,6 +160,14 @@ function CreateDistributionCard({
       setFormError("Total amount must be greater than zero.");
       return;
     }
+    if (balance !== null && raw > balance) {
+      setFormError("Total amount exceeds your payment-token balance.");
+      return;
+    }
+    if (allowance !== null && raw > allowance) {
+      setFormError("The dividend contract allowance is insufficient. Approve it to spend at least the requested amount before creating this distribution.");
+      return;
+    }
 
     const res = await tx.run((ctx) =>
       dividend.createDistribution(ctx, tokenContract, pt, raw),
@@ -146,7 +198,7 @@ function CreateDistributionCard({
             value={paymentToken}
             onChange={(e) => setPaymentToken(e.target.value)}
             placeholder="C… (SAC or Soroban token contract)"
-            disabled={tx.pending}
+            disabled={tx.pending || !isAdmin}
             className="input font-mono text-xs"
             spellCheck={false}
             aria-invalid={tokenInvalid || undefined}
@@ -155,6 +207,33 @@ function CreateDistributionCard({
           <p className="mt-1 text-[11px] text-base-100/55">
             This is the token used to pay holders — typically a stablecoin or XLM SAC.
           </p>
+
+          {/* #323: Known-token preset buttons so the issuer doesn't have to paste
+              the XLM SAC address (or other well-known tokens) manually. */}
+          {KNOWN_TOKENS[network] && KNOWN_TOKENS[network].length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] text-base-100/30">Presets:</span>
+              {KNOWN_TOKENS[network].map((token) => (
+                <button
+                  key={token.contractId}
+                  type="button"
+                  disabled={tx.pending}
+                  onClick={() => setPaymentToken(token.contractId)}
+                  aria-label={`Use ${token.label} (${token.contractId})`}
+                  className={[
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                    paymentToken.trim() === token.contractId
+                      ? "border-brand-500/50 bg-brand-500/10 text-brand-300"
+                      : "border-white/10 bg-white/[0.04] text-base-100/50 hover:border-white/20 hover:text-base-100/80",
+                  ].join(" ")}
+                >
+                  <span>{token.symbol}</span>
+                  <span className="text-base-100/30">·</span>
+                  <span>{token.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* #293: surface balance + allowance so the issuer knows before submitting */}
@@ -194,8 +273,11 @@ function CreateDistributionCard({
         )}
         {needsApproval && !insufficientBalance && (
           <p id="dist-total-error" role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90">
+        {needsApproval && (
+          <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90">
             The dividend contract is not approved to spend enough of this token on your behalf.
-            Submit an <strong className="font-semibold">approve</strong> transaction for at least{" "}
+            Creating this distribution is blocked until you submit an{" "}
+            <strong className="font-semibold">approve</strong> transaction for at least{" "}
             {formatTokenAmount(requestedRaw ?? 0n, PAYMENT_TOKEN_DECIMALS)} tokens before funding
             this distribution.
           </p>
@@ -210,7 +292,7 @@ function CreateDistributionCard({
               onChange={(e) => setTotalAmount(e.target.value)}
               placeholder="0.0000000"
               inputMode="decimal"
-              disabled={tx.pending}
+              disabled={tx.pending || !isAdmin}
               className="input pr-16"
               aria-invalid={totalInvalid || undefined}
               aria-describedby={totalErrorIds}
@@ -227,7 +309,20 @@ function CreateDistributionCard({
         {formError && <p id="dist-form-error" role="alert" className="text-xs text-red-400">{formError}</p>}
 
         {tx.phase === "idle" ? (
-          <button type="submit" disabled={tx.pending} className="btn-primary">
+          <button
+            type="submit"
+            disabled={tx.pending || !isAdmin || insufficientBalance || needsApproval}
+            className="btn-primary"
+            title={
+              !isAdmin
+                ? "Only the asset admin can create distributions"
+                : insufficientBalance
+                  ? "The requested amount exceeds your payment-token balance"
+                  : needsApproval
+                    ? "Approve the dividend contract before creating this distribution"
+                    : ""
+            }
+          >
             Create distribution
           </button>
         ) : (
@@ -235,6 +330,7 @@ function CreateDistributionCard({
             phase={tx.phase}
             hash={tx.hash}
             error={tx.error}
+            errorType={tx.errorType}
             onDismiss={tx.reset}
             successMessage="Distribution created. Holders can now claim their share."
           />

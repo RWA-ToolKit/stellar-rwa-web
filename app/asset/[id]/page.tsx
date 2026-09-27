@@ -1,16 +1,53 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AssetDetailView } from "@/components/asset/AssetDetailView";
+import { api } from "@/lib/api";
+import { registry } from "@/lib/contracts";
+import { DEFAULT_NETWORK } from "@/lib/stellar";
+import { formatUsdCents } from "@/lib/format";
 
 interface PageProps {
   params: { id: string };
 }
 
-export function generateMetadata({ params }: PageProps): Metadata {
+export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
+  const id = parseId(params.id);
+  const asset = id === null ? null : await getAssetForMetadata(id);
+  const name = asset?.name ?? `Asset #${params.id}`;
+  const description = asset
+    ? `${name} is valued at ${formatUsdCents(asset.valuation)}. Explore its holders and dividend history on Stellar RWA.`
+    : `Details, holders and dividend history for tokenized asset #${params.id} on Stellar.`;
+
   return {
-    title: `Asset #${params.id}`,
-    description: `Details, holders and dividend history for tokenized asset #${params.id} on Stellar.`,
+    title: name,
+    description,
+    openGraph: {
+      title: `${name} — Stellar RWA`,
+      description,
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title: `${name} — Stellar RWA`,
+      description,
+    },
   };
+}
+
+async function getAssetForMetadata(id: bigint) {
+  try {
+    const indexed = await api.getAsset(id);
+    if (indexed) return indexed;
+  } catch (error) {
+    console.warn(`Unable to load indexed metadata for asset ${id.toString()}:`, error);
+  }
+
+  try {
+    return await registry.getAsset(DEFAULT_NETWORK, id);
+  } catch (error) {
+    console.warn(`Unable to load registry metadata for asset ${id.toString()}:`, error);
+    return null;
+  }
 }
 
 function parseId(raw: string): bigint | null {

@@ -142,6 +142,8 @@ describe("usePortfolio", () => {
       holdings: [],
       totalValueCents: 0n,
       totalClaimable: 0n,
+      failedAssetCount: 0,
+      isIncomplete: false,
     });
   });
 });

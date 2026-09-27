@@ -19,7 +19,7 @@ export default function ExplorePage() {
           dividend history.
         </p>
       </div>
-      <Suspense fallback={<CardSkeletonGrid count={6} />}>
+      <Suspense fallback={<CardSkeletonGrid count={9} />}>
         <AssetExplorer />
       </Suspense>
     </div>

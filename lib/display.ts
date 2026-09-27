@@ -30,3 +30,9 @@ export function getDisplayText(value: string | null | undefined, fallback = "Unt
   const text = sanitizeDisplayText(value, { maxLength: SAFE_TEXT_LIMIT, maxLines: SAFE_LINE_LIMIT });
   return text || fallback;
 }
+
+/** Truncate a Stellar address for display: shows first 8 and last 8 characters. */
+export function truncateAddress(address: string): string {
+  if (address.length <= 16) return address;
+  return `${address.slice(0, 8)}…${address.slice(-8)}`;
+}

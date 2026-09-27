@@ -4,6 +4,8 @@ import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
 import type { WriteCtx } from "@/lib/contracts";
 import type { TxPhase } from "@/types";
+import { LockedWalletError, UserRejectedError } from "@/lib/freighter";
+import { TransactionTimeoutError } from "@/lib/stellar";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 
@@ -96,6 +98,25 @@ describe("useTx", () => {
     });
   });
 
+  it("resets to idle when user rejects the signing prompt, without showing an error", async () => {
+    const { result } = renderHook(() => useTx());
+
+    await act(async () => {
+      const res = await result.current.run(async () => {
+        throw new UserRejectedError("User rejected the signing prompt");
+      });
+      expect(res).toBeNull();
+    });
+
+    // Should be idle, not error
+    expect(result.current.phase).toBe("idle");
+    expect(result.current.hash).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(result.current.pending).toBe(false);
+    // Should not show a toast for user rejection
+    expect(mockAddToast).not.toHaveBeenCalled();
+  });
+
   it("resets state when reset is called", async () => {
     const { result } = renderHook(() => useTx());
 
@@ -133,5 +154,56 @@ describe("useTx", () => {
     expect(onPhase).toHaveBeenCalledWith("signing");
     expect(onPhase).toHaveBeenCalledWith("success");
     expect(onSuccess).toHaveBeenCalledWith("0xHASH", { hash: "0xHASH", status: "SUCCESS" });
+  });
+
+  it("detects locked wallet errors and calls onError with 'locked-wallet' phase", async () => {
+    const onError = jest.fn();
+    const { result } = renderHook(() => useTx({ onError }));
+
+    await act(async () => {
+      const res = await result.current.run(async () => {
+        throw new LockedWalletError();
+      });
+      expect(res).toBeNull();
+    });
+
+    expect(result.current.phase).toBe("error");
+    expect(result.current.error).toContain("locked");
+    expect(mockAddToast).toHaveBeenCalledWith({
+      title: "Transaction failed",
+      description: expect.stringContaining("locked"),
+      tone: "error",
+    });
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining("locked"),
+      "locked-wallet",
+    );
+  });
+
+  it("detects transaction timeout and sets phase to 'timeout' with hash preserved", async () => {
+    const onError = jest.fn();
+    const { result } = renderHook(() => useTx({ onError }));
+
+    const txHash = "0xabcd1234";
+
+    await act(async () => {
+      const res = await result.current.run(async () => {
+        throw new TransactionTimeoutError(txHash);
+      });
+      expect(res).toBeNull();
+    });
+
+    expect(result.current.phase).toBe("timeout");
+    expect(result.current.hash).toBe(txHash); // Hash preserved for explorer link
+    expect(result.current.error).toContain("timed out");
+    expect(mockAddToast).toHaveBeenCalledWith({
+      title: "Transaction failed",
+      description: expect.stringContaining("timed out"),
+      tone: "error",
+    });
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining("timed out"),
+      "timeout",
+    );
   });
 });
