@@ -288,7 +288,7 @@ describe("useComplianceOverview", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.data?.jurisdictions).toHaveLength(1);
-    expect(result.current.data?.jurisdictions[0].code).toBe("US");
+    expect(result.current.data?.jurisdictions.at(0)?.code).toBe("US");
     // isJurisdictionBlocked should have been called exactly once for "US".
     expect(mockIsJurisdictionBlocked).toHaveBeenCalledTimes(1);
     expect(mockIsJurisdictionBlocked).toHaveBeenCalledWith("testnet", "C_ID", "US");

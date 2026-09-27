@@ -21,6 +21,7 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import type { Network, TxResult } from "@/types";
+import { isAuthError, parseContractError } from "@/lib/contractErrors";
 
 interface NetworkConfig {
   /** Ordered candidates; the first is primary, the rest are failover RPCs. */
@@ -83,6 +84,7 @@ const serverCache = new Map<Network, ServerCacheEntry>();
 
 function buildServer(cfg: NetworkConfig, urlIndex: number): rpc.Server {
   const url = cfg.rpcUrls[urlIndex] ?? cfg.rpcUrls[0];
+  if (!url) throw new Error("No RPC URLs are configured for this network.");
   return new rpc.Server(url, { allowHttp: url.startsWith("http://") });
 }
 
@@ -247,8 +249,7 @@ export async function readContract<T = unknown>(
     withFailover(network, (server) => server.simulateTransaction(tx)),
   );
   if (rpc.Api.isSimulationError(sim)) {
-    const { message, isAuth } = parseContractError(sim.error);
-    throw new ContractError(message, sim.error, isAuth);
+    throw new ContractError(parseContractError(sim.error), sim.error, isAuthError(sim.error));
   }
   const retval = sim.result?.retval;
   if (!retval) return undefined as T;
@@ -292,10 +293,12 @@ export async function invokeContract(
   // user to sign, and so the transaction carries the right footprint + fees.
   const sim = await server.simulateTransaction(built);
   if (rpc.Api.isSimulationError(sim)) {
-    const { message, isAuth } = parseContractError(sim.error);
-    throw new ContractError(message, sim.error, isAuth);
+    throw new ContractError(parseContractError(sim.error), sim.error, isAuthError(sim.error));
   }
   const prepared = rpc.assembleTransaction(built, sim).build();
+
+  // Extract the estimated fee from simulation for display to the user
+  const estimatedFee = sim.minResourceFee ? BigInt(sim.minResourceFee) : undefined;
 
   onPhase?.("signing");
   const signedXdr = await sign(prepared.toXDR());
@@ -325,7 +328,11 @@ export async function invokeContract(
   } catch {
     // A missing/undecodable return value is non-fatal for void methods.
   }
-  return { hash: sent.hash, returnValue };
+  return {
+    hash: sent.hash,
+    returnValue,
+    ...(estimatedFee !== undefined ? { estimatedFee } : {}),
+  };
 }
 
 async function pollTransaction(
@@ -340,10 +347,7 @@ async function pollTransaction(
     const res = await server.getTransaction(hash);
     if (res.status !== rpc.Api.GetTransactionStatus.NOT_FOUND) return res;
     if (Date.now() - start > timeoutMs) {
-      throw new ContractError(
-        "Timed out waiting for confirmation. The transaction may still land — check the explorer.",
-        hash,
-      );
+      throw new TransactionTimeoutError(hash);
     }
     await sleep(2000);
   }
@@ -366,7 +370,7 @@ export class ContractError extends Error {
   constructor(message: string, detail?: string, isAuth: boolean = false) {
     super(message);
     this.name = "ContractError";
-    this.detail = detail;
+    if (detail !== undefined) this.detail = detail;
     this.isAuth = isAuth;
   }
 }
@@ -381,36 +385,30 @@ export class RateLimitError extends Error {
 }
 
 /**
- * Map a raw Soroban error string to a friendlier message. Contract errors
- * surface as `Error(Contract, #N)`; we translate the codes we know about.
- * Returns an object with the message and a flag indicating if this is an Auth error.
+ * True when a failed read means "no such record" (contract error #4) rather
+ * than a transient/RPC failure.
  */
-function parseContractError(raw: string): { message: string; isAuth: boolean } {
-  const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
-  if (codeMatch) {
-    const code = Number(codeMatch[1]);
-    const isAuth = code === 3; // Error code 3 is Auth
-    const message = KNOWN_CONTRACT_ERRORS[code] ?? `Contract rejected the call (code ${code}).`;
-    return { message, isAuth };
-  }
-  if (/trustline|insufficient/i.test(raw)) {
-    return { message: "Insufficient balance or a missing trustline for the payment token.", isAuth: false };
-  }
-  return { message: "The contract call could not be completed.", isAuth: false };
+export function isNotFoundError(e: unknown): boolean {
+  return (
+    e instanceof ContractError &&
+    /Error\(Contract,\s*#4\)/.test(e.detail ?? "")
+  );
 }
 
 /**
- * Union of the error enums across the four contracts. Codes overlap between
- * contracts, so messages are written to read sensibly regardless of source.
+ * Specialized error for when a transaction times out waiting for confirmation.
+ * The transaction hash is stored so the user can check the explorer.
  */
-const KNOWN_CONTRACT_ERRORS: Record<number, string> = {
-  1: "Already initialized.",
-  2: "Contract is not initialized.",
-  3: "You are not authorized to perform this action.",
-  4: "The requested record was not found.",
-  5: "Invalid amount or valuation.",
-  6: "This asset is currently paused.",
-  7: "The sender is not KYC-approved for this asset.",
-  8: "The recipient is not KYC-approved for this asset.",
-  9: "Amount overflow.",
-};
+export class TransactionTimeoutError extends ContractError {
+  readonly hash: string;
+  constructor(hash: string) {
+    super(
+      "Transaction confirmation timed out. The transaction may still land — check the explorer.",
+      hash,
+    );
+    this.name = "TransactionTimeoutError";
+    this.hash = hash;
+  }
+}
+
+

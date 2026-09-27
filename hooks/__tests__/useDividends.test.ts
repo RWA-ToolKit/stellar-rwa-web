@@ -1,12 +1,15 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { useDividends } from "../useDividends";
-import { dividend } from "@/lib/contracts";
+import { assetToken, dividend } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import type { Distribution } from "@/types";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 
 jest.mock("@/lib/contracts", () => ({
+  assetToken: {
+    decimals: jest.fn(),
+  },
   dividend: {
     getDistributionsForAsset: jest.fn(),
     claimable: jest.fn(),
@@ -39,6 +42,7 @@ describe("useDividends", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseWallet.mockReturnValue({ network: "testnet", address: "GUSER123" });
+    (assetToken.decimals as jest.Mock).mockResolvedValue(7);
   });
 
   it("does not fetch and returns empty array when assetToken is null", async () => {
@@ -69,8 +73,8 @@ describe("useDividends", () => {
 
     expect(dividend.getDistributionsForAsset).toHaveBeenCalledWith("testnet", "TOKEN_A");
     expect(result.current.data).toEqual([
-      { ...dist1, claimable: BigInt(50), claimed: false },
-      { ...dist2, claimable: BigInt(0), claimed: true },
+      { ...dist1, paymentTokenDecimals: 7, claimable: BigInt(50), claimed: false },
+      { ...dist2, paymentTokenDecimals: 7, claimable: BigInt(0), claimed: true },
     ]);
   });
 
@@ -97,7 +101,7 @@ describe("useDividends", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.data).toEqual([
-      { ...dist, claimable: 0n, claimed: false },
+      { ...dist, paymentTokenDecimals: 7, claimable: 0n, claimed: false },
     ]);
     expect(dividend.claimable).not.toHaveBeenCalled();
     expect(dividend.hasClaimed).not.toHaveBeenCalled();

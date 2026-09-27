@@ -11,7 +11,6 @@ import { useWallet } from "@/hooks/useWallet";
 import { getLatestLedger } from "@/lib/stellar";
 import { useDividends } from "@/hooks/useDividends";
 import { parseTokenAmount, formatTokenAmount, truncateAddress } from "@/lib/format";
-import { PAYMENT_TOKEN_DECIMALS } from "@/components/dividend/ClaimButton";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
@@ -70,7 +69,7 @@ export function DistributionPanel({ asset, onCreated, isAdmin = true }: Distribu
       </div>
       <CreateDistributionCard
         tokenContract={asset.tokenContract}
-        onCreated={onCreated}
+        {...(onCreated !== undefined ? { onCreated } : {})}
         isAdmin={isAdmin}
       />
       <ExistingDistributionsCard tokenContract={asset.tokenContract} />
@@ -103,25 +102,46 @@ function CreateDistributionCard({
       StrKey.isValidEd25519PublicKey(paymentToken.trim()));
 
   // #293: Show the issuer's balance in the payment token before they submit.
-  const { data: balance, loading: balanceLoading } = useAsync(
-    () => assetToken.balance(network, paymentToken.trim(), address!),
+  const { data: balanceData, loading: balanceLoading } = useAsync(
+    async () => ({
+      token: paymentToken.trim(),
+      amount: await assetToken.balance(network, paymentToken.trim(), address!),
+    }),
     [network, paymentToken, address],
     isValidPt && !!address,
   );
+  const balance = balanceData?.token === paymentToken.trim() ? balanceData.amount : null;
 
   // #293: Show how much the dividend contract is already approved to pull.
   // Issuers need to approve at least totalAmount before the distribution can be funded.
   const dividendContractId = contractIds(network).dividend;
-  const { data: allowance, loading: allowanceLoading } = useAsync(
-    () => assetToken.allowance(network, paymentToken.trim(), address!, dividendContractId),
+  const { data: allowanceData, loading: allowanceLoading } = useAsync(
+    async () => ({
+      token: paymentToken.trim(),
+      amount: await assetToken.allowance(network, paymentToken.trim(), address!, dividendContractId),
+    }),
     [network, paymentToken, address, dividendContractId],
     isValidPt && !!address,
   );
+  const allowance = allowanceData?.token === paymentToken.trim() ? allowanceData.amount : null;
+
+  const { data: decimalsData, loading: decimalsLoading, error: decimalsError } = useAsync(
+    async () => ({
+      token: paymentToken.trim(),
+      decimals: await assetToken.decimals(network, paymentToken.trim()),
+    }),
+    [network, paymentToken],
+    isValidPt,
+  );
+  const paymentTokenDecimals =
+    decimalsData?.token === paymentToken.trim() ? decimalsData.decimals : null;
 
   // Parse the requested amount for comparison (best-effort; errors handled on submit).
   let requestedRaw: bigint | null = null;
   try {
-    if (totalAmount.trim()) requestedRaw = parseTokenAmount(totalAmount, PAYMENT_TOKEN_DECIMALS);
+    if (totalAmount.trim() && paymentTokenDecimals !== null) {
+      requestedRaw = parseTokenAmount(totalAmount, paymentTokenDecimals);
+    }
   } catch {
     // handled at submit time
   }
@@ -141,13 +161,22 @@ function CreateDistributionCard({
 
     let raw: bigint;
     try {
-      raw = parseTokenAmount(totalAmount, PAYMENT_TOKEN_DECIMALS);
+      const decimals = await assetToken.decimals(network, pt);
+      raw = parseTokenAmount(totalAmount, decimals);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Invalid amount.");
       return;
     }
     if (raw <= 0n) {
       setFormError("Total amount must be greater than zero.");
+      return;
+    }
+    if (balance !== null && raw > balance) {
+      setFormError("Total amount exceeds your payment-token balance.");
+      return;
+    }
+    if (allowance !== null && raw > allowance) {
+      setFormError("The dividend contract allowance is insufficient. Approve it to spend at least the requested amount before creating this distribution.");
       return;
     }
     let deadline = 0;
@@ -259,9 +288,9 @@ function CreateDistributionCard({
               <span className="text-base-100/50">Your balance</span>
               {balanceLoading ? (
                 <Spinner size={10} />
-              ) : balance !== null ? (
+              ) : balance !== null && paymentTokenDecimals !== null ? (
                 <span className={insufficientBalance ? "font-semibold text-red-400" : "text-base-100/80"}>
-                  {formatTokenAmount(balance, PAYMENT_TOKEN_DECIMALS)}
+                  {formatTokenAmount(balance, paymentTokenDecimals)}
                 </span>
               ) : (
                 <span className="text-base-100/30">—</span>
@@ -271,9 +300,9 @@ function CreateDistributionCard({
               <span className="text-base-100/50">Dividend contract allowance</span>
               {allowanceLoading ? (
                 <Spinner size={10} />
-              ) : allowance !== null ? (
+              ) : allowance !== null && paymentTokenDecimals !== null ? (
                 <span className={needsApproval ? "font-semibold text-amber-400" : "text-base-100/80"}>
-                  {formatTokenAmount(allowance, PAYMENT_TOKEN_DECIMALS)}
+                  {formatTokenAmount(allowance, paymentTokenDecimals)}
                 </span>
               ) : (
                 <span className="text-base-100/30">—</span>
@@ -284,15 +313,15 @@ function CreateDistributionCard({
 
         {insufficientBalance && (
           <p role="alert" className="text-xs text-red-400">
-            Insufficient balance — your wallet holds less than the requested distribution amount.
+            The requested pool exceeds your payment-token balance.
           </p>
         )}
-        {needsApproval && !insufficientBalance && (
+        {needsApproval && (
           <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90">
             The dividend contract is not approved to spend enough of this token on your behalf.
-            Submit an <strong className="font-semibold">approve</strong> transaction for at least{" "}
-            {formatTokenAmount(requestedRaw ?? 0n, PAYMENT_TOKEN_DECIMALS)} tokens before funding
-            this distribution.
+            Creating this distribution is blocked until you submit an{" "}
+            <strong className="font-semibold">approve</strong> transaction for at least{" "}
+            {formatTokenAmount(requestedRaw ?? 0n, paymentTokenDecimals ?? 0)} tokens.
           </p>
         )}
 
@@ -303,7 +332,7 @@ function CreateDistributionCard({
               id="dist-total"
               value={totalAmount}
               onChange={(e) => setTotalAmount(e.target.value)}
-              placeholder="0.0000000"
+              placeholder="Enter amount"
               inputMode="decimal"
               disabled={tx.pending || !isAdmin}
               className="input pr-16"
@@ -313,7 +342,13 @@ function CreateDistributionCard({
             </span>
           </div>
           <p className="mt-1 text-[11px] text-base-100/40">
-            Uses {PAYMENT_TOKEN_DECIMALS} decimals (Stellar standard).
+            {paymentTokenDecimals !== null
+              ? `Uses ${paymentTokenDecimals} decimals for ${truncateAddress(paymentToken.trim())}.`
+              : decimalsLoading
+                ? "Loading payment token decimals…"
+                : decimalsError
+                  ? `Couldn't load payment token decimals: ${decimalsError}`
+                  : "Enter a payment token contract to load its decimals."}
           </p>
         </div>
 
@@ -322,9 +357,17 @@ function CreateDistributionCard({
         {tx.phase === "idle" ? (
           <button
             type="submit"
-            disabled={tx.pending || !isAdmin}
+            disabled={tx.pending || !isAdmin || insufficientBalance || needsApproval}
             className="btn-primary"
-            title={!isAdmin ? "Only the asset admin can create distributions" : ""}
+            title={
+              !isAdmin
+                ? "Only the asset admin can create distributions"
+                : insufficientBalance
+                  ? "The requested amount exceeds your payment-token balance"
+                  : needsApproval
+                    ? "Approve the dividend contract before creating this distribution"
+                    : ""
+            }
           >
             Create distribution
           </button>
@@ -402,7 +445,7 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-gold-300">
-                      {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
+                      {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
                     </p>
                     <p className="text-[11px] text-base-100/40">{pct.toFixed(1)}% claimed</p>
                   </div>

@@ -75,12 +75,19 @@ export function useComplianceOverview(complianceId: string | null) {
           records.flatMap((r) => (r?.jurisdiction ? [r.jurisdiction] : [])),
         ),
       ].sort();
-      const blocked = await Promise.all(
-        codes.map((c) => compliance.isJurisdictionBlocked(network, complianceId, c)),
+      const jurisdictions = await Promise.all(
+        codes.map(async (code) => ({
+          code,
+          blocked: await compliance.isJurisdictionBlocked(
+            network,
+            complianceId,
+            code,
+          ),
+        })),
       );
       return {
         allowlistSize: addresses.length,
-        jurisdictions: codes.map((code, i) => ({ code, blocked: blocked[i] })),
+        jurisdictions,
       };
     },
     [complianceId, network],

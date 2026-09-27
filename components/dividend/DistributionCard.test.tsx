@@ -17,29 +17,34 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { DistributionWithClaim } from "@/hooks/useDividends";
 
 // ── mock ClaimButton ───────────────────────────────────────────────────────
 
 jest.mock("./ClaimButton", () => ({
+  PAYMENT_TOKEN_DECIMALS: 7,
   ClaimButton: ({
     distributionId,
     claimed,
     claimable,
+    onPendingClaim,
   }: {
     distributionId: bigint;
     claimed: boolean;
     claimable: bigint;
+    onPendingClaim?: (amount: bigint) => void;
   }) => (
-    <div
+    <button
       data-testid="claim-button"
       data-distribution-id={distributionId.toString()}
       data-claimed={String(claimed)}
       data-claimable={claimable.toString()}
-    />
+      onClick={() => onPendingClaim?.(claimable)}
+    >
+      Mock claim
+    </button>
   ),
-  PAYMENT_TOKEN_DECIMALS: 7,
 }));
 
 // ── mock date-fns to avoid non-deterministic relative times ───────────────
@@ -71,6 +76,7 @@ function makeDistribution(
     paymentToken: "CPAYMENT5678",
     totalAmount: 1000_0000000n, // 1000 tokens @ 7 decimals
     distributed: 250_0000000n, // 250 tokens = 25%
+    paymentTokenDecimals: 7,
     createdAt: 50000,
     completed: false,
     claimable: 0n,
@@ -134,6 +140,26 @@ describe("DistributionCard", () => {
     expect(screen.getByText(/25\.0%/)).toBeInTheDocument();
   });
 
+  it("includes a submitted claim in progress while clearly marking it pending", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution({
+          distributed: 250_0000000n,
+          totalAmount: 1000_0000000n,
+          claimable: 100_0000000n,
+        })}
+        currentLedger={null}
+      />,
+    );
+
+    const claim = screen.getByTestId("claim-button");
+    expect(claim).toBeInTheDocument();
+    fireEvent.click(claim);
+    expect(screen.getByText(/claimed \(including pending\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/350 \/ 1,000 \(35\.0%\)/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/awaiting on-chain confirmation/i);
+  });
+
   it("renders 100.0% when fully distributed", () => {
     render(
       <DistributionCard
@@ -172,6 +198,22 @@ describe("DistributionCard", () => {
     // 500_0000000 @ 7 decimals = 500 – rendered twice (numerator + total)
     const matches = screen.getAllByText("500");
     expect(matches.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("formats distribution amounts using the payment token's decimals", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution({
+          totalAmount: 12_345n,
+          distributed: 1_234n,
+          paymentTokenDecimals: 2,
+        })}
+        currentLedger={null}
+      />,
+    );
+
+    expect(screen.getByText("123.45")).toBeInTheDocument();
+    expect(screen.getByText("12.34 / 123.45 (10.0%)")).toBeInTheDocument();
   });
 
   // ── claim row visibility ─────────────────────────────────────────────────

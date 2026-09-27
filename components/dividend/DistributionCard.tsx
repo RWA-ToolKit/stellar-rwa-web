@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import type { DistributionWithClaim } from "@/hooks/useDividends";
 import {
@@ -8,7 +9,7 @@ import {
   truncateAddress,
   ledgerToApproxDate as approxDate,
 } from "@/lib/format";
-import { ClaimButton, PAYMENT_TOKEN_DECIMALS } from "./ClaimButton";
+import { ClaimButton } from "./ClaimButton";
 
 interface DistributionCardProps {
   distribution: DistributionWithClaim;
@@ -19,7 +20,9 @@ interface DistributionCardProps {
 /** A single dividend distribution with progress and a claim action. */
 export function DistributionCard({ distribution, currentLedger, onClaimed }: DistributionCardProps) {
   const d = distribution;
-  const pct = percent(d.distributed, d.totalAmount);
+  const [pendingClaim, setPendingClaim] = useState(0n);
+  const displayedDistributed = d.distributed + pendingClaim;
+  const pct = percent(displayedDistributed, d.totalAmount);
   const deadline = d.claimDeadline ?? 0;
   const expired = deadline > 0 && currentLedger !== null && currentLedger >= deadline;
   const when =
@@ -57,16 +60,16 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
         <div className="text-right">
           <p className="text-xs uppercase tracking-wide text-base-100/40">Total pool</p>
           <p className="text-lg font-bold text-gold-300">
-            {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
+            {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
           </p>
         </div>
       </div>
 
       <div className="mt-4">
         <div className="mb-1.5 flex items-center justify-between text-xs text-base-100/50">
-          <span>Claimed</span>
+          <span>{pendingClaim > 0n ? "Claimed (including pending)" : "Claimed"}</span>
           <span>
-            {formatTokenAmount(d.distributed, PAYMENT_TOKEN_DECIMALS)} / {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
+            {formatTokenAmount(displayedDistributed, d.paymentTokenDecimals)} / {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
             {" "}({pct.toFixed(1)}%)
           </span>
         </div>
@@ -76,6 +79,11 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             style={{ width: `${pct}%` }}
           />
         </div>
+        {pendingClaim > 0n && (
+          <p role="status" className="mt-1.5 text-xs text-amber-300">
+            Claim submitted — awaiting on-chain confirmation.
+          </p>
+        )}
       </div>
 
       {(d.claimable > 0n || d.claimed) && (
@@ -85,7 +93,9 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             claimable={d.claimable}
             claimed={d.claimed}
             expired={expired}
-            onClaimed={onClaimed}
+            decimals={d.paymentTokenDecimals}
+            {...(onClaimed !== undefined ? { onClaimed } : {})}
+            onPendingClaim={setPendingClaim}
           />
         </div>
       )}

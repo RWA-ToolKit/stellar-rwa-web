@@ -12,6 +12,7 @@ import { ActionCard } from "@/components/issuer/ActionCard";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { truncateAddress } from "@/lib/format";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -32,9 +33,21 @@ export function CompliancePanel({ asset, onChanged, isAdmin = true }: Compliance
       <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-base-100/50">
         <strong>Required role:</strong> compliance contract <code className="font-mono text-base-100/60">admin</code>
       </div>
-      <AddToAllowlistCard complianceId={complianceId} onChanged={onChanged} isAdmin={isAdmin} />
-      <AllowlistManageCard complianceId={complianceId} onChanged={onChanged} isAdmin={isAdmin} />
-      <JurisdictionCard complianceId={complianceId} onChanged={onChanged} isAdmin={isAdmin} />
+      <AddToAllowlistCard
+        complianceId={complianceId}
+        {...(onChanged !== undefined ? { onChanged } : {})}
+        isAdmin={isAdmin}
+      />
+      <AllowlistManageCard
+        complianceId={complianceId}
+        {...(onChanged !== undefined ? { onChanged } : {})}
+        isAdmin={isAdmin}
+      />
+      <JurisdictionCard
+        complianceId={complianceId}
+        {...(onChanged !== undefined ? { onChanged } : {})}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 }
@@ -198,7 +211,7 @@ function AllowlistManageCard({
   onChanged?: () => void;
   isAdmin?: boolean;
 }) {
-  const { data, loading, refetch } = useAllowlist(complianceId);
+  const { data, loading, error, refetch } = useAllowlist(complianceId);
   const records = data ?? [];
 
   // #320: Serialize allowlist mutations across all rows so the issuer cannot
@@ -229,6 +242,13 @@ function AllowlistManageCard({
         <div className="flex items-center gap-2 py-4 text-sm text-base-100/40">
           <Spinner size={14} /> Loading allowlist…
         </div>
+      ) : error ? (
+        <ErrorState
+          title="Couldn't load allowlist"
+          message={error}
+          onRetry={refetch}
+          className="py-6"
+        />
       ) : records.length === 0 ? (
         <p className="py-2 text-sm text-base-100/40">No addresses on the allowlist yet.</p>
       ) : (
@@ -300,7 +320,7 @@ function AllowlistRow({
       <ConfirmDialog
         open={removeConfirmOpen}
         title="Remove address from allowlist?"
-        description={`This will permanently revoke KYC access for ${truncateAddress(record.address, 6, 6)}. The holder will lose the ability to hold or transfer this asset. You can re-approve them later if needed.`}
+        description={`This will remove ${record.address} from the allowlist immediately, preventing it from holding, sending, or receiving this asset. You can re-approve it later if needed.`}
         confirmLabel="Remove address"
         onConfirm={doRemove}
         onCancel={() => setRemoveConfirmOpen(false)}

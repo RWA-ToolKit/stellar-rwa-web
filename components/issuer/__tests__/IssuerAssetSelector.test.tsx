@@ -59,6 +59,7 @@ describe("IssuerAssetSelector", () => {
       data: null,
       loading: true,
       error: null,
+      updatedAt: null,
       refetch: jest.fn(),
     });
     render(<IssuerAssetSelector selected={null} onSelect={jest.fn()} />);
@@ -72,6 +73,7 @@ describe("IssuerAssetSelector", () => {
       data: null,
       loading: false,
       error: "RPC down",
+      updatedAt: null,
       refetch,
     });
     render(<IssuerAssetSelector selected={null} onSelect={jest.fn()} />);
@@ -86,6 +88,7 @@ describe("IssuerAssetSelector", () => {
       data: [],
       loading: false,
       error: null,
+      updatedAt: null,
       refetch: jest.fn(),
     });
     render(<IssuerAssetSelector selected={null} onSelect={jest.fn()} />);
@@ -102,6 +105,7 @@ describe("IssuerAssetSelector", () => {
       data: [a1, a2],
       loading: false,
       error: null,
+      updatedAt: null,
       refetch: jest.fn(),
     });
     const onSelect = jest.fn();
@@ -127,6 +131,7 @@ describe("IssuerAssetSelector", () => {
       data: [a1],
       loading: false,
       error: null,
+      updatedAt: null,
       refetch: jest.fn(),
     });
     render(<IssuerAssetSelector selected={a1} onSelect={jest.fn()} />);

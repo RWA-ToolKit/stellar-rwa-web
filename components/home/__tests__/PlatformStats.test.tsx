@@ -37,6 +37,7 @@ interface PlatformStatsResult {
   data?: { totalAssets: number; tvl: bigint; totalHolders: number | null; assets: AssetEntry[] | null } | null;
   loading: boolean;
   error: string | null;
+  updatedAt: number | null;
   refetch: () => void;
 }
 
@@ -56,6 +57,7 @@ function setupMocks(
     data: null,
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
     ...statsResult,
   } as ReturnType<typeof usePlatformStats>);
@@ -76,7 +78,7 @@ describe("PlatformStats", () => {
   // ── tile labels always present ─────────────────────────────────────────
   it("renders all three tile labels when data is loading", () => {
     setupMocks(
-      { data: undefined, loading: true, error: null },
+      { loading: true, error: null },
       { data: null, loading: true, error: null },
     );
 
@@ -90,7 +92,7 @@ describe("PlatformStats", () => {
   // ── loading state ──────────────────────────────────────────────────────
   it("renders skeleton placeholders while data is loading", () => {
     setupMocks(
-      { data: undefined, loading: true, error: null },
+      { loading: true, error: null },
       { data: null, loading: true, error: null },
     );
 
@@ -111,12 +113,14 @@ describe("PlatformStats", () => {
       data: null,
       loading: false,
       error: "RPC down",
+      updatedAt: null,
       refetch: mockRefetch,
     } as ReturnType<typeof usePlatformStats>);
     mockUseHolderTotals.mockReturnValue({
       data: null,
       loading: false,
       error: null,
+      updatedAt: null,
       refetch: jest.fn(),
     } as ReturnType<typeof useHolderTotals>);
 
@@ -213,7 +217,7 @@ describe("PlatformStats", () => {
   // ── three tiles rendered ───────────────────────────────────────────────
   it("renders exactly 3 stat tiles when data is loading", () => {
     setupMocks(
-      { data: undefined, loading: true, error: null },
+      { loading: true, error: null },
       { data: null, loading: true, error: null },
     );
 

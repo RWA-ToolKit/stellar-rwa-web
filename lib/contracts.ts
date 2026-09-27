@@ -266,6 +266,14 @@ export const assetToken = {
     );
   },
 
+  async decimals(network: Network, tokenId: string): Promise<number> {
+    const decimals = await readContract<number>(network, tokenId, "decimals");
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) {
+      throw new Error(`Token ${tokenId} returned invalid decimals.`);
+    }
+    return decimals;
+  },
+
   balance(network: Network, tokenId: string, holder: string): Promise<bigint> {
     return readContract<bigint>(network, tokenId, "balance", [
       arg.address(holder),

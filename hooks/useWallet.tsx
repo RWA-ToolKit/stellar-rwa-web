@@ -281,7 +281,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           `Your wallet is on a different network. Switch your wallet to match the app's network and try again.`,
         );
       }
-      return { network, source: addressRef.current, sign, onPhase };
+      return {
+        network,
+        source: addressRef.current,
+        sign,
+        ...(onPhase !== undefined ? { onPhase } : {}),
+      };
     },
     [network, sign, networkUnknown, networkMismatch],
   );

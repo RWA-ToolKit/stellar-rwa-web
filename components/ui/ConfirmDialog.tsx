@@ -56,13 +56,13 @@ export function ConfirmDialog({
 
   return (
     /* Backdrop */
-    <div
-      role="presentation"
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      onClick={onCancel}
-    >
-      {/* Semi-transparent overlay */}
-      <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default border-0 bg-black/60 p-0"
+        aria-label="Dismiss confirmation dialog"
+        onClick={onCancel}
+      />
 
       {/* Dialog panel */}
       <div
@@ -71,7 +71,6 @@ export function ConfirmDialog({
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-desc"
         className="relative z-10 w-full max-w-sm rounded-2xl border border-white/10 bg-base-900 p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Icon */}
         <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">
