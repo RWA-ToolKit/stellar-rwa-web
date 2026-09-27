@@ -60,11 +60,13 @@ const PORTFOLIO_WITH_HOLDING: PortfolioData = {
       },
       balance: 10000n,
       claimableDistributions: [],
-      totalClaimable: 0n,
+      totalClaimable: [],
     },
   ],
   totalValueCents: 250000n,
-  totalClaimable: 0n,
+  totalClaimable: [],
+  failedAssetCount: 0,
+  isIncomplete: false,
 };
 
 function setup({ address = null, data = PORTFOLIO_WITH_HOLDING }: {
@@ -76,6 +78,7 @@ function setup({ address = null, data = PORTFOLIO_WITH_HOLDING }: {
     data,
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
   });
   return render(<PortfolioPage />);
@@ -105,7 +108,7 @@ describe("/portfolio page route", () => {
   });
 
   it("shows empty portfolio state when no holdings", () => {
-    setup({ address: "GCONNECTED123456789", data: { holdings: [], totalValueCents: 0n, totalClaimable: 0n } });
+    setup({ address: "GCONNECTED123456789", data: { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false } });
     expect(screen.getByText("Portfolio View")).toBeInTheDocument();
   });
 });

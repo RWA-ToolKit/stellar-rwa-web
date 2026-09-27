@@ -197,3 +197,9 @@ To test various states without a real wallet:
 3. **User rejected:** Click "Connect Wallet", then click "Reject" in the Freighter prompt.
 4. **Wrong network:** Connect to Testnet, then switch Freighter to Mainnet. The app detects this within ~8 seconds and blocks writes.
 5. **Error boundary:** Open browser dev tools, set a breakpoint in the Freighter API call, and throw an exception—this triggers the error boundary.
+
+---
+
+*For a full list of every error message a holder or issuer may see during
+wallet connection and transaction signing — including what each message means
+and step-by-step remediation — see [Freighter Signing Errors — Troubleshooting Guide](freighter-troubleshooting.md).*

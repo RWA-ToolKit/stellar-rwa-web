@@ -1,13 +1,71 @@
-import { formatUsdCents, formatTokenAmount, parseTokenAmount, formatRawPlain, compactNumber } from "@/lib/format";
+import {
+  compactNumber,
+  formatRawPlain,
+  formatStroopsToXLM,
+  formatTokenAmount,
+  formatUsdCents,
+  holderSharePercentages,
+  parseTokenAmount,
+} from "@/lib/format";
 
 // ---------------------------------------------------------------------------
-// Issue #35 — formatUsdCents
+// formatStroopsToXLM
+// ---------------------------------------------------------------------------
+describe("formatStroopsToXLM", () => {
+  it("formats zero stroops", () => {
+    expect(formatStroopsToXLM(0n)).toBe("0 XLM");
+  });
+
+  it("formats 1 stroop", () => {
+    expect(formatStroopsToXLM(1n)).toBe("0.0000001 XLM");
+  });
+
+  it("formats 10,000,000 stroops (1 XLM) as whole unit", () => {
+    expect(formatStroopsToXLM(10_000_000n)).toBe("1 XLM");
+  });
+
+  it("formats 15,000,000 stroops (1.5 XLM)", () => {
+    expect(formatStroopsToXLM(15_000_000n)).toBe("1.5 XLM");
+  });
+
+  it("formats 10,100,000 stroops with leading zeros", () => {
+    expect(formatStroopsToXLM(10_100_000n)).toBe("1.01 XLM");
+  });
+
+  it("formats 10,000,100 stroops with trailing precision", () => {
+    expect(formatStroopsToXLM(10_000_100n)).toBe("1.00001 XLM");
+  });
+
+  it("formats 100,000,000 stroops (10 XLM)", () => {
+    expect(formatStroopsToXLM(100_000_000n)).toBe("10 XLM");
+  });
+
+  it("handles number input", () => {
+    expect(formatStroopsToXLM(10_000_000)).toBe("1 XLM");
+  });
+
+  it("handles large network fees (few hundred stroops)", () => {
+    // Typical Soroban fee is around 100,000 stroops
+    expect(formatStroopsToXLM(100_000n)).toBe("0.01 XLM");
+  });
+
+  it("removes trailing zeros in fractional part", () => {
+    expect(formatStroopsToXLM(50_000_000n)).toBe("5 XLM");
+    expect(formatStroopsToXLM(51_000_000n)).toBe("5.1 XLM");
+    expect(formatStroopsToXLM(51_100_000n)).toBe("5.11 XLM");
+  });
+});
+
 // ---------------------------------------------------------------------------
 describe("formatUsdCents", () => {
   // --- whole dollar amounts ------------------------------------------------
 
   it("formats zero cents as $0", () => {
     expect(formatUsdCents(0n)).toBe("$0");
+  });
+
+  it("formats zero cents in compact mode as $0", () => {
+    expect(formatUsdCents(0n, { compact: true })).toBe("$0");
   });
 
   it("formats exactly $1 (100 cents)", () => {
@@ -60,6 +118,15 @@ describe("formatUsdCents", () => {
     expect(formatUsdCents(1_230_000_000n, { compact: true })).toBe("$12.3M");
   });
 
+  it("rounds compact values to one decimal without promoting early", () => {
+    expect(formatUsdCents(104_999_999n, { compact: true })).toBe("$1M");
+    expect(formatUsdCents(105_000_000n, { compact: true })).toBe("$1.1M");
+  });
+
+  it("promotes a rounded compact value at the next unit boundary", () => {
+    expect(formatUsdCents(99_999_999_900n, { compact: true })).toBe("$1B");
+  });
+
   it("formats $2,000,000,000 in compact mode as $2B", () => {
     expect(formatUsdCents(200_000_000_000n, { compact: true })).toBe("$2B");
   });
@@ -81,6 +148,24 @@ describe("formatUsdCents", () => {
     // 10_000_000_000_000_000n cents = $100,000,000,000,000 (~$100 trillion)
     // Converting via Number() would silently round; bigint math does not.
     expect(formatUsdCents(10_000_000_000_000_000n)).toBe("$100,000,000,000,000");
+  });
+
+  it("formats the maximum positive i128 with exact separators and cents", () => {
+    expect(formatUsdCents(170141183460469231731687303715884105727n)).toBe(
+      "$1,701,411,834,604,692,317,316,873,037,158,841,057.27",
+    );
+  });
+
+  it("formats compact maximum i128 values without floating-point notation", () => {
+    expect(formatUsdCents(170141183460469231731687303715884105727n, { compact: true })).toBe(
+      "$1,701,411,834,604,692,317,316,873,037.2B",
+    );
+  });
+
+  it("preserves compact valuation precision above Number.MAX_SAFE_INTEGER", () => {
+    expect(formatUsdCents(900_719_925_474_099_345n, { compact: true })).toBe(
+      "$9,007,199.3B",
+    );
   });
 });
 
@@ -446,5 +531,28 @@ describe("compactNumber", () => {
   it("keeps single decimal when significant", () => {
     // 1234567 / 1000000 = 1.234567, toFixed(1) = "1.2" (not trimmed)
     expect(compactNumber(1_234_567)).toBe("1.2M");
+  });
+});
+
+describe("holderSharePercentages", () => {
+  it("keeps a small positive holder visible", () => {
+    expect(holderSharePercentages([1n, 999_999n], 1_000_000n)).toEqual([
+      "0.01",
+      "99.99",
+    ]);
+  });
+
+  it("allocates rounding remainder so full-supply shares total 100 percent", () => {
+    expect(holderSharePercentages([1n, 1n, 1n], 3n)).toEqual([
+      "33.34",
+      "33.33",
+      "33.33",
+    ]);
+  });
+
+  it("uses more precision when required to keep a small holder visible", () => {
+    const shares = holderSharePercentages([1n, 1n], 1_000_000n);
+    expect(shares[0]).toBe("0.0001");
+    expect(shares[1]).toBe("0.0001");
   });
 });

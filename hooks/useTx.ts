@@ -1,16 +1,20 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { TxPhase, TxResult, TxTelemetry } from "@/types";
+import type { TxPhase, TxResult, TxTelemetry, TxErrorType } from "@/types";
 import type { WriteCtx } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
-import { ContractError } from "@/lib/stellar";
+import { ContractError, TransactionTimeoutError } from "@/lib/stellar";
+import { LockedWalletError, UserRejectedError } from "@/lib/freighter";
 
 interface RunResult {
   phase: TxPhase;
   hash: string | null;
   error: string | null;
+  errorType: TxErrorType;
+  /** Estimated network fee in stroops from simulation. */
+  estimatedFee: bigint | null;
   /** True while the transaction is building/signing/submitting/confirming. */
   pending: boolean;
   /**
@@ -68,6 +72,8 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
   const [phase, setPhase] = useState<TxPhase>("idle");
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<TxErrorType>("generic");
+  const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
   const [retryable, setRetryable] = useState(false);
   /** Holds the last submitted action so `retry()` can re-run it. */
   const lastActionRef = useRef<((ctx: WriteCtx) => Promise<TxResult>) | null>(null);
@@ -77,6 +83,8 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     setPhase("idle");
     setHash(null);
     setError(null);
+    setErrorType("generic");
+    setEstimatedFee(null);
     setRetryable(false);
     lastActionRef.current = null;
   }, []);
@@ -85,7 +93,9 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     async (action: (ctx: WriteCtx) => Promise<TxResult>) => {
       lastActionRef.current = action;
       setError(null);
+      setErrorType("generic");
       setHash(null);
+      setEstimatedFee(null);
       setRetryable(false);
       setPhase("building");
       t.onPhase?.("building");
@@ -96,22 +106,48 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
         });
         const result = await action(ctx);
         setHash(result.hash);
+        setEstimatedFee(result.estimatedFee ?? null);
         setPhase("success");
         t.onPhase?.("success");
         t.onSuccess?.(result.hash, result);
         return result;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Transaction failed.";
-        if (e instanceof ContractError && e.detail) {
-          console.error("Transaction failed:", e.detail);
+        // A declined signature is a normal user choice, not a failure: reset to
+        // idle without an error so the form stays filled in for a retry.
+        if (e instanceof UserRejectedError) {
+          setPhase("idle");
+          t.onPhase?.("idle");
+          return null;
         }
+
+        let msg: string;
+        let nextPhase: TxPhase = "error";
+        let errType: TxErrorType = "generic";
+
+        if (e instanceof TransactionTimeoutError) {
+          msg = e.message;
+          nextPhase = "timeout";
+          errType = "timeout";
+          setHash(e.hash); // Keep the hash visible so the user can check the explorer.
+        } else if (e instanceof LockedWalletError) {
+          msg = e.message;
+          errType = "locked-wallet";
+        } else {
+          msg = e instanceof Error ? e.message : "Transaction failed.";
+          if (e instanceof ContractError) {
+            console.error("Transaction failed:", e.detail);
+            errType = e.isAuth ? "auth" : "generic";
+          }
+        }
+
         setError(msg);
-        setPhase("error");
+        setErrorType(errType);
+        setPhase(nextPhase);
         // Only offer retry for errors that are not deterministic contract rejections.
         setRetryable(!isNonRetryableError(e));
         addToast({ title: "Transaction failed", description: msg, tone: "error" });
-        t.onPhase?.("error", msg);
-        t.onError?.(msg, "error");
+        t.onPhase?.(nextPhase === "timeout" ? "error" : nextPhase, msg);
+        t.onError?.(msg, errType);
         return null;
       }
     },
@@ -128,6 +164,8 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     phase,
     hash,
     error,
+    errorType,
+    estimatedFee,
     pending: phase === "building" || phase === "signing" || phase === "submitting" || phase === "confirming",
     retryable,
     run,

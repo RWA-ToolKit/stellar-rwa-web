@@ -13,6 +13,11 @@ jest.mock("@/components/portfolio/HoldingRow", () => ({
   ),
 }));
 
+jest.mock("@/components/dividend/ClaimAllButton", () => ({
+  ClaimAllButton: ({ distributions }: { distributions: unknown[] }) =>
+    distributions.length >= 2 ? <button>Claim all distributions</button> : null,
+}));
+
 jest.mock("@/components/wallet/ConnectButton", () => ({
   ConnectButton: () => <button>Connect Wallet</button>,
 }));
@@ -70,11 +75,13 @@ const PORTFOLIO_WITH_HOLDING: PortfolioData = {
       },
       balance: 10000n,
       claimableDistributions: [],
-      totalClaimable: 0n,
+      totalClaimable: [],
     },
   ],
   totalValueCents: 250000n,
-  totalClaimable: 0n,
+  totalClaimable: [],
+  failedAssetCount: 0,
+  isIncomplete: false,
 };
 
 function setup({ address = null, data = PORTFOLIO_WITH_HOLDING }: {
@@ -86,6 +93,7 @@ function setup({ address = null, data = PORTFOLIO_WITH_HOLDING }: {
     data,
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
   });
   return render(<PortfolioView />);
@@ -95,7 +103,7 @@ describe("PortfolioView", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("prompts disconnected users to connect their wallet", () => {
-    setup({ data: { holdings: [], totalValueCents: 0n, totalClaimable: 0n } });
+    setup({ data: { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false } });
 
     expect(
       screen.getByRole("heading", { name: /connect your wallet/i }),
@@ -113,6 +121,50 @@ describe("PortfolioView", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Harbor View Apartments" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers one action for multiple claimable distributions", () => {
+    const data: PortfolioData = {
+      ...PORTFOLIO_WITH_HOLDING,
+      holdings: [
+        {
+          ...PORTFOLIO_WITH_HOLDING.holdings[0]!,
+          totalClaimable: [{ paymentToken: "CPAYMENT", decimals: 7, amount: 200n }],
+          claimableDistributions: [
+            {
+              id: 1n,
+              assetToken: "CABC",
+              paymentToken: "CPAYMENT",
+              totalAmount: 100n,
+              distributed: 0n,
+              createdAt: 1,
+              completed: false,
+              paymentTokenDecimals: 7,
+              claimable: 100n,
+              claimed: false,
+            },
+            {
+              id: 2n,
+              assetToken: "CABC",
+              paymentToken: "CPAYMENT",
+              totalAmount: 100n,
+              distributed: 0n,
+              createdAt: 2,
+              completed: false,
+              paymentTokenDecimals: 7,
+              claimable: 100n,
+              claimed: false,
+            },
+          ],
+        },
+      ],
+      totalClaimable: [{ paymentToken: "CPAYMENT", decimals: 7, amount: 200n }],
+    };
+    setup({ address: "GCONNECTED123456789", data });
+
+    expect(
+      screen.getByRole("button", { name: /claim all distributions/i }),
     ).toBeInTheDocument();
   });
 });

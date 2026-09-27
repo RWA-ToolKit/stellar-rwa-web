@@ -33,20 +33,46 @@ export function ConfirmDialog({
   onCancel,
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   // Focus the Cancel button when the dialog opens (safe default for
-  // destructive actions — pressing Enter won't accidentally confirm).
+  // destructive actions — pressing Enter won't accidentally confirm), and
+  // return focus to the element that opened the dialog when it closes.
   useEffect(() => {
-    if (open) {
-      cancelRef.current?.focus();
-    }
+    if (!open) return;
+    const trigger = document.activeElement as HTMLElement | null;
+    cancelRef.current?.focus();
+    return () => {
+      if (trigger && trigger.isConnected) trigger.focus();
+    };
   }, [open]);
 
-  // Close on Escape key.
+  // Close on Escape; keep Tab / Shift+Tab cycling inside the dialog.
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onCancel();
+      if (e.key === "Escape") {
+        onCancel();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable || focusable.length === 0) return;
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement;
+      if (!dialogRef.current?.contains(active)) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && active === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && active === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -56,22 +82,22 @@ export function ConfirmDialog({
 
   return (
     /* Backdrop */
-    <div
-      role="presentation"
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      onClick={onCancel}
-    >
-      {/* Semi-transparent overlay */}
-      <div className="absolute inset-0 bg-black/60" aria-hidden="true" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <button
+        type="button"
+        className="absolute inset-0 cursor-default border-0 bg-black/60 p-0"
+        aria-label="Dismiss confirmation dialog"
+        onClick={onCancel}
+      />
 
       {/* Dialog panel */}
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-desc"
         className="relative z-10 w-full max-w-sm rounded-2xl border border-white/10 bg-base-900 p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Icon */}
         <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400">

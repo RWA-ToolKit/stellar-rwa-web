@@ -15,17 +15,20 @@ describe("StepIndicator", () => {
     const stepItems = within(progress).getAllByRole("listitem");
 
     expect(stepItems).toHaveLength(3);
-
     const completedStep = stepItems[0];
+    const currentStep = stepItems[1];
+    const upcomingStep = stepItems[2];
+    if (!completedStep || !currentStep || !upcomingStep) {
+      throw new Error("Expected three wizard steps");
+    }
+
     expect(completedStep).toHaveTextContent("Token contract");
     expect(completedStep.querySelector("svg")).toBeInTheDocument();
     expect(completedStep.querySelector('[aria-current="step"]')).not.toBeInTheDocument();
 
-    const currentStep = stepItems[1];
     expect(currentStep).toHaveTextContent("Asset details");
     expect(currentStep.querySelector('[aria-current="step"]')).toBeInTheDocument();
 
-    const upcomingStep = stepItems[2];
     expect(upcomingStep).toHaveTextContent("Confirm");
     expect(within(upcomingStep).getByText("3")).toBeInTheDocument();
     expect(upcomingStep.querySelector('[aria-current="step"]')).not.toBeInTheDocument();

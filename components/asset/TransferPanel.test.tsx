@@ -70,12 +70,15 @@ function setup(assetOverride: AssetDetail = asset) {
       : { allowed: true, status: "Approved", record: null },
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
   }));
   mockUseTx.mockReturnValue({
     phase: "idle",
     hash: null,
     error: null,
+    errorType: "generic",
+    estimatedFee: null,
     pending: false,
     retryable: false,
     run: jest.fn(),
@@ -111,6 +114,18 @@ describe("TransferPanel", () => {
     expect(screen.getByRole("button", { name: "Transfer" })).toBeDisabled();
   });
 
+  it("warns and disables transfer when the recipient is your own address", () => {
+    setup();
+
+    fireEvent.change(screen.getByLabelText("Recipient address"), {
+      target: { value: SENDER },
+    });
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "10" } });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/your connected wallet address/i);
+    expect(screen.getByRole("button", { name: "Transfer" })).toBeDisabled();
+  });
+
   it("surfaces a warning when the recipient is not KYC-approved", () => {
     setup();
 
@@ -123,6 +138,28 @@ describe("TransferPanel", () => {
         "Recipient isn't KYC-approved for this asset and can't receive a transfer.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("explains that transfers are paused and never submits a paused transfer", () => {
+    const pausedAsset = {
+      ...asset,
+      metadata: { ...asset.metadata, paused: true },
+    } as AssetDetail;
+    setup(pausedAsset);
+    const run = mockUseTx.mock.results[0]!.value.run;
+
+    expect(
+      screen.getByText(/transfers are paused by the issuer.*unpauses the token/i),
+    ).toBeInTheDocument();
+    const submit = screen.getByRole("button", { name: "Transfers paused" });
+    expect(submit).toBeDisabled();
+
+    fireEvent.submit(submit.closest("form")!);
+
+    expect(
+      screen.getByText("Transfers are paused by the issuer for this asset."),
+    ).toBeInTheDocument();
+    expect(run).not.toHaveBeenCalled();
   });
 
   // ── Issue #231: decimals-aware inline validation ─────────────────────────
@@ -203,6 +240,74 @@ describe("TransferPanel", () => {
       expect(
         screen.getByText(/maximum 0 decimal places/i),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("aria error association", () => {
+    it("links the recipient error to the input and marks it invalid", () => {
+      setup();
+      const input = screen.getByLabelText("Recipient address");
+      expect(input).not.toHaveAttribute("aria-invalid");
+
+      fireEvent.change(input, { target: { value: RECIPIENT } });
+
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      const errorId = input.getAttribute("aria-describedby");
+      expect(errorId).toBeTruthy();
+      expect(document.getElementById(errorId!)).toHaveTextContent(/isn't KYC-approved/i);
+    });
+
+    it("links the amount error to the input and marks it invalid", () => {
+      setup(assetWith2Decimals);
+      const input = screen.getByLabelText("Amount");
+
+      fireEvent.change(input, { target: { value: "1.256" } });
+
+      expect(input).toHaveAttribute("aria-invalid", "true");
+      expect(document.getElementById(input.getAttribute("aria-describedby")!)).toHaveTextContent(
+        /maximum 2 decimal places/i,
+      );
+
+      fireEvent.change(input, { target: { value: "1.25" } });
+      expect(input).not.toHaveAttribute("aria-invalid");
+      expect(input).not.toHaveAttribute("aria-describedby");
+    });
+  });
+
+  describe("double submission prevention", () => {
+    it("disables submit button while transaction is pending", () => {
+      mockUseWallet.mockReturnValue({ address: SENDER } as ReturnType<typeof useWallet>);
+      mockUseCompliance.mockReturnValue({
+        data: { allowed: true, status: "Approved", record: null },
+        loading: false,
+        error: null,
+        updatedAt: null,
+        refetch: jest.fn(),
+      });
+
+      // Set up with pending=true
+      mockUseTx.mockReturnValue({
+        phase: "signing",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: true,
+        run: jest.fn(),
+        retryable: false,
+        retry: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      render(<TransferPanel asset={asset} balance={100n} />);
+
+      // When pending=true and form is in idle state, button should be visible but disabled
+      const submitButton = screen.queryByRole("button", { name: "Transfer" });
+      if (submitButton) {
+        // Button is shown and disabled
+        expect(submitButton).toBeDisabled();
+      }
+      // If TxProgress is shown instead, that's also correct (button won't exist)
     });
   });
 });

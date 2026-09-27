@@ -58,6 +58,8 @@ jest.mock("@stellar/stellar-sdk", () => ({
 
 import {
   WalletError,
+  LockedWalletError,
+  UserRejectedError,
   isFreighterInstalled,
   isAppAllowed,
   connect,
@@ -303,14 +305,24 @@ describe("signTx", () => {
     });
   });
 
-  it("throws WalletError when signTransaction returns an error shape", async () => {
+  it("throws UserRejectedError when signTransaction reports the user declined", async () => {
     mockSignTransaction.mockResolvedValue({ error: "User denied" });
+    await expect(
+      signTx("XDR", TESTNET_PASSPHRASE, "GTEST"),
+    ).rejects.toThrow(UserRejectedError);
+    await expect(
+      signTx("XDR", TESTNET_PASSPHRASE, "GTEST"),
+    ).rejects.toThrow("User denied");
+  });
+
+  it("throws WalletError when signTransaction returns an error shape unrelated to rejection or a locked wallet", async () => {
+    mockSignTransaction.mockResolvedValue({ error: "Simulation failed" });
     await expect(
       signTx("XDR", TESTNET_PASSPHRASE, "GTEST"),
     ).rejects.toThrow(WalletError);
     await expect(
       signTx("XDR", TESTNET_PASSPHRASE, "GTEST"),
-    ).rejects.toThrow("User denied");
+    ).rejects.toThrow("Simulation failed");
   });
 
   it("throws WalletError when signedTxXdr is missing from the response", async () => {
@@ -324,10 +336,30 @@ describe("signTx", () => {
   });
 
   it("the thrown error is a WalletError with the correct name", async () => {
-    mockSignTransaction.mockResolvedValue({ error: "Rejected" });
+    mockSignTransaction.mockResolvedValue({ error: "Simulation failed" });
     const err = await signTx("XDR", TESTNET_PASSPHRASE, "G").catch((e) => e);
     expect(err).toBeInstanceOf(WalletError);
     expect(err.name).toBe("WalletError");
+  });
+
+  it("the thrown error is a UserRejectedError with the correct name when the user rejects", async () => {
+    mockSignTransaction.mockResolvedValue({ error: "Rejected" });
+    const err = await signTx("XDR", TESTNET_PASSPHRASE, "G").catch((e) => e);
+    expect(err).toBeInstanceOf(UserRejectedError);
+    expect(err.name).toBe("UserRejectedError");
+  });
+
+  it.each([
+    "Freighter is locked. Please unlock it.",
+    "Please unlock your Freighter wallet",
+    "This app is not allowed to access your wallet",
+    "Wallet is not connected",
+    "LOCKED: Please try again",
+  ])("throws LockedWalletError for %j", async (errorMsg) => {
+    mockSignTransaction.mockResolvedValue({ error: errorMsg });
+    await expect(
+      signTx("XDR", TESTNET_PASSPHRASE, "GTEST"),
+    ).rejects.toBeInstanceOf(LockedWalletError);
   });
 });
 
@@ -402,5 +434,18 @@ describe("WalletError", () => {
     expect(new WalletError("something went wrong").message).toBe(
       "something went wrong",
     );
+  });
+});
+
+describe("LockedWalletError", () => {
+  it("has correct name and message", () => {
+    const error = new LockedWalletError();
+    expect(error.name).toBe("LockedWalletError");
+    expect(error.message).toContain("locked");
+    expect(error.message).toContain("unlock");
+  });
+
+  it("is an instance of WalletError", () => {
+    expect(new LockedWalletError()).toBeInstanceOf(WalletError);
   });
 });

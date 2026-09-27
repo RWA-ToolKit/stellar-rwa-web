@@ -25,7 +25,7 @@ export function IssuerAssetSelector({ selected, onSelect }: IssuerAssetSelectorP
 
   if (loading) {
     return (
-      <div className="flex items-center gap-2 py-8 text-sm text-base-100/40">
+      <div className="flex items-center gap-2 py-8 text-sm text-base-100/55">
         <Spinner size={16} /> Loading your assets…
       </div>
     );
@@ -70,13 +70,13 @@ export function IssuerAssetSelector({ selected, onSelect }: IssuerAssetSelectorP
                 <div className="flex flex-wrap items-center gap-1.5">
                   <AssetTypeBadge type={asset.assetType} />
                   {!asset.active && (
-                    <span className="chip bg-white/5 text-base-100/40 text-[10px]">Inactive</span>
+                    <span className="chip bg-white/5 text-base-100/55 text-[10px]">Inactive</span>
                   )}
                 </div>
                 <p className={`mt-1 truncate text-sm font-semibold ${isSelected ? "text-brand-200" : "text-base-100"}`}>
                   {asset.name}
                 </p>
-                <p className="text-[11px] text-base-100/40">Asset #{asset.id.toString()}</p>
+                <p className="text-[11px] text-base-100/55">Asset #{asset.id.toString()}</p>
               </div>
               <div className="shrink-0 text-right">
                 <p className="text-sm font-bold text-gold-300">

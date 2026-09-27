@@ -25,6 +25,28 @@ export class WalletError extends Error {
   }
 }
 
+/**
+ * Thrown when the user explicitly rejects a signing prompt in Freighter.
+ * This is distinct from a WalletError (actual failure) and should be handled
+ * as a normal, neutral user choice rather than an error.
+ */
+export class UserRejectedError extends Error {
+  constructor(message: string = "User rejected the request") {
+    super(message);
+    this.name = "UserRejectedError";
+  }
+}
+
+/** Specialized error for when the Freighter wallet is locked. */
+export class LockedWalletError extends WalletError {
+  constructor() {
+    super(
+      "Wallet is locked. Please unlock Freighter and try again.",
+    );
+    this.name = "LockedWalletError";
+  }
+}
+
 /** Whether the Freighter extension is installed and reachable. */
 export async function isFreighterInstalled(): Promise<boolean> {
   try {
@@ -94,7 +116,29 @@ export async function signTx(
     networkPassphrase,
     address,
   });
-  if (res.error) throw new WalletError(String(res.error));
+  if (res.error) {
+    const errorMsg = String(res.error).toLowerCase();
+    // Locked-wallet is checked first: its messages can also mention "user"
+    // ("user must unlock"), which the rejection matcher below would swallow.
+    if (
+      errorMsg.includes("locked") ||
+      errorMsg.includes("unlock") ||
+      errorMsg.includes("not connected") ||
+      errorMsg.includes("not allowed")
+    ) {
+      throw new LockedWalletError();
+    }
+    // Detect user rejection: Freighter uses "rejected" or "user denied".
+    if (
+      errorMsg.includes("user") ||
+      errorMsg.includes("reject") ||
+      errorMsg.includes("cancel") ||
+      errorMsg.includes("denied")
+    ) {
+      throw new UserRejectedError(String(res.error));
+    }
+    throw new WalletError(String(res.error));
+  }
   if (!res.signedTxXdr) throw new WalletError("Freighter returned no signature.");
   return res.signedTxXdr;
 }

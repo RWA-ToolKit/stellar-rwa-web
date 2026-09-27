@@ -25,7 +25,7 @@ export function FeaturedAssets() {
       <div className="mb-6 flex items-end justify-between">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-base-100">Featured assets</h2>
-          <p className="mt-1 text-sm text-base-100/50">Live, on-chain, compliance-gated.</p>
+          <p className="mt-1 text-sm text-base-100/55">Live, on-chain, compliance-gated.</p>
         </div>
         <Link href="/explore" className="text-sm font-medium text-brand-400 hover:text-brand-300">
           View all →

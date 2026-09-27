@@ -5,7 +5,7 @@ import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
 import { assetToken } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
-import { parseTokenAmount, formatTokenAmount } from "@/lib/format";
+import { parseTokenAmount, formatTokenAmount, formatRawPlain } from "@/lib/format";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -14,23 +14,29 @@ interface TokenPanelProps {
   asset: AssetDetail;
   onMinted?: () => void;
   onPauseToggled?: () => void;
+  isAdmin?: boolean;
 }
 
 /** Mint tokens to an address, and pause / unpause the token contract. */
-export function TokenPanel({ asset, onMinted, onPauseToggled }: TokenPanelProps) {
+export function TokenPanel({ asset, onMinted, onPauseToggled, isAdmin = true }: TokenPanelProps) {
   const { metadata, tokenContract } = asset;
 
   return (
     <div className="space-y-4">
+      <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-base-100/50">
+        <strong>Required role:</strong> asset-token <code className="font-mono text-base-100/60">admin</code>
+      </div>
       <MintCard
         tokenContract={tokenContract}
         metadata={metadata}
-        onMinted={onMinted}
+        {...(onMinted !== undefined ? { onMinted } : {})}
+        isAdmin={isAdmin}
       />
       <PauseCard
         tokenContract={tokenContract}
         paused={metadata.paused}
-        onToggled={onPauseToggled}
+        {...(onPauseToggled !== undefined ? { onToggled: onPauseToggled } : {})}
+        isAdmin={isAdmin}
       />
     </div>
   );
@@ -38,19 +44,30 @@ export function TokenPanel({ asset, onMinted, onPauseToggled }: TokenPanelProps)
 
 // ---- Mint ----
 
+/**
+ * Threshold for requiring confirmation on large mint amounts.
+ * Mints that would increase supply by more than 50% of current supply require
+ * an extra confirmation step to prevent accidental supply inflation.
+ */
+const LARGE_MINT_THRESHOLD_PERCENT = 50;
+
 function MintCard({
   tokenContract,
   metadata,
   onMinted,
+  isAdmin = true,
 }: {
   tokenContract: string;
   metadata: AssetDetail["metadata"];
   onMinted?: () => void;
+  isAdmin?: boolean;
 }) {
   const tx = useTx();
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingMint, setPendingMint] = useState<{ recipient: string; raw: bigint } | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,27 +88,75 @@ function MintCard({
       setFormError("Amount must be greater than zero.");
       return;
     }
+
+    // Check if this is a large mint that requires confirmation
+    if (
+      raw * 100n >
+      metadata.totalSupply * BigInt(LARGE_MINT_THRESHOLD_PERCENT)
+    ) {
+      setPendingMint({ recipient, raw });
+      setConfirmOpen(true);
+      return;
+    }
+
+    // Otherwise, mint directly
+    await executeMint(recipient, raw);
+  }
+
+  async function executeMint(recipient: string, raw: bigint) {
     const res = await tx.run((ctx) =>
       assetToken.mint(ctx, tokenContract, recipient, raw),
     );
     if (res) {
       setTo("");
       setAmount("");
+      setPendingMint(null);
       onMinted?.();
     }
   }
 
+  function handleConfirmLargeMint() {
+    setConfirmOpen(false);
+    if (pendingMint) {
+      void executeMint(pendingMint.recipient, pendingMint.raw);
+    }
+  }
+
+  function handleCancelMint() {
+    setConfirmOpen(false);
+    setPendingMint(null);
+  }
+
   return (
-    <ActionCard
-      title="Mint tokens"
-      description="Issue new tokens to a KYC-approved address, increasing total supply."
-      icon={
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 8v8M8 12h8" strokeLinecap="round" />
-        </svg>
-      }
-    >
+    <>
+      <ConfirmDialog
+        open={confirmOpen && !!pendingMint}
+        title="Confirm large mint?"
+        description={
+          pendingMint
+            ? `You're minting ${formatTokenAmount(pendingMint.raw, metadata.decimals)} ${
+                metadata.symbol
+              } (${formatRawPlain(pendingMint.raw, metadata.decimals)} raw). This will increase total supply from ${formatTokenAmount(
+                metadata.totalSupply,
+                metadata.decimals,
+              )} by more than ${LARGE_MINT_THRESHOLD_PERCENT}%. Are you sure this is correct?`
+            : ""
+        }
+        confirmLabel="Yes, mint these tokens"
+        onConfirm={handleConfirmLargeMint}
+        onCancel={handleCancelMint}
+      />
+
+      <ActionCard
+        title="Mint tokens"
+        description="Issue new tokens to a KYC-approved address, increasing total supply."
+        icon={
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 8v8M8 12h8" strokeLinecap="round" />
+          </svg>
+        }
+      >
       {/* #294: warn the issuer when the token is paused so mint attempts don't silently fail */}
       {metadata.paused && (
         <p
@@ -110,7 +175,7 @@ function MintCard({
             value={to}
             onChange={(e) => setTo(e.target.value)}
             placeholder="G… or C…"
-            disabled={tx.pending}
+            disabled={tx.pending || !isAdmin}
             className="input font-mono text-xs"
             spellCheck={false}
           />
@@ -124,14 +189,14 @@ function MintCard({
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               inputMode="decimal"
-              disabled={tx.pending}
+              disabled={tx.pending || !isAdmin}
               className="input pr-20"
             />
-            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/55">
               {metadata.symbol}
             </span>
           </div>
-          <p className="mt-1 text-[11px] text-base-100/40">
+          <p className="mt-1 text-[11px] text-base-100/55">
             Current supply: {formatTokenAmount(metadata.totalSupply, metadata.decimals)} {metadata.symbol}
           </p>
         </div>
@@ -139,7 +204,12 @@ function MintCard({
         {formError && <p className="text-xs text-red-400">{formError}</p>}
 
         {tx.phase === "idle" ? (
-          <button type="submit" disabled={tx.pending} className="btn-primary">
+          <button
+            type="submit"
+            disabled={tx.pending || !isAdmin}
+            className="btn-primary"
+            title={!isAdmin ? "Only the asset admin can mint tokens" : ""}
+          >
             Mint
           </button>
         ) : (
@@ -147,6 +217,7 @@ function MintCard({
             phase={tx.phase}
             hash={tx.hash}
             error={tx.error}
+            errorType={tx.errorType}
             onDismiss={tx.reset}
             onRetry={tx.retry}
             retryable={tx.retryable}
@@ -154,32 +225,33 @@ function MintCard({
           />
         )}
       </form>
-    </ActionCard>
+      </ActionCard>
+    </>
   );
 }
 
 // ---- Pause / Unpause ----
 
+interface AssetMetadata {
+  name?: string;
+}
+
 function PauseCard({
   tokenContract,
   paused,
   onToggled,
+  isAdmin = true,
 }: {
   tokenContract: string;
   paused: boolean;
   onToggled?: () => void;
+  isAdmin?: boolean;
 }) {
   const tx = useTx();
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   function requestToggle() {
-    // Unpausing is recoverable; pausing is the irreversible (blocking) action
-    // that warrants an explicit confirmation step.
-    if (!paused) {
-      setConfirmOpen(true);
-    } else {
-      void doToggle();
-    }
+    setConfirmOpen(true);
   }
 
   async function doToggle() {
@@ -196,9 +268,13 @@ function PauseCard({
     <>
       <ConfirmDialog
         open={confirmOpen}
-        title="Pause all transfers?"
-        description="This will immediately stop all token transfers. Existing holders won't be able to send or receive this asset until you unpause it. Are you sure you want to continue?"
-        confirmLabel="Yes, pause transfers"
+        title={paused ? "Unpause transfers?" : "Pause all transfers?"}
+        description={
+          paused
+            ? "This will re-enable all token transfers. Existing holders will be able to send or receive this asset again. Are you sure?"
+            : "This will immediately stop all token transfers. Existing holders won't be able to send or receive this asset until you unpause it. Are you sure you want to continue?"
+        }
+        confirmLabel={paused ? "Yes, unpause transfers" : "Yes, pause transfers"}
         onConfirm={doToggle}
         onCancel={() => setConfirmOpen(false)}
       />
@@ -232,8 +308,9 @@ function PauseCard({
         {tx.phase === "idle" ? (
           <button
             onClick={requestToggle}
-            disabled={tx.pending}
+            disabled={tx.pending || !isAdmin}
             className={paused ? "btn-primary" : "btn-secondary"}
+            title={!isAdmin ? "Only the asset admin can control pausing" : ""}
           >
             {paused ? "Unpause transfers" : "Pause transfers"}
           </button>
@@ -242,6 +319,7 @@ function PauseCard({
             phase={tx.phase}
             hash={tx.hash}
             error={tx.error}
+            errorType={tx.errorType}
             onDismiss={tx.reset}
             onRetry={tx.retry}
             retryable={tx.retryable}

@@ -42,7 +42,7 @@ export function TokenizeWizard() {
         </div>
         <div>
           <h2 className="text-xl font-semibold text-base-100">Connect your wallet</h2>
-          <p className="mx-auto mt-2 max-w-sm text-sm text-base-100/50">
+          <p className="mx-auto mt-2 max-w-sm text-sm text-base-100/55">
             You must connect the issuer wallet before registering an asset. The
             connected address will be recorded as the issuer.
           </p>

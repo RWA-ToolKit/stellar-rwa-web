@@ -2,6 +2,9 @@ interface ErrorStateProps {
   title?: string;
   message: string;
   onRetry?: () => void;
+  /** Heading level for the title so it never skips a level in context. */
+  headingLevel?: 1 | 2 | 3 | 4;
+  retryLabel?: string;
   className?: string;
 }
 
@@ -10,8 +13,11 @@ export function ErrorState({
   title = "Something went wrong",
   message,
   onRetry,
+  headingLevel = 3,
+  retryLabel = "Try again",
   className = "",
 }: ErrorStateProps) {
+  const Heading = `h${headingLevel}` as const;
   return (
     <div
       role="alert"
@@ -25,12 +31,12 @@ export function ErrorState({
         </svg>
       </div>
       <div>
-        <h3 className="text-base font-semibold text-base-100">{title}</h3>
+        <Heading className="text-base font-semibold text-base-100">{title}</Heading>
         <p className="mx-auto mt-1 max-w-md text-sm text-base-100/60">{message}</p>
       </div>
       {onRetry && (
-        <button onClick={onRetry} className="btn-secondary mt-1">
-          Try again
+        <button type="button" onClick={() => onRetry()} className="btn-secondary mt-1">
+          {retryLabel}
         </button>
       )}
     </div>

@@ -8,7 +8,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { AssetEntry } from "@/types";
 
 // Render Next.js Link as a plain <a> — no router needed.
@@ -16,15 +16,32 @@ jest.mock("next/link", () => {
   const MockLink = ({
     children,
     href,
+    onFocus,
+    onMouseEnter,
   }: {
     children: React.ReactNode;
     href: string;
-  }) => <a href={href}>{children}</a>;
+    onFocus?: () => void;
+    onMouseEnter?: () => void;
+  }) => (
+    <a href={href} onFocus={onFocus} onMouseEnter={onMouseEnter}>
+      {children}
+    </a>
+  );
   MockLink.displayName = "MockLink";
   return MockLink;
 });
 
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: () => ({ network: "testnet" }),
+}));
+
+jest.mock("@/lib/assetCache", () => ({
+  prefetchAssetMetadata: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { AssetCard } from "../AssetCard";
+import { prefetchAssetMetadata } from "@/lib/assetCache";
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -45,6 +62,8 @@ function makeAsset(overrides: Partial<AssetEntry> = {}): AssetEntry {
 // ── tests ──────────────────────────────────────────────────────────────────
 
 describe("AssetCard", () => {
+  afterEach(() => jest.clearAllMocks());
+
   it("renders the asset name", () => {
     render(<AssetCard asset={makeAsset()} />);
     expect(screen.getByText("Lagos Office Tower")).toBeInTheDocument();
@@ -65,6 +84,26 @@ describe("AssetCard", () => {
     render(<AssetCard asset={makeAsset({ id: 7n })} />);
     const link = screen.getByRole("link");
     expect(link).toHaveAttribute("href", "/asset/7");
+  });
+
+  it("prefetches metadata when the card receives pointer or keyboard focus", () => {
+    const asset = makeAsset();
+    render(<AssetCard asset={asset} />);
+    const link = screen.getByRole("link");
+
+    fireEvent.mouseEnter(link);
+    fireEvent.focus(link);
+
+    expect(prefetchAssetMetadata).toHaveBeenNthCalledWith(
+      1,
+      "testnet",
+      asset.tokenContract,
+    );
+    expect(prefetchAssetMetadata).toHaveBeenNthCalledWith(
+      2,
+      "testnet",
+      asset.tokenContract,
+    );
   });
 
   it("shows 'Inactive' chip when asset.active is false", () => {

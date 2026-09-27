@@ -11,13 +11,13 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import type { AssetDetail } from "@/types";
 
 // ── mock useTx ─────────────────────────────────────────────────────────────
 // Default: idle, never pending — the submit button is visible.
 
-const mockRun = jest.fn();
+const mockRun = jest.fn().mockResolvedValue(true);
 
 jest.mock("@/hooks/useTx", () => ({
   useTx: jest.fn(() => ({
@@ -76,7 +76,7 @@ function makeAsset(decimals: number, paused = false): AssetDetail {
       name: "Test Asset",
       symbol: "TST",
       assetType: "real_estate",
-      totalSupply: 1_000_000n,
+      totalSupply: 10_000_000_000n, // Much larger supply to avoid triggering large mint confirmation
       decimals,
       admin: "GISSUER123",
       complianceContract: "CCOMPLIANCE",
@@ -90,13 +90,15 @@ function makeAsset(decimals: number, paused = false): AssetDetail {
 const VALID_RECIPIENT = "GABCDEFGHIJ";
 
 async function fillAndSubmit(amount: string, recipient = VALID_RECIPIENT) {
-  fireEvent.change(screen.getByLabelText(/recipient address/i), {
-    target: { value: recipient },
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText(/recipient address/i), {
+      target: { value: recipient },
+    });
+    fireEvent.change(screen.getByLabelText(/amount/i), {
+      target: { value: amount },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /mint/i }));
   });
-  fireEvent.change(screen.getByLabelText(/amount/i), {
-    target: { value: amount },
-  });
-  fireEvent.click(screen.getByRole("button", { name: /mint/i }));
 }
 
 // ── tests ──────────────────────────────────────────────────────────────────
@@ -104,6 +106,7 @@ async function fillAndSubmit(amount: string, recipient = VALID_RECIPIENT) {
 describe("TokenPanel – MintCard parseTokenAmount validation", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRun.mockResolvedValue(true);
   });
 
   // ── decimals = 7 (normal Stellar token) ───────────────────────────────

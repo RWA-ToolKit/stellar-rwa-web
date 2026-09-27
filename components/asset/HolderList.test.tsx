@@ -31,6 +31,7 @@ function setup(holders: Holder[]) {
     data: holders,
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
   });
 }
@@ -46,10 +47,14 @@ describe("HolderList", () => {
 
     render(<HolderList asset={asset} />);
 
-    // A listitem takes no accessible name from its content, so assert on the
-    // rendered text instead. useHolders does the sorting; this pins that the
-    // list renders in the order it is given.
-    const rows = screen.getAllByRole("listitem");
+    // useHolders does the sorting; this pins that the table renders rows in
+    // the order given, with column headers exposed to assistive tech.
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
+      "Address",
+      "Balance",
+      "Share of supply",
+    ]);
+    const rows = screen.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveTextContent(/900 TOKEN/);
     expect(rows[1]).toHaveTextContent(/100 TOKEN/);
@@ -66,7 +71,7 @@ describe("HolderList", () => {
         "Once the issuer distributes this asset to approved addresses, holders appear here.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
   });
 
   it("renders an ErrorState with retry when loading holders fails", () => {
@@ -76,6 +81,7 @@ describe("HolderList", () => {
       data: null,
       loading: false,
       error: "RPC unreachable",
+      updatedAt: null,
       refetch: mockRefetch,
     });
 

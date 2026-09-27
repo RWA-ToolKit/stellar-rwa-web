@@ -1,10 +1,15 @@
 /**
  * Tests for components/issuer/panels/DistributionPanel.tsx
  *
- * Focus: ExistingDistributionsCard renders a progress bar whose width is
- * derived from percent(d.distributed, d.totalAmount). The width must always be
- * clamped to [0, 100] — even if percent() or upstream data produces a value
- * outside that range due to rounding or a stale snapshot.
+ * Focus areas:
+ *   1. ExistingDistributionsCard renders a progress bar whose width is
+ *      derived from percent(d.distributed, d.totalAmount). The width must
+ *      always be clamped to [0, 100].
+ *
+ *   2. (#323) CreateDistributionCard shows known-token preset buttons so the
+ *      issuer can fill the payment-token field without pasting a raw contract
+ *      address. Each preset button fills the input with the correct contract ID
+ *      for the current network.
  *
  * Strategy: mock useDividends so we control the Distribution objects directly,
  * mock useTx / CreateDistributionCard dependencies so we only test the
@@ -13,7 +18,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import type { AssetDetail } from "@/types";
 
 // ── mock useDividends ──────────────────────────────────────────────────────
@@ -53,7 +58,7 @@ jest.mock("@stellar/stellar-sdk", () => ({
   ...jest.requireActual("@stellar/stellar-sdk"),
   StrKey: {
     isValidEd25519PublicKey: () => false,
-    isValidContract: () => false,
+    isValidContract: (address: string) => address.startsWith("C"),
   },
 }));
 
@@ -75,12 +80,6 @@ jest.mock("@/components/ui/ErrorState", () => ({
   ErrorState: ({ title }: { title: string }) => <div role="alert">{title}</div>,
 }));
 
-// ── mock ClaimButton constant ─────────────────────────────────────────────
-
-jest.mock("@/components/dividend/ClaimButton", () => ({
-  PAYMENT_TOKEN_DECIMALS: 7,
-}));
-
 // ── mock percent so we can force out-of-range values ──────────────────────
 // By default we proxy to the real implementation; individual tests override.
 
@@ -91,9 +90,12 @@ const percentSpy = jest.spyOn(formatModule, "percent");
 // ── imports after mocks ────────────────────────────────────────────────────
 
 import { useDividends } from "@/hooks/useDividends";
+import type { DistributionWithClaim } from "@/hooks/useDividends";
+import { useAsync } from "@/hooks/useAsync";
 import { DistributionPanel } from "../DistributionPanel";
 
 const mockUseDividends = useDividends as jest.MockedFunction<typeof useDividends>;
+const mockUseAsync = useAsync as jest.Mock;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -122,22 +124,19 @@ function makeAsset(): AssetDetail {
   };
 }
 
-type DistributionItem = ReturnType<typeof useDividends>["data"] extends Array<infer T> | null
-  ? T
-  : never;
-
 function makeDistribution(
   id: bigint,
   distributed: bigint,
   totalAmount: bigint,
   completed = false,
-): DistributionItem {
+): DistributionWithClaim {
   return {
     id,
     assetToken: "CTOKEN123",
     paymentToken: "CPAYTOKEN",
     totalAmount,
     distributed,
+    paymentTokenDecimals: 7,
     createdAt: 100,
     completed,
     claimable: 0n,
@@ -227,8 +226,7 @@ describe("DistributionPanel – ExistingDistributionsCard progress bar clamping"
       document.querySelectorAll<HTMLElement>(".bg-gradient-to-r"),
     );
     expect(bars).toHaveLength(2);
-    expect(bars[0].style.width).toBe("25%");
-    expect(bars[1].style.width).toBe("100%");
+    expect(bars.map((bar) => bar.style.width)).toEqual(["25%", "100%"]);
   });
 
   it("shows an empty state when there are no distributions", () => {
@@ -243,5 +241,159 @@ describe("DistributionPanel – ExistingDistributionsCard progress bar clamping"
     render(<DistributionPanel asset={makeAsset()} />);
 
     expect(screen.getByRole("alert")).toBeInTheDocument();
+  });
+});
+
+// ── known-token preset tests (#323) ────────────────────────────────────────
+//
+// The XLM SAC contract IDs used in these tests are the canonical well-known
+// addresses embedded in KNOWN_TOKENS inside DistributionPanel.tsx.
+
+const XLM_SAC_TESTNET = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCN4";
+const XLM_SAC_MAINNET = "CAS3J7GYLGXMF6TDJBBYYSE3HQ6BBSMLNUQ34T6TZMYMW2EVH34XOWMA";
+
+import { useWallet } from "@/hooks/useWallet";
+
+const mockUseWallet = useWallet as jest.MockedFunction<typeof useWallet>;
+
+describe("DistributionPanel – CreateDistributionCard known-token presets (#323)", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    // Ensure distributions card renders with no data to avoid interfering.
+    mockUseDividends.mockReturnValue({
+      data: [],
+      loading: false,
+      error: null,
+      updatedAt: null,
+      refetch: jest.fn(),
+    } as ReturnType<typeof useDividends>);
+  });
+
+  it("shows an XLM SAC preset button on testnet", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    expect(screen.getByRole("button", { name: /use native xlm .sac. \(CDLZFC/i })).toBeInTheDocument();
+  });
+
+  it("shows an XLM SAC preset button on mainnet", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "mainnet" } as ReturnType<typeof useWallet>);
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    expect(screen.getByRole("button", { name: /use native xlm .sac. \(CAS3J7/i })).toBeInTheDocument();
+  });
+
+  it("clicking the testnet XLM SAC preset fills the payment-token input", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /use native xlm .sac. \(CDLZFC/i }));
+
+    const input = document.getElementById("dist-payment-token") as HTMLInputElement;
+    expect(input.value).toBe(XLM_SAC_TESTNET);
+  });
+
+  it("clicking the mainnet XLM SAC preset fills the payment-token input with the mainnet address", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "mainnet" } as ReturnType<typeof useWallet>);
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /use native xlm .sac. \(CAS3J7/i }));
+
+    const input = document.getElementById("dist-payment-token") as HTMLInputElement;
+    expect(input.value).toBe(XLM_SAC_MAINNET);
+  });
+
+  it("applies an active style to the preset button when its address is currently in the input", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    const presetBtn = screen.getByRole("button", { name: /use native xlm .sac. \(CDLZFC/i });
+
+    // Before clicking: should NOT have the active (brand) class.
+    expect(presetBtn.className).not.toContain("text-brand-300");
+
+    // After clicking: should get the active class.
+    fireEvent.click(presetBtn);
+    expect(presetBtn.className).toContain("text-brand-300");
+  });
+
+  it("clicking a preset does not submit the form", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
+    const { useTx: mockUseTxFn } = require("@/hooks/useTx") as { useTx: jest.MockedFunction<typeof import("@/hooks/useTx").useTx> };
+    const mockRunFn = mockUseTxFn().run as jest.Mock;
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /use native xlm .sac. \(CDLZFC/i }));
+
+    expect(mockRunFn).not.toHaveBeenCalled();
+  });
+
+  it("clearly blocks creation when the dividend contract allowance is too low", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
+    mockUseAsync.mockImplementation((_loader: unknown, deps: unknown[]) => ({
+      // Two deps is the payment-token decimals read, which must resolve before
+      // the requested amount can be parsed and compared.
+      data:
+        deps.length === 2
+          ? { token: deps[1], decimals: 7 }
+          : deps.length === 4
+            ? { token: deps[1], amount: 5_0000000n }
+            : { token: deps[1], amount: 100_0000000n },
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    }));
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    fireEvent.change(screen.getByLabelText(/payment token contract/i), {
+      target: { value: XLM_SAC_TESTNET },
+    });
+    fireEvent.change(screen.getByLabelText(/total pool amount/i), {
+      target: { value: "10" },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/not approved to spend enough/i);
+    expect(screen.getByRole("button", { name: /create distribution/i })).toBeDisabled();
+  });
+
+  it("blocks creation when the requested pool exceeds the payment-token balance", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
+    const run = jest.fn();
+    const { useTx: mockUseTxFn } = require("@/hooks/useTx") as { useTx: jest.Mock };
+    mockUseTxFn.mockReturnValue({
+      phase: "idle",
+      hash: null,
+      error: null,
+      errorType: "generic",
+      pending: false,
+      run,
+      reset: jest.fn(),
+    });
+    mockUseAsync.mockImplementation((_loader: unknown, deps: unknown[]) => ({
+      // Two deps is the payment-token decimals read.
+      data:
+        deps.length === 2
+          ? { token: deps[1], decimals: 7 }
+          : deps.length === 4
+            ? { token: deps[1], amount: 100_0000000n }
+            : { token: deps[1], amount: 5_0000000n },
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    }));
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    fireEvent.change(screen.getByLabelText(/payment token contract/i), {
+      target: { value: XLM_SAC_TESTNET },
+    });
+    fireEvent.change(screen.getByLabelText(/total pool amount/i), {
+      target: { value: "10" },
+    });
+
+    const submitButton = screen.getByRole("button", { name: /create distribution/i });
+    expect(submitButton).toBeDisabled();
+    fireEvent.submit(submitButton.closest("form")!);
+    expect(screen.getByText(/exceeds your payment-token balance/i)).toBeInTheDocument();
+    expect(run).not.toHaveBeenCalled();
   });
 });

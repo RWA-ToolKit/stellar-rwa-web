@@ -10,13 +10,12 @@ import {
   type TypeFilter,
   type SortKey,
 } from "./AssetFilter";
-import { CardSkeletonGrid } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ASSET_TYPES } from "@/types";
+import { DataFreshness } from "@/components/ui/DataFreshness";
 
 const PAGE_SIZE = 9;
-const MAX_VISIBLE_PAGES = 5;
 
 const VALID_SORT_KEYS: SortKey[] = ["valuation", "newest"];
 const VALID_TYPE_FILTERS: TypeFilter[] = ["all", ...ASSET_TYPES];
@@ -32,13 +31,14 @@ function isValidTypeFilter(value: string): value is TypeFilter {
 /**
  * Client island powering /explore: loads all registered assets, applies the
  * type filter and sort, and paginates the results with numbered page controls.
- * Filter and page state are serialised into the URL (type, sort, page) so
- * filtered views can be linked and restored on refresh.
+ * Search, filter and page state are serialised into the URL (q, type, sort,
+ * page) so filtered views can be linked and restored on refresh.
  */
 export function AssetExplorer() {
-  const { assets, loading, error, refetch } = useAssets();
+  const { assets, loading, error, refetch, updatedAt } = useAssets();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const search = searchParams.get("q") ?? "";
 
   // Derive filter and page from URL search params, falling back to defaults.
   const filter: FilterValue = useMemo(() => {
@@ -76,6 +76,18 @@ export function AssetExplorer() {
     if (filter.type !== "all") {
       list = list.filter((a) => a.assetType === filter.type);
     }
+    const term = search.trim().toLowerCase();
+    if (term) {
+      list = list.filter((asset) =>
+        [
+          asset.name,
+          asset.id.toString(),
+          asset.issuer,
+          asset.tokenContract,
+          asset.assetType,
+        ].some((field) => field.toLowerCase().includes(term)),
+      );
+    }
     const sorted = [...list].sort((a, b) => {
       if (filter.sort === "valuation") {
         return a.valuation > b.valuation ? -1 : a.valuation < b.valuation ? 1 : 0;
@@ -83,7 +95,7 @@ export function AssetExplorer() {
       return b.createdAt - a.createdAt;
     });
     return sorted;
-  }, [assets, filter]);
+  }, [assets, filter, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -91,7 +103,7 @@ export function AssetExplorer() {
 
   /** Build a new URL by merging changes into the current search params. */
   const buildUrl = useCallback(
-    (updates: Partial<{ type: TypeFilter; sort: SortKey; page: number }>) => {
+    (updates: Partial<{ type: TypeFilter; sort: SortKey; page: number; q: string }>) => {
       const params = new URLSearchParams(searchParams.toString());
       if (updates.type !== undefined) {
         if (updates.type === "all") {
@@ -114,6 +126,14 @@ export function AssetExplorer() {
           params.set("page", String(updates.page));
         }
       }
+      if (updates.q !== undefined) {
+        const query = updates.q.trim();
+        if (query) {
+          params.set("q", query);
+        } else {
+          params.delete("q");
+        }
+      }
       const qs = params.toString();
       return qs ? `/explore?${qs}` : "/explore";
     },
@@ -134,118 +154,56 @@ export function AssetExplorer() {
     [router, buildUrl],
   );
 
+  const updateSearch = useCallback(
+    (next: string) => {
+      router.replace(buildUrl({ q: next, page: 1 }), { scroll: false });
+    },
+    [router, buildUrl],
+  );
+
   return (
     <div className="space-y-8">
-      <AssetFilter value={filter} onChange={updateFilter} counts={counts} />
+      <AssetFilter
+        value={filter}
+        onChange={updateFilter}
+        search={search}
+        onSearchChange={updateSearch}
+        counts={counts}
+      />
 
       {loading ? (
-        <CardSkeletonGrid count={6} />
+        <AssetGrid assets={[]} loading skeletonCount={PAGE_SIZE} />
       ) : error ? (
-        <ErrorState message={error} onRetry={refetch} />
+        <ErrorState message={error} onRetry={refetch} headingLevel={2} />
       ) : filtered.length === 0 ? (
         <EmptyState
-          title={filter.type === "all" ? "No assets tokenized yet" : "No assets of this type"}
+          headingLevel={2}
+          title={
+            search.trim()
+              ? "No assets found"
+              : filter.type === "all"
+                ? "No assets tokenized yet"
+                : "No assets of this type"
+          }
           description={
-            filter.type === "all"
-              ? "Be the first to bring a real-world asset on-chain."
-              : "Try a different asset class or clear the filter."
+            search.trim()
+              ? "Try a different search or clear the search field."
+              : filter.type === "all"
+                ? "Be the first to bring a real-world asset on-chain."
+                : "Try a different asset class or clear the filter."
           }
         />
       ) : (
-        <>
-          <AssetGrid assets={visible} />
-          {totalPages > 1 && (
-            <PaginationBar
-              page={currentPage}
-              totalPages={totalPages}
-              onChange={goToPage}
-              total={filtered.length}
-            />
-          )}
-        </>
+        <AssetGrid
+          assets={visible}
+          headingLevel={2}
+          page={currentPage}
+          totalPages={totalPages}
+          total={filtered.length}
+          onPageChange={goToPage}
+        />
       )}
-    </div>
-  );
-}
-
-function PaginationBar({
-  page,
-  totalPages,
-  onChange,
-  total,
-}: {
-  page: number;
-  totalPages: number;
-  onChange: (p: number) => void;
-  total: number;
-}) {
-  const pages = useMemo(() => {
-    const half = Math.floor(MAX_VISIBLE_PAGES / 2);
-    let start = Math.max(1, page - half);
-    let end = Math.min(totalPages, start + MAX_VISIBLE_PAGES - 1);
-    if (end - start + 1 < MAX_VISIBLE_PAGES) {
-      start = Math.max(1, end - MAX_VISIBLE_PAGES + 1);
-    }
-    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }, [page, totalPages]);
-
-  return (
-    <div className="flex items-center justify-between border-t border-white/5 pt-5">
-      <p className="text-sm text-base-100/40">
-        Page {page} of {totalPages} · {total} asset{total === 1 ? "" : "s"}
-      </p>
-      <nav className="flex items-center gap-1" aria-label="Pagination">
-        <button
-          onClick={() => onChange(page - 1)}
-          disabled={page <= 1}
-          className="btn-secondary px-3 py-2 text-sm"
-          aria-label="Previous page"
-        >
-          ←
-        </button>
-        {pages[0] > 1 && (
-          <>
-            <button onClick={() => onChange(1)} className="btn-secondary px-3 py-2 text-sm">
-              1
-            </button>
-            {pages[0] > 2 && (
-              <span className="px-1 text-sm text-base-100/30">…</span>
-            )}
-          </>
-        )}
-        {pages.map((p) => (
-          <button
-            key={p}
-            onClick={() => onChange(p)}
-            className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              p === page
-                ? "bg-brand-500/20 text-brand-300"
-                : "text-base-100/60 hover:text-base-100/90 btn-secondary"
-            }`}
-            aria-current={p === page ? "page" : undefined}
-          >
-            {p}
-          </button>
-        ))}
-        {pages[pages.length - 1] < totalPages && (
-          <>
-            {pages[pages.length - 1] < totalPages - 1 && (
-              <span className="px-1 text-sm text-base-100/30">…</span>
-            )}
-            <button onClick={() => onChange(totalPages)} className="btn-secondary px-3 py-2 text-sm">
-              {totalPages}
-            </button>
-          </>
-        )}
-        <button
-          onClick={() => onChange(page + 1)}
-          disabled={page >= totalPages}
-          className="btn-secondary px-3 py-2 text-sm"
-          aria-label="Next page"
-        >
-          →
-        </button>
-      </nav>
+      {!loading && !error && <DataFreshness updatedAt={updatedAt} />}
     </div>
   );
 }

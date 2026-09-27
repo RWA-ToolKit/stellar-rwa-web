@@ -25,6 +25,7 @@
 import type { Page, Route } from "@playwright/test";
 import {
   Address,
+  Keypair,
   Networks,
   SorobanDataBuilder,
   TransactionBuilder,
@@ -90,7 +91,7 @@ interface SimConfig {
 }
 
 /** The invoked function name and arguments, read back out of the envelope. */
-function decodeInvocation(
+export function decodeInvocation(
   txXdr: string,
 ): { fn: string; args: unknown[] } | null {
   try {
@@ -325,7 +326,7 @@ export async function mockFreighterWallet(
           REQUEST_PUBLIC_KEY: { publicKey: address },
           REQUEST_NETWORK_DETAILS: { networkDetails },
           REQUEST_USER_INFO: { userInfo: { publicKey: address } },
-          SIGN_TRANSACTION: {
+          SUBMIT_TRANSACTION: {
             signedTransaction: data?.transactionXdr ?? "",
             signerAddress: address,
           },
@@ -385,6 +386,9 @@ export async function mockRpc(
     hasClaimed = false,
   } = opts;
 
+  // The most recent envelope submitted, echoed back by getTransaction.
+  let lastSentTx = "";
+
   // Intercept Soroban RPC endpoint.
   await page.route(
     /soroban-testnet\.stellar\.org|soroban.*\.org|sorobanrpc/,
@@ -427,6 +431,42 @@ export async function mockRpc(
         });
       }
 
+      // SDK getAccount() is a getLedgerEntries lookup of the account entry.
+      if (method === "getLedgerEntries") {
+        const account = new xdr.AccountEntry({
+          accountId: Keypair.fromPublicKey(WALLET_ADDRESS).xdrAccountId(),
+          balance: xdr.Int64.fromString("1000000000"),
+          seqNum: xdr.Int64.fromString("1000"),
+          numSubEntries: 0,
+          inflationDest: null,
+          flags: 0,
+          homeDomain: "",
+          thresholds: Buffer.from([1, 0, 0, 0]),
+          signers: [],
+          ext: xdr.AccountEntryExt.fromXDR(Buffer.from([0, 0, 0, 0])),
+        });
+        const data = xdr.LedgerEntryData.account(account);
+        const accountKey = xdr.LedgerKey.account(
+          new xdr.LedgerKeyAccount({
+            accountId: Keypair.fromPublicKey(WALLET_ADDRESS).xdrAccountId(),
+          }),
+        );
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              entries: [
+                { key: accountKey.toXDR("base64"), xdr: data.toXDR("base64"), lastModifiedLedgerSeq: 1234 },
+              ],
+              latestLedger: 1234,
+            },
+          }),
+        });
+      }
+
       if (method === "simulateTransaction") {
         const params = body.params as { transaction?: string } | undefined;
         const invocation = decodeInvocation(params?.transaction ?? "");
@@ -461,6 +501,8 @@ export async function mockRpc(
       }
 
       if (method === "sendTransaction") {
+        lastSentTx =
+          (body.params as { transaction?: string } | undefined)?.transaction ?? "";
         return route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -488,9 +530,19 @@ export async function mockRpc(
               status: "SUCCESS",
               latestLedger: "1236",
               latestLedgerCloseTime: "1700000001",
-              txHash:
-                "aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899",
-              returnValue: "AAAAAQAAAAE=",
+              oldestLedger: "1",
+              oldestLedgerCloseTime: "1600000000",
+              ledger: 1235,
+              createdAt: "1700000001",
+              applicationOrder: 1,
+              feeBump: false,
+              // The SDK parses all three; the envelope is the one the app
+              // just sent, the result is a successful tx, and the meta carries
+              // a Soroban return value of u64 7 (the new registry asset id).
+              envelopeXdr: lastSentTx,
+              resultXdr: "AAAAAAAAAGQAAAAAAAAAAAAAAAA=",
+              resultMetaXdr:
+                "AAAAAwAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAFAAAAAAAAAAcAAAAA",
             },
           }),
         });

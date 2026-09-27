@@ -79,6 +79,9 @@ To point the app at different deployments (e.g., local, alternative RPC, or Main
 
 > This project is currently configured for Stellar Testnet only. Mainnet contract IDs are intentionally left blank in [.env.example](.env.example), so the app will not expose fully working mainnet routes until those values are populated.
 
+Use Node.js 20 for local development, matching CI. The repository pins this
+major in `.nvmrc` and npm rejects unsupported Node versions during install.
+
 ```bash
 cp .env.example .env.local   # Testnet contract ids are pre-filled
 npm install
@@ -97,6 +100,14 @@ Install the [Freighter](https://freighter.app) browser extension and point it at
 | `npm run start`   | Serve the production build       |
 | `npm run lint`    | Next.js ESLint                   |
 | `npm run typecheck` | `tsc --noEmit`                 |
+| `npm run size`    | Check the configured bundle-size budgets |
+
+The CI build also generates module-level Webpack Bundle Analyzer reports and
+uploads them as the `bundle-analysis` artifact, including when the size-budget
+check fails. To generate them locally, run `ANALYZE=true npm run build`; the
+reports are written to `.next/analyze/`.
+| `npm test`        | Jest unit and component tests   |
+| `npm run test:e2e` | Playwright browser tests       |
 
 ## Configuration
 
@@ -104,6 +115,12 @@ All configuration is via `NEXT_PUBLIC_*` env vars (see `.env.example`): the
 default network, Soroban RPC URLs, and the registry / compliance / dividend
 contract ids per network. Asset-token contract ids are discovered at runtime
 from the registry.
+
+For help with wallet errors, see [Freighter Troubleshooting](docs/freighter-troubleshooting.md).
+For common first-run issues—including network selection, RPC rate limits, and
+missing contract IDs—see [First-Run Troubleshooting](docs/first-run-troubleshooting.md).
+For test commands, mock setup, and guidance on adding tests, see
+[Running and Extending Tests](docs/testing.md).
 
 ## Architecture
 
@@ -117,10 +134,19 @@ types/          Domain types mirroring the contracts
 ```
 
 - **Reads** simulate a contract invocation via Soroban RPC — no wallet, no fees.
+- Data views show when their figures were last retrieved; values served by the
+  API index may lag behind the latest Stellar ledger while the index catches up.
 - **Writes** build → simulate → assemble → sign (Freighter) → submit → poll,
   surfacing each phase to the UI and mapping contract errors to friendly text.
 - Monetary valuations are stored on-chain as **USD cents** (`i128`); token
+  amounts are integers in each token's own `decimals` base. Dividend payment
+  amounts use the payment token's on-chain decimals and portfolio totals remain
+  grouped by token so different units are never added together.
   amounts are integers in each token's own `decimals` base.
+- For concrete component → hook → API/RPC read paths and the simulate → sign →
+  submit write path, see [Application Data Flow](docs/data-flow.md).
+- For the complete contract validation, registry registration, and four-step
+  wizard flow, see [Tokenizing an asset](docs/tokenizing-an-asset.md).
 
 ### Issuer dashboard roles
 
@@ -149,8 +175,9 @@ explicit "you are not the admin" notice before letting an action be attempted.
 | `/`            | ✅     | Landing: live platform stats, featured assets, how-it-works |
 | `/explore`     | ✅     | Browse assets — filter by type, sort, paginate         |
 | `/asset/[id]`  | ✅     | Asset detail: stats, holders, dividends, gated transfer |
-| `/asset/new`   | ⏳     | Tokenize a new asset (multi-step)                      |
-| `/issuer`      | ⏳     | Issuer dashboard                                        |
-| `/issuer/compliance` | ⏳ | Manage KYC allowlist                                  |
-| `/issuer/dividends`  | ⏳ | Create/manage distributions                          |
-| `/portfolio`   | ⏳     | Investor holdings                                      |
+| `/asset/new`   | ✅     | Tokenize a new asset (four-step registration wizard)   |
+| `/issuer`      | ✅     | Issuer dashboard: token, compliance, and distributions |
+| `/portfolio`   | ✅     | Investor holdings                                      |
+
+Compliance and distribution management are tabs in the `/issuer` dashboard,
+not separate `/issuer/compliance` or `/issuer/dividends` URL routes.

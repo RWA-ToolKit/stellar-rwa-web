@@ -2,11 +2,9 @@ import { render, screen } from "@testing-library/react";
 import { PortfolioSummary } from "./PortfolioSummary";
 import type { PortfolioData } from "@/hooks/usePortfolio";
 
-// PortfolioSummary imports PAYMENT_TOKEN_DECIMALS from ClaimButton, which
-// transitively pulls in @stellar/stellar-sdk (ESM). Mock the whole module.
+// Mock ClaimButton to avoid transitively loading the Stellar SDK (ESM).
 jest.mock("@/components/dividend/ClaimButton", () => ({
   ClaimButton: () => null,
-  PAYMENT_TOKEN_DECIMALS: 7,
 }));
 
 /** Minimal holding used to populate holdings arrays. */
@@ -35,7 +33,9 @@ const HOLDING = (id: bigint, balance: bigint, supply: bigint, valuation: bigint)
   },
   balance,
   claimableDistributions: [],
-  totalClaimable: 0n,
+  totalClaimable: [],
+  failedAssetCount: 0,
+  isIncomplete: false,
 });
 
 describe("PortfolioSummary", () => {
@@ -43,7 +43,9 @@ describe("PortfolioSummary", () => {
     const emptyData: PortfolioData = {
       holdings: [],
       totalValueCents: 0n,
-      totalClaimable: 0n,
+      totalClaimable: [],
+      failedAssetCount: 0,
+      isIncomplete: false,
     };
 
     it("renders all three stat cards", () => {
@@ -83,7 +85,9 @@ describe("PortfolioSummary", () => {
           HOLDING(3n, 100n, 1000n, 2_000_000n),
         ],
         totalValueCents: 8_750_000n,
-        totalClaimable: 0n,
+        totalClaimable: [],
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 
@@ -94,7 +98,9 @@ describe("PortfolioSummary", () => {
       const data: PortfolioData = {
         holdings: [HOLDING(1n, 1000n, 1000n, 5_000_000_00n)],
         totalValueCents: 5_000_000_00n, // $5,000,000
-        totalClaimable: 0n,
+        totalClaimable: [],
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 
@@ -106,7 +112,9 @@ describe("PortfolioSummary", () => {
       const data: PortfolioData = {
         holdings: [HOLDING(1n, 100n, 1000n, 250_000n)],
         totalValueCents: 25_000n, // $250
-        totalClaimable: 0n,
+        totalClaimable: [],
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 
@@ -115,16 +123,18 @@ describe("PortfolioSummary", () => {
   });
 
   describe("claimable dividends", () => {
-    it("shows the formatted claimable amount when totalClaimable > 0", () => {
+    it("shows each claimable amount formatted with its payment token decimals", () => {
       // 5_000_000_0n @ 7 decimals = "5" tokens
       const data: PortfolioData = {
         holdings: [HOLDING(1n, 1000n, 1000n, 1_000_000n)],
         totalValueCents: 1_000_000n,
-        totalClaimable: 5_000_000_0n,
+        totalClaimable: [{ paymentToken: "CPAYMENT", decimals: 7, amount: 5_000_000_0n }],
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 
-      expect(screen.getByText("5")).toBeInTheDocument();
+      expect(screen.getByText("5 CPAYMENT")).toBeInTheDocument();
       // em-dash should NOT appear
       expect(screen.queryByText("—")).not.toBeInTheDocument();
     });
@@ -133,7 +143,9 @@ describe("PortfolioSummary", () => {
       const data: PortfolioData = {
         holdings: [HOLDING(1n, 1000n, 1000n, 1_000_000n)],
         totalValueCents: 1_000_000n,
-        totalClaimable: 1_000_000_0n,
+        totalClaimable: [{ paymentToken: "CPAYMENT", decimals: 7, amount: 1_000_000_0n }],
+        failedAssetCount: 0,
+        isIncomplete: false,
       };
       render(<PortfolioSummary data={data} />);
 

@@ -13,6 +13,8 @@ export interface FilterValue {
 interface AssetFilterProps {
   value: FilterValue;
   onChange: (next: FilterValue) => void;
+  search: string;
+  onSearchChange: (search: string) => void;
   /** Per-type counts, used to annotate the filter chips. */
   counts?: Record<TypeFilter, number>;
 }
@@ -23,20 +25,37 @@ const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
 ];
 
 /** Filter assets by class and choose a sort order. */
-export function AssetFilter({ value, onChange, counts }: AssetFilterProps) {
+export function AssetFilter({
+  value,
+  onChange,
+  search,
+  onSearchChange,
+  counts,
+}: AssetFilterProps) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <label className="sr-only" htmlFor="asset-search">Search assets</label>
+      <input
+        id="asset-search"
+        type="search"
+        value={search}
+        onChange={(event) => onSearchChange(event.target.value)}
+        placeholder="Search by name, ID, issuer or token"
+        className="input w-full sm:max-w-sm"
+      />
+
       {/* #215 a11y: focus-visible rings added to filter chip buttons.
           #216 a11y: aria-label encodes the count so screen readers announce it
                      alongside the visible badge (e.g. "Real Estate, 12 assets").
           #218 a11y: inactive chip text bumped from /60 to /70. */}
-      <div className="flex flex-wrap gap-2">
+      <div role="group" aria-label="Filter by asset type" className="flex flex-wrap gap-2">
         {TYPE_OPTIONS.map((opt) => {
           const active = value.type === opt.value;
           const count = counts?.[opt.value];
           return (
             <button
               key={opt.value}
+              type="button"
               onClick={() => onChange({ ...value, type: opt.value })}
               aria-pressed={active}
               aria-label={count !== undefined ? `${opt.label}, ${count} asset${count === 1 ? "" : "s"}` : opt.label}
@@ -48,7 +67,7 @@ export function AssetFilter({ value, onChange, counts }: AssetFilterProps) {
             >
               {opt.label}
               {count !== undefined && (
-                <span aria-hidden="true" className={active ? "text-brand-300/70" : "text-base-100/40"}>
+                <span aria-hidden="true" className={active ? "text-brand-300/70" : "text-base-100/55"}>
                   {count}
                 </span>
               )}
