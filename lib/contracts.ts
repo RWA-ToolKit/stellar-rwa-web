@@ -163,6 +163,7 @@ type RawDist = {
   distributed: bigint;
   created_at: number;
   completed: boolean;
+  claim_deadline?: number;
 };
 
 function toDistribution(r: RawDist): Distribution {
@@ -174,6 +175,7 @@ function toDistribution(r: RawDist): Distribution {
     distributed: BigInt(r.distributed),
     createdAt: Number(r.created_at),
     completed: r.completed,
+    claimDeadline: r.claim_deadline === undefined ? 0 : Number(r.claim_deadline),
   };
 }
 
@@ -262,6 +264,14 @@ export const assetToken = {
     return readContract<RawMetadata>(network, tokenId, "get_metadata").then(
       toMetadata,
     );
+  },
+
+  async decimals(network: Network, tokenId: string): Promise<number> {
+    const decimals = await readContract<number>(network, tokenId, "decimals");
+    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) {
+      throw new Error(`Token ${tokenId} returned invalid decimals.`);
+    }
+    return decimals;
   },
 
   balance(network: Network, tokenId: string, holder: string): Promise<bigint> {
@@ -465,12 +475,14 @@ export const dividend = {
     assetToken: string,
     paymentToken: string,
     totalAmount: bigint,
+    claimDeadline = 0,
   ): Promise<TxResult> {
     return write(ctx, contractIds(ctx.network).dividend, "create_distribution", [
       arg.address(ctx.source),
       arg.address(assetToken),
       arg.address(paymentToken),
       arg.i128(totalAmount),
+      arg.u32(claimDeadline),
     ]);
   },
 

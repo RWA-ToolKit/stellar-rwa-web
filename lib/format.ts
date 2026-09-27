@@ -7,6 +7,26 @@ import type { AssetType, ComplianceStatus } from "@/types";
 import { ASSET_TYPE_LABELS } from "@/types";
 
 /**
+ * Format XLM (in stroops, the atomic unit: 1 XLM = 10,000,000 stroops)
+ * as a currency string, e.g. 1000000n -> "0.1 XLM".
+ * Used for displaying network fees estimated during transaction simulation.
+ */
+export function formatStroopsToXLM(stroops: bigint | number): string {
+  const base = 10_000_000; // Stroops per XLM
+  const xlm = typeof stroops === "bigint" ? stroops : BigInt(stroops);
+  const whole = xlm / BigInt(base);
+  const remainder = xlm % BigInt(base);
+
+  if (remainder === 0n) {
+    return `${whole.toString()} XLM`;
+  }
+
+  // Format fractional part with trailing zeros removed
+  const fracStr = remainder.toString().padStart(7, "0").replace(/0+$/, "");
+  return `${whole}.${fracStr} XLM`;
+}
+
+/**
  * Format USD cents (bigint) as a currency string, e.g. 500000000n -> "$5,000,000".
  * Stays in bigint until the final string conversion so valuations above
  * Number.MAX_SAFE_INTEGER (2^53-1 cents) keep full precision — mirror of how
@@ -50,27 +70,23 @@ function trimZero(n: number): string {
  * large cents value would), then the small quotient is formatted.
  */
 function compactBigint(n: bigint): string {
-  const abs = n < 0n ? -n : n;
-  let divisor: bigint;
-  let suffix: string;
-  if (abs >= 1_000_000_000n) {
-    divisor = 1_000_000_000n;
-    suffix = "B";
-  } else if (abs >= 1_000_000n) {
-    divisor = 1_000_000n;
-    suffix = "M";
-  } else if (abs >= 1_000n) {
-    divisor = 1_000n;
-    suffix = "K";
-  } else {
-    return n.toString();
-  }
+  const units = [
+    { threshold: 1_000_000_000n, divisor: 1_000_000_000n, suffix: "B" },
+    { threshold: 1_000_000n, divisor: 1_000_000n, suffix: "M" },
+    { threshold: 1_000n, divisor: 1_000n, suffix: "K" },
+  ];
+  let unitIndex = units.findIndex(({ threshold }) => n >= threshold);
+  if (unitIndex < 0) return n.toString();
 
-  const tenths = (abs * 10n + divisor / 2n) / divisor;
-  const whole = tenths / 10n;
+  let { divisor, suffix } = units[unitIndex]!;
+  let tenths = (n * 10n + divisor / 2n) / divisor;
+  while (tenths >= 10_000n && unitIndex > 0) {
+    ({ divisor, suffix } = units[--unitIndex]!);
+    tenths = (n * 10n + divisor / 2n) / divisor;
+  }
+  const whole = (tenths / 10n).toLocaleString("en-US");
   const fraction = tenths % 10n;
-  const sign = n < 0n ? "-" : "";
-  return `${sign}${whole}${fraction === 0n ? "" : `.${fraction}`}${suffix}`;
+  return `${whole}${fraction === 0n ? "" : `.${fraction}`}${suffix}`;
 }
 
 /**
@@ -218,7 +234,9 @@ export function holderSharePercentages(balances: bigint[], supply: bigint): stri
     a.remainder === b.remainder ? a.index - b.index : a.remainder > b.remainder ? -1 : 1,
   );
   for (let i = 0; undistributed > 0n; i += 1) {
-    remainderOrder[i].units += 1n;
+    const item = remainderOrder[i];
+    if (!item) break;
+    item.units += 1n;
     undistributed -= 1n;
   }
 

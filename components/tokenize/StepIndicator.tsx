@@ -26,7 +26,7 @@ export function StepIndicator({ steps, current }: StepIndicatorProps) {
                       ? "border-brand-500 bg-brand-500 text-base-950"
                       : active
                         ? "border-brand-500 bg-transparent text-brand-300"
-                        : "border-white/10 bg-transparent text-base-100/30"
+                        : "border-white/10 bg-transparent text-base-100/55"
                   }`}
                   aria-current={active ? "step" : undefined}
                 >
@@ -40,7 +40,7 @@ export function StepIndicator({ steps, current }: StepIndicatorProps) {
                 </div>
                 <span
                   className={`mt-1.5 hidden text-[11px] font-medium sm:block ${
-                    active ? "text-brand-300" : done ? "text-base-100/60" : "text-base-100/30"
+                    active ? "text-brand-300" : done ? "text-base-100/60" : "text-base-100/55"
                   }`}
                 >
                   {step.label}

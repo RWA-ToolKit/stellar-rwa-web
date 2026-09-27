@@ -6,22 +6,28 @@ import { useAsync } from "@/hooks/useAsync";
 import type { AssetEntry, AssetMetadata, Distribution } from "@/types";
 import type { DistributionWithClaim } from "@/hooks/useDividends";
 
+export interface ClaimableTotal {
+  paymentToken: string;
+  decimals: number;
+  amount: bigint;
+}
+
 export interface Holding {
   asset: AssetEntry;
   metadata: AssetMetadata;
   balance: bigint;
   /** Distributions for this asset that the connected wallet can still claim. */
   claimableDistributions: DistributionWithClaim[];
-  /** Sum of all claimable amounts across distributions for this asset. */
-  totalClaimable: bigint;
+  /** Claimable totals grouped by payment token and decimal scale. */
+  totalClaimable: ClaimableTotal[];
 }
 
 export interface PortfolioData {
   holdings: Holding[];
   /** Total estimated USD value across holdings (valuation × share of supply). */
   totalValueCents: bigint;
-  /** Sum of all claimable dividend amounts across all assets. */
-  totalClaimable: bigint;
+  /** Claimable totals grouped by payment token and decimal scale. */
+  totalClaimable: ClaimableTotal[];
   /** Count of assets that failed to load their distributions. */
   failedAssetCount: number;
   /** Whether the portfolio totals are incomplete due to read failures. */
@@ -38,7 +44,7 @@ export function usePortfolio() {
   return useAsync<PortfolioData>(
     async () => {
       if (!address) {
-        return { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false };
+        return { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false };
       }
 
       // 1. Fetch all assets from registry (already filtered to active by registry contract)
@@ -46,7 +52,7 @@ export function usePortfolio() {
       const allAssets = await registry.getAllAssets(network);
 
       if (allAssets.length === 0) {
-        return { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false };
+        return { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false };
       }
 
       // 2. For each asset, fetch balance + metadata in parallel
@@ -64,7 +70,7 @@ export function usePortfolio() {
       const held = enriched.filter(({ balance }) => balance > 0n);
 
       if (held.length === 0) {
-        return { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false };
+        return { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false };
       }
 
       // 4. For held assets, fetch distributions and annotate with claimable
@@ -83,18 +89,16 @@ export function usePortfolio() {
 
           const claimableDistributions: DistributionWithClaim[] = await Promise.all(
             distributions.map(async (d) => {
-              const [claimable, claimed] = await Promise.all([
+              const [claimable, claimed, paymentTokenDecimals] = await Promise.all([
                 dividend.claimable(network, d.id, address),
                 dividend.hasClaimed(network, d.id, address),
+                assetToken.decimals(network, d.paymentToken),
               ]);
-              return { ...d, claimable, claimed };
+              return { ...d, claimable, claimed, paymentTokenDecimals };
             }),
           );
 
-          const totalClaimable = claimableDistributions.reduce(
-            (sum, d) => sum + (d.claimed ? 0n : d.claimable),
-            0n,
-          );
+          const totalClaimable = sumClaimableByToken(claimableDistributions);
 
           return { asset, metadata, balance, claimableDistributions, totalClaimable };
         }),
@@ -120,9 +124,15 @@ export function usePortfolio() {
         return sum + (asset.valuation * balance) / metadata.totalSupply;
       }, 0n);
 
-      const totalClaimable = holdings.reduce(
-        (sum, h) => sum + h.totalClaimable,
-        0n,
+      const totalClaimable = sumClaimableByToken(
+        holdings.flatMap((holding) =>
+          holding.totalClaimable.map(({ paymentToken, decimals, amount }) => ({
+            paymentToken,
+            paymentTokenDecimals: decimals,
+            claimable: amount,
+            claimed: false,
+          })),
+        ),
       );
 
       return {
@@ -136,4 +146,28 @@ export function usePortfolio() {
     [address, network],
     Boolean(address),
   );
+}
+
+function sumClaimableByToken(
+  distributions: Pick<
+    DistributionWithClaim,
+    "paymentToken" | "paymentTokenDecimals" | "claimable" | "claimed"
+  >[],
+): ClaimableTotal[] {
+  const totals = new Map<string, ClaimableTotal>();
+  for (const distribution of distributions) {
+    if (distribution.claimed || distribution.claimable <= 0n) continue;
+    const key = `${distribution.paymentToken}:${distribution.paymentTokenDecimals}`;
+    const total = totals.get(key);
+    if (total) {
+      total.amount += distribution.claimable;
+    } else {
+      totals.set(key, {
+        paymentToken: distribution.paymentToken,
+        decimals: distribution.paymentTokenDecimals,
+        amount: distribution.claimable,
+      });
+    }
+  }
+  return Array.from(totals.values());
 }

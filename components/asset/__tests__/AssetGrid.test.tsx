@@ -23,6 +23,14 @@ jest.mock("next/link", () => {
   return MockLink;
 });
 
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: () => ({ network: "testnet" }),
+}));
+
+jest.mock("@/lib/assetCache", () => ({
+  prefetchAssetMetadata: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { AssetGrid } from "../AssetGrid";
 
 // ── helpers ────────────────────────────────────────────────────────────────

@@ -54,6 +54,7 @@ function setupTx() {
     hash: null,
     error: null,
     errorType: "generic",
+    estimatedFee: null,
     pending: false,
     run: mockRun,
     reset: mockReset,

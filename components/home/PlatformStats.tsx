@@ -16,12 +16,15 @@ export function PlatformStats() {
 
   const holderCount = stats.data?.totalHolders ?? holders.data ?? null;
 
-  if (stats.error) {
+  const failure = stats.error ?? holders.error;
+  if (failure) {
     return (
       <ErrorState
+        headingLevel={2}
         title="Couldn't load platform stats"
-        message={stats.error}
-        onRetry={stats.refetch}
+        message={failure}
+        // Retry only the load that failed.
+        onRetry={stats.error ? stats.refetch : holders.refetch}
       />
     );
   }
@@ -46,7 +49,7 @@ export function PlatformStats() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {items.map((item) => (
           <div key={item.label} className="card p-6 text-center sm:text-left">
-            <p className="text-xs font-medium uppercase tracking-wide text-base-100/40">
+            <p className="text-xs font-medium uppercase tracking-wide text-base-100/55">
               {item.label}
             </p>
             {item.value === null ? (

@@ -57,7 +57,9 @@ describe("CopyButton", () => {
     });
 
     expect(writeTextMock).toHaveBeenCalledWith("GABC123456789");
-    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+    // Name keeps identifying the value; success is announced via the live region.
+    expect(screen.getByRole("button", { name: "Copy Copy Key" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Copied to clipboard");
     expect(screen.getByText("Copied")).toBeInTheDocument();
 
     // Advance timer past 1400ms feedback timeout
@@ -89,13 +91,13 @@ describe("CopyButton", () => {
     // The rejection is caught and retried via legacyCopy, which also fails
     // under jsdom (no document.execCommand), so the button reports the
     // failure rather than silently pretending the copy succeeded.
-    expect(screen.getByRole("button", { name: "Copy failed" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Copied" })).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Copy failed");
+    expect(screen.queryByText("Copied to clipboard")).not.toBeInTheDocument();
 
     // ...and recovers to the idle label once the feedback window elapses.
     act(() => {
       jest.advanceTimersByTime(1400);
     });
-    expect(screen.getByRole("button", { name: "Copy GABC123456789" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 });

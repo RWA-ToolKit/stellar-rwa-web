@@ -14,7 +14,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
 
       # `npm ci` installs strictly from package-lock.json and fails if it has
@@ -36,6 +36,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          ANALYZE: "true"
 
       # ── Bundle size budget ────────────────────────────────────────────────
       # Guards against accidentally re-introducing large un-tree-shaken chunks
@@ -47,6 +49,24 @@ jobs:
       # slack; bump them in the same PR as the change that grows the bundle.
       - name: Bundle size check
         run: npm run size
+
+      - name: Install Chromium for Lighthouse
+        run: npx playwright install --with-deps chromium
+
+      # Lighthouse category score floors complement the JavaScript bundle budget.
+      - name: Performance and accessibility budgets
+        run: |
+          export CHROME_PATH="$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')"
+          npx --yes @lhci/cli@0.15.1 autorun
+
+      - name: Upload bundle module analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bundle-analysis
+          path: .next/analyze/*.html
+          if-no-files-found: warn
+          retention-days: 7
 
   # ── End-to-end tests ────────────────────────────────────────────────────────
   # Exercises the transfer, claim, tokenize and issuer-gating flows in a real browser against a dev
@@ -60,7 +80,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install

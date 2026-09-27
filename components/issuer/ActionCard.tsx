@@ -22,7 +22,7 @@ export function ActionCard({ title, description, icon, children, accent = "bg-br
         </div>
         <div>
           <h3 className="font-semibold text-base-100">{title}</h3>
-          <p className="mt-0.5 text-xs leading-relaxed text-base-100/50">{description}</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-base-100/55">{description}</p>
         </div>
       </div>
       <div className="mt-4 border-t border-white/5 pt-4">

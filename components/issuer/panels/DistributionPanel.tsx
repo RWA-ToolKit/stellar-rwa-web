@@ -8,9 +8,9 @@ import { assetToken, contractIds, dividend } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useAsync } from "@/hooks/useAsync";
 import { useWallet } from "@/hooks/useWallet";
+import { getLatestLedger } from "@/lib/stellar";
 import { useDividends } from "@/hooks/useDividends";
 import { parseTokenAmount, formatTokenAmount, truncateAddress } from "@/lib/format";
-import { PAYMENT_TOKEN_DECIMALS } from "@/components/dividend/ClaimButton";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
@@ -69,7 +69,7 @@ export function DistributionPanel({ asset, onCreated, isAdmin = true }: Distribu
       </div>
       <CreateDistributionCard
         tokenContract={asset.tokenContract}
-        onCreated={onCreated}
+        {...(onCreated !== undefined ? { onCreated } : {})}
         isAdmin={isAdmin}
       />
       <ExistingDistributionsCard tokenContract={asset.tokenContract} />
@@ -92,6 +92,7 @@ function CreateDistributionCard({
   const { address, network } = useWallet();
   const [paymentToken, setPaymentToken] = useState("");
   const [totalAmount, setTotalAmount] = useState("");
+  const [claimDeadline, setClaimDeadline] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
   // Only fetch when the input looks like a valid contract address.
@@ -101,31 +102,64 @@ function CreateDistributionCard({
       StrKey.isValidEd25519PublicKey(paymentToken.trim()));
 
   // #293: Show the issuer's balance in the payment token before they submit.
-  const { data: balance, loading: balanceLoading } = useAsync(
-    () => assetToken.balance(network, paymentToken.trim(), address!),
+  const { data: balanceData, loading: balanceLoading } = useAsync(
+    async () => ({
+      token: paymentToken.trim(),
+      amount: await assetToken.balance(network, paymentToken.trim(), address!),
+    }),
     [network, paymentToken, address],
     isValidPt && !!address,
   );
+  const balance = balanceData?.token === paymentToken.trim() ? balanceData.amount : null;
 
   // #293: Show how much the dividend contract is already approved to pull.
   // Issuers need to approve at least totalAmount before the distribution can be funded.
   const dividendContractId = contractIds(network).dividend;
-  const { data: allowance, loading: allowanceLoading } = useAsync(
-    () => assetToken.allowance(network, paymentToken.trim(), address!, dividendContractId),
+  const { data: allowanceData, loading: allowanceLoading } = useAsync(
+    async () => ({
+      token: paymentToken.trim(),
+      amount: await assetToken.allowance(network, paymentToken.trim(), address!, dividendContractId),
+    }),
     [network, paymentToken, address, dividendContractId],
     isValidPt && !!address,
   );
+  const allowance = allowanceData?.token === paymentToken.trim() ? allowanceData.amount : null;
+
+  const { data: decimalsData, loading: decimalsLoading, error: decimalsError } = useAsync(
+    async () => ({
+      token: paymentToken.trim(),
+      decimals: await assetToken.decimals(network, paymentToken.trim()),
+    }),
+    [network, paymentToken],
+    isValidPt,
+  );
+  const paymentTokenDecimals =
+    decimalsData?.token === paymentToken.trim() ? decimalsData.decimals : null;
 
   // Parse the requested amount for comparison (best-effort; errors handled on submit).
   let requestedRaw: bigint | null = null;
   try {
-    if (totalAmount.trim()) requestedRaw = parseTokenAmount(totalAmount, PAYMENT_TOKEN_DECIMALS);
+    if (totalAmount.trim() && paymentTokenDecimals !== null) {
+      requestedRaw = parseTokenAmount(totalAmount, paymentTokenDecimals);
+    }
   } catch {
     // handled at submit time
   }
 
   const insufficientBalance = balance !== null && requestedRaw !== null && requestedRaw > balance;
   const needsApproval = allowance !== null && requestedRaw !== null && requestedRaw > allowance;
+
+  // Submit-time errors are attributed to the field they concern.
+  const tokenInvalid = !!formError && /payment token/i.test(formError);
+  const totalFormInvalid = !!formError && !tokenInvalid;
+  const totalInvalid = insufficientBalance || totalFormInvalid;
+  const totalErrorIds =
+    [
+      totalFormInvalid && "dist-form-error",
+      (insufficientBalance || needsApproval) && "dist-total-error",
+    ]
+      .filter(Boolean)
+      .join(" ") || undefined;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -139,7 +173,8 @@ function CreateDistributionCard({
 
     let raw: bigint;
     try {
-      raw = parseTokenAmount(totalAmount, PAYMENT_TOKEN_DECIMALS);
+      const decimals = await assetToken.decimals(network, pt);
+      raw = parseTokenAmount(totalAmount, decimals);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Invalid amount.");
       return;
@@ -156,13 +191,33 @@ function CreateDistributionCard({
       setFormError("The dividend contract allowance is insufficient. Approve it to spend at least the requested amount before creating this distribution.");
       return;
     }
+    let deadline = 0;
+    if (claimDeadline.trim()) {
+      deadline = Number.parseInt(claimDeadline.trim(), 10);
+      if (!Number.isInteger(deadline) || deadline < 0) {
+        setFormError("Claim deadline must be a non-negative ledger number (0 = no deadline).");
+        return;
+      }
+      if (deadline > 0) {
+        try {
+          const latestLedger = await getLatestLedger(network);
+          if (deadline <= latestLedger) {
+            setFormError(`Ledger ${deadline} has already passed (current ledger: ${latestLedger}).`);
+            return;
+          }
+        } catch {
+          // The contract remains the final authority if the ledger is unavailable.
+        }
+      }
+    }
 
     const res = await tx.run((ctx) =>
-      dividend.createDistribution(ctx, tokenContract, pt, raw),
+      dividend.createDistribution(ctx, tokenContract, pt, raw, deadline),
     );
     if (res) {
       setPaymentToken("");
       setTotalAmount("");
+      setClaimDeadline("");
       onCreated?.();
     }
   }
@@ -189,8 +244,10 @@ function CreateDistributionCard({
             disabled={tx.pending || !isAdmin}
             className="input font-mono text-xs"
             spellCheck={false}
+            aria-invalid={tokenInvalid || undefined}
+            aria-describedby={tokenInvalid ? "dist-form-error" : undefined}
           />
-          <p className="mt-1 text-[11px] text-base-100/40">
+          <p className="mt-1 text-[11px] text-base-100/55">
             This is the token used to pay holders — typically a stablecoin or XLM SAC.
           </p>
 
@@ -222,48 +279,63 @@ function CreateDistributionCard({
           )}
         </div>
 
+        <div>
+          <label htmlFor="dist-deadline" className="label">Claim deadline ledger</label>
+          <input
+            id="dist-deadline"
+            value={claimDeadline}
+            onChange={(e) => setClaimDeadline(e.target.value)}
+            placeholder="0 = no deadline"
+            inputMode="numeric"
+            disabled={tx.pending || !isAdmin}
+            className="input"
+          />
+          <p className="mt-1 text-[11px] text-base-100/40">
+            Holders can claim until this ledger. Leave at 0 for unlimited claims.
+          </p>
+        </div>
+
         {/* #293: surface balance + allowance so the issuer knows before submitting */}
         {isValidPt && address && (
           <div className="rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5 space-y-1.5 text-[11px]">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-base-100/50">Your balance</span>
+              <span className="text-base-100/55">Your balance</span>
               {balanceLoading ? (
                 <Spinner size={10} />
-              ) : balance !== null ? (
+              ) : balance !== null && paymentTokenDecimals !== null ? (
                 <span className={insufficientBalance ? "font-semibold text-red-400" : "text-base-100/80"}>
-                  {formatTokenAmount(balance, PAYMENT_TOKEN_DECIMALS)}
+                  {formatTokenAmount(balance, paymentTokenDecimals)}
                 </span>
               ) : (
-                <span className="text-base-100/30">—</span>
+                <span className="text-base-100/55">—</span>
               )}
             </div>
             <div className="flex items-center justify-between gap-2">
-              <span className="text-base-100/50">Dividend contract allowance</span>
+              <span className="text-base-100/55">Dividend contract allowance</span>
               {allowanceLoading ? (
                 <Spinner size={10} />
-              ) : allowance !== null ? (
+              ) : allowance !== null && paymentTokenDecimals !== null ? (
                 <span className={needsApproval ? "font-semibold text-amber-400" : "text-base-100/80"}>
-                  {formatTokenAmount(allowance, PAYMENT_TOKEN_DECIMALS)}
+                  {formatTokenAmount(allowance, paymentTokenDecimals)}
                 </span>
               ) : (
-                <span className="text-base-100/30">—</span>
+                <span className="text-base-100/55">—</span>
               )}
             </div>
           </div>
         )}
 
         {insufficientBalance && (
-          <p role="alert" className="text-xs text-red-400">
-            Insufficient balance — your wallet holds less than the requested distribution amount.
+          <p id="dist-total-error" role="alert" className="text-xs text-red-400">
+            The requested pool exceeds your payment-token balance.
           </p>
         )}
-        {needsApproval && (
-          <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90">
+        {needsApproval && !insufficientBalance && (
+          <p id="dist-total-error" role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90">
             The dividend contract is not approved to spend enough of this token on your behalf.
             Creating this distribution is blocked until you submit an{" "}
             <strong className="font-semibold">approve</strong> transaction for at least{" "}
-            {formatTokenAmount(requestedRaw ?? 0n, PAYMENT_TOKEN_DECIMALS)} tokens before funding
-            this distribution.
+            {formatTokenAmount(requestedRaw ?? 0n, paymentTokenDecimals ?? 0)} tokens.
           </p>
         )}
 
@@ -274,21 +346,29 @@ function CreateDistributionCard({
               id="dist-total"
               value={totalAmount}
               onChange={(e) => setTotalAmount(e.target.value)}
-              placeholder="0.0000000"
+              placeholder="Enter amount"
               inputMode="decimal"
               disabled={tx.pending || !isAdmin}
               className="input pr-16"
+              aria-invalid={totalInvalid || undefined}
+              aria-describedby={totalErrorIds}
             />
-            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/40">
+            <span className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-medium text-base-100/55">
               tokens
             </span>
           </div>
-          <p className="mt-1 text-[11px] text-base-100/40">
-            Uses {PAYMENT_TOKEN_DECIMALS} decimals (Stellar standard).
+          <p className="mt-1 text-[11px] text-base-100/55">
+            {paymentTokenDecimals !== null
+              ? `Uses ${paymentTokenDecimals} decimals for ${truncateAddress(paymentToken.trim())}.`
+              : decimalsLoading
+                ? "Loading payment token decimals…"
+                : decimalsError
+                  ? `Couldn't load payment token decimals: ${decimalsError}`
+                  : "Enter a payment token contract to load its decimals."}
           </p>
         </div>
 
-        {formError && <p className="text-xs text-red-400">{formError}</p>}
+        {formError && <p id="dist-form-error" role="alert" className="text-xs text-red-400">{formError}</p>}
 
         {tx.phase === "idle" ? (
           <button
@@ -341,7 +421,7 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
       }
     >
       {loading ? (
-        <div className="flex items-center gap-2 py-4 text-sm text-base-100/40">
+        <div className="flex items-center gap-2 py-4 text-sm text-base-100/55">
           <Spinner size={14} /> Loading distributions…
         </div>
       ) : error ? (
@@ -375,15 +455,15 @@ function ExistingDistributionsCard({ tokenContract }: { tokenContract: string })
                         <span className="chip border border-gold-500/25 bg-gold-500/10 text-gold-300 text-[10px]">Active</span>
                       )}
                     </div>
-                    <p className="text-[11px] text-base-100/40">
+                    <p className="text-[11px] text-base-100/55">
                       Payment token: {truncateAddress(d.paymentToken)}
                     </p>
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-bold text-gold-300">
-                      {formatTokenAmount(d.totalAmount, PAYMENT_TOKEN_DECIMALS)}
+                      {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
                     </p>
-                    <p className="text-[11px] text-base-100/40">{pct.toFixed(1)}% claimed</p>
+                    <p className="text-[11px] text-base-100/55">{pct.toFixed(1)}% claimed</p>
                   </div>
                 </div>
                 <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">

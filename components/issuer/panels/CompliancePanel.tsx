@@ -12,9 +12,11 @@ import { ActionCard } from "@/components/issuer/ActionCard";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { truncateAddress } from "@/lib/format";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { explorerAddressUrl } from "@/lib/stellar";
 
 interface CompliancePanelProps {
   asset: AssetDetail;
@@ -31,9 +33,21 @@ export function CompliancePanel({ asset, onChanged, isAdmin = true }: Compliance
       <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-base-100/50">
         <strong>Required role:</strong> compliance contract <code className="font-mono text-base-100/60">admin</code>
       </div>
-      <AddToAllowlistCard complianceId={complianceId} onChanged={onChanged} isAdmin={isAdmin} />
-      <AllowlistManageCard complianceId={complianceId} onChanged={onChanged} isAdmin={isAdmin} />
-      <JurisdictionCard complianceId={complianceId} onChanged={onChanged} isAdmin={isAdmin} />
+      <AddToAllowlistCard
+        complianceId={complianceId}
+        {...(onChanged !== undefined ? { onChanged } : {})}
+        isAdmin={isAdmin}
+      />
+      <AllowlistManageCard
+        complianceId={complianceId}
+        {...(onChanged !== undefined ? { onChanged } : {})}
+        isAdmin={isAdmin}
+      />
+      <JurisdictionCard
+        complianceId={complianceId}
+        {...(onChanged !== undefined ? { onChanged } : {})}
+        isAdmin={isAdmin}
+      />
     </div>
   );
 }
@@ -197,7 +211,7 @@ function AllowlistManageCard({
   onChanged?: () => void;
   isAdmin?: boolean;
 }) {
-  const { data, loading, refetch } = useAllowlist(complianceId);
+  const { data, loading, error, refetch } = useAllowlist(complianceId);
   const records = data ?? [];
 
   // #320: Serialize allowlist mutations across all rows so the issuer cannot
@@ -225,11 +239,18 @@ function AllowlistManageCard({
       }
     >
       {loading ? (
-        <div className="flex items-center gap-2 py-4 text-sm text-base-100/40">
+        <div className="flex items-center gap-2 py-4 text-sm text-base-100/55">
           <Spinner size={14} /> Loading allowlist…
         </div>
+      ) : error ? (
+        <ErrorState
+          title="Couldn't load allowlist"
+          message={error}
+          onRetry={refetch}
+          className="py-6"
+        />
       ) : records.length === 0 ? (
-        <p className="py-2 text-sm text-base-100/40">No addresses on the allowlist yet.</p>
+        <p className="py-2 text-sm text-base-100/55">No addresses on the allowlist yet.</p>
       ) : (
         <ul className="divide-y divide-white/5 max-h-80 overflow-y-auto pr-1">
           {records.map((r) => (
@@ -255,7 +276,7 @@ function AllowlistRow({
   activeMutationsRef,
   isAdmin = true,
 }: {
-  record: { address: string; status: string; jurisdiction: string };
+  record: { address: string; status: string; jurisdiction: string; expiresAt: number };
   complianceId: string;
   onChanged?: () => void;
   /** #320: Shared ref counting in-flight mutations across all rows in the list.
@@ -266,6 +287,7 @@ function AllowlistRow({
 }) {
   const suspendTx = useTx();
   const removeTx = useTx();
+  const { network } = useWallet();
   const [removeConfirmOpen, setRemoveConfirmOpen] = useState(false);
 
   const isSuspended = record.status === "Suspended";
@@ -298,7 +320,7 @@ function AllowlistRow({
       <ConfirmDialog
         open={removeConfirmOpen}
         title="Remove address from allowlist?"
-        description={`This will permanently revoke KYC access for ${truncateAddress(record.address, 6, 6)}. The holder will lose the ability to hold or transfer this asset. You can re-approve them later if needed.`}
+        description={`This will remove ${record.address} from the allowlist immediately, preventing it from holding, sending, or receiving this asset. You can re-approve it later if needed.`}
         confirmLabel="Remove address"
         onConfirm={doRemove}
         onCancel={() => setRemoveConfirmOpen(false)}
@@ -307,12 +329,20 @@ function AllowlistRow({
       <li className="py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs text-base-100/80">
+            <a
+              href={explorerAddressUrl(network ?? "testnet", record.address)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-mono text-xs text-base-100/80 hover:text-brand-300"
+            >
               {truncateAddress(record.address, 6, 6)}
-            </span>
+            </a>
             <CopyButton value={record.address} />
             <ComplianceBadge status={record.status as never} />
-            <span className="text-[10px] text-base-100/40">{record.jurisdiction}</span>
+            <span className="text-[10px] text-base-100/55">{record.jurisdiction}</span>
+            <span className="text-[10px] text-base-100/55">
+              {record.expiresAt === 0 ? "Never expires" : `Expires at ledger ${record.expiresAt}`}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             {!isSuspended && (
@@ -337,7 +367,13 @@ function AllowlistRow({
                   runWithSerialize(() =>
                     suspendTx
                       .run((ctx) =>
-                        compliance.addToAllowlist(ctx, complianceId, record.address, record.jurisdiction, 0),
+                        compliance.addToAllowlist(
+                          ctx,
+                          complianceId,
+                          record.address,
+                          record.jurisdiction,
+                          record.expiresAt,
+                        ),
                       )
                       .then((r) => r && onChanged?.()),
                   )

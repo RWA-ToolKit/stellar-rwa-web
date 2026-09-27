@@ -50,12 +50,18 @@ jest.mock("@/lib/contracts", () => ({
   assetToken: {
     balance: jest.fn().mockResolvedValue(0n),
     allowance: jest.fn().mockResolvedValue(0n),
+    decimals: jest.fn().mockResolvedValue(7),
   },
   contractIds: jest.fn(() => ({ dividend: "CDIVIDEND", registry: "CREGISTRY", compliance: "CCOMPLIANCE" })),
 }));
 
 jest.mock("@/hooks/useAsync", () => ({
-  useAsync: jest.fn(() => ({ data: null, loading: false, error: null, refetch: jest.fn() })),
+  useAsync: jest.fn((loader: () => Promise<unknown>, deps: unknown[]) => ({
+    data: deps.length === 2 ? { token: deps[1], decimals: 7 } : null,
+    loading: false,
+    error: null,
+    refetch: jest.fn(),
+  })),
 }));
 
 // ── mock sub-components ────────────────────────────────────────────────────
@@ -131,6 +137,7 @@ const BASE_TX: ReturnType<typeof useTx> = {
   hash: null,
   error: null,
   errorType: "generic",
+  estimatedFee: null,
   pending: false,
   run: jest.fn().mockResolvedValue(null),
   reset: jest.fn(),
@@ -162,6 +169,7 @@ function makeDistribution(
     paymentToken: "CPAYMENT",
     totalAmount: 0n,
     distributed: 0n,
+    paymentTokenDecimals: 7,
     createdAt: 0,
     completed: false,
     claimable: 0n,
@@ -219,7 +227,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       expect(screen.getByPlaceholderText(/^C… \(SAC or Soroban/i)).toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/^0\.0000000$/)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/^Enter amount$/)).toBeInTheDocument();
     });
 
     it("renders helper text for payment token field", () => {
@@ -245,7 +253,7 @@ describe("DistributionPanel", () => {
 
       render(<DistributionPanel asset={mockAsset} />);
 
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
       await user.type(amountInput, "100");
 
       const submitButton = screen.getByRole("button", { name: /create distribution/i });
@@ -263,7 +271,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "not-a-number");
@@ -284,7 +292,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "0");
@@ -306,7 +314,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "100.5");
@@ -327,7 +335,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i) as HTMLInputElement;
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/) as HTMLInputElement;
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/) as HTMLInputElement;
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "100.5");
@@ -350,7 +358,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} onCreated={onCreated} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       await user.type(tokenInput, VALID_PAYMENT_TOKEN);
       await user.type(amountInput, "100.5");
@@ -371,7 +379,7 @@ describe("DistributionPanel", () => {
       render(<DistributionPanel asset={mockAsset} />);
 
       const tokenInput = screen.getByPlaceholderText(/^C… \(SAC or Soroban/i);
-      const amountInput = screen.getByPlaceholderText(/^0\.0000000$/);
+      const amountInput = screen.getByPlaceholderText(/^Enter amount$/);
 
       expect(tokenInput).toBeDisabled();
       expect(amountInput).toBeDisabled();
@@ -548,6 +556,37 @@ describe("DistributionPanel", () => {
 
       // Should show truncated version, not full address
       expect(screen.getByText(/Payment token:/)).toBeInTheDocument();
+    });
+  });
+
+  describe("aria error association", () => {
+    it("links the payment-token error to its input and sets aria-invalid", async () => {
+      const user = userEvent.setup();
+      render(<DistributionPanel asset={mockAsset} />);
+      const token = screen.getByLabelText(/payment token contract/i);
+      expect(token).not.toHaveAttribute("aria-invalid");
+
+      await user.type(screen.getByLabelText(/total pool amount/i), "100");
+      await user.click(screen.getByRole("button", { name: /create distribution/i }));
+
+      expect(token).toHaveAttribute("aria-invalid", "true");
+      expect(document.getElementById(token.getAttribute("aria-describedby")!)).toHaveTextContent(
+        /enter a valid payment token/i,
+      );
+    });
+
+    it("links the amount error to the total input and sets aria-invalid", async () => {
+      const user = userEvent.setup();
+      render(<DistributionPanel asset={mockAsset} />);
+      await user.type(screen.getByLabelText(/payment token contract/i), VALID_PAYMENT_TOKEN);
+      const total = screen.getByLabelText(/total pool amount/i);
+      await user.type(total, "0");
+      await user.click(screen.getByRole("button", { name: /create distribution/i }));
+
+      expect(total).toHaveAttribute("aria-invalid", "true");
+      expect(document.getElementById(total.getAttribute("aria-describedby")!)).toHaveTextContent(
+        /greater than zero/i,
+      );
     });
   });
 });
