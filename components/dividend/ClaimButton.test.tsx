@@ -64,6 +64,7 @@ const BASE_TX: ReturnType<typeof useTx> = {
   hash: null,
   error: null,
   errorType: "generic",
+  estimatedFee: null,
   pending: false,
   run: jest.fn().mockResolvedValue(null),
   reset: jest.fn(),
@@ -215,6 +216,32 @@ describe("ClaimButton", () => {
       fireEvent.click(screen.getByRole("button", { name: /claim/i }));
       await waitFor(() => expect(run).toHaveBeenCalled());
       expect(onClaimed).not.toHaveBeenCalled();
+    });
+
+    it("reports the claim as pending only while awaiting on-chain confirmation", () => {
+      setupWallet("GABCDEF1234");
+      const onPendingClaim = jest.fn();
+      setupTx({ phase: "confirming", pending: true });
+      const { rerender } = render(
+        <ClaimButton
+          distributionId={DISTRIBUTION_ID}
+          claimable={10_0000000n}
+          claimed={false}
+          onPendingClaim={onPendingClaim}
+        />,
+      );
+      expect(onPendingClaim).toHaveBeenLastCalledWith(10_0000000n);
+
+      setupTx({ phase: "error", pending: false });
+      rerender(
+        <ClaimButton
+          distributionId={DISTRIBUTION_ID}
+          claimable={10_0000000n}
+          claimed={false}
+          onPendingClaim={onPendingClaim}
+        />,
+      );
+      expect(onPendingClaim).toHaveBeenLastCalledWith(0n);
     });
 
     it("disables the button while a transaction is pending", () => {

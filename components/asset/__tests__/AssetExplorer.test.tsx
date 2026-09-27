@@ -17,11 +17,16 @@ jest.mock("@/hooks/useAssets", () => ({
   useAssets: jest.fn(),
 }));
 
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: () => ({ network: "testnet" }),
+}));
+
 // ── mock Next.js navigation ────────────────────────────────────────────────
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 
 jest.mock("next/navigation", () => ({
-  useRouter: jest.fn(() => ({ push: mockPush })),
+  useRouter: jest.fn(() => ({ push: mockPush, replace: mockReplace })),
   useSearchParams: jest.fn(() => new URLSearchParams()),
 }));
 
@@ -65,7 +70,9 @@ function setupMock(state: Partial<UseAssetsReturn>, searchParamsStr = "") {
     new URLSearchParams(searchParamsStr) as ReturnType<typeof useSearchParams>,
   );
 
-  mockUseRouter.mockReturnValue({ push: mockPush } as unknown as ReturnType<typeof useRouter>);
+  mockUseRouter.mockReturnValue(
+    { push: mockPush, replace: mockReplace } as unknown as ReturnType<typeof useRouter>,
+  );
 }
 
 function makeAsset(
@@ -177,6 +184,89 @@ describe("AssetExplorer", () => {
     expect(screen.getByText("Lagos Office Tower")).toBeInTheDocument();
     expect(screen.getByText("Trade Invoice #42")).toBeInTheDocument();
     expect(screen.getByText("Gold Reserve")).toBeInTheDocument();
+  });
+
+  it("searches asset names without regard to case", () => {
+    setupMock(
+      { assets: [REAL_ESTATE_ASSET, INVOICE_ASSET, COMMODITY_ASSET] },
+      "q=LAGOS",
+    );
+    render(<AssetExplorer />);
+
+    expect(screen.getByRole("searchbox", { name: "Search assets" })).toHaveValue("LAGOS");
+    expect(screen.getByText("Lagos Office Tower")).toBeInTheDocument();
+    expect(screen.queryByText("Trade Invoice #42")).not.toBeInTheDocument();
+    expect(screen.queryByText("Gold Reserve")).not.toBeInTheDocument();
+  });
+
+  it("restores search and filters from their URL parameters", () => {
+    setupMock(
+      { assets: [REAL_ESTATE_ASSET, INVOICE_ASSET] },
+      "q=lagos&type=real_estate&sort=newest",
+    );
+    render(<AssetExplorer />);
+
+    expect(screen.getByRole("searchbox", { name: "Search assets" })).toHaveValue("lagos");
+    expect(screen.getByText("Lagos Office Tower")).toBeInTheDocument();
+    expect(screen.queryByText("Trade Invoice #42")).not.toBeInTheDocument();
+  });
+
+  it("updates q in the URL, preserves other filters, and resets pagination", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET, INVOICE_ASSET] }, "type=invoice&sort=newest&page=2");
+    render(<AssetExplorer />);
+
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "  trade invoice  " },
+    });
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    const url: string = mockReplace.mock.calls[0][0];
+    expect(url).toContain("q=trade+invoice");
+    expect(url).toContain("type=invoice");
+    expect(url).toContain("sort=newest");
+    expect(url).not.toContain("page=");
+  });
+
+  it("removes q from the URL when the search field is cleared", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET] }, "q=lagos");
+    render(<AssetExplorer />);
+
+    fireEvent.change(screen.getByRole("searchbox"), { target: { value: "" } });
+
+    expect(mockReplace).toHaveBeenCalledWith("/explore", { scroll: false });
+  });
+
+  it.each([
+    ["asset ID", "2"],
+    ["issuer address", "gissuerxyz"],
+    ["token contract address", "ctokenxyz"],
+  ])("searches by %s", (_field, query) => {
+    setupMock({
+      assets: [
+        {
+          ...REAL_ESTATE_ASSET,
+          issuer: "GISSUERABC",
+          tokenContract: "CTOKENABC",
+        },
+        {
+          ...INVOICE_ASSET,
+          issuer: "GISSUERXYZ",
+          tokenContract: "CTOKENXYZ",
+        },
+      ],
+    }, `q=${query}`);
+    render(<AssetExplorer />);
+
+    expect(screen.getByText("Trade Invoice #42")).toBeInTheDocument();
+    expect(screen.queryByText("Lagos Office Tower")).not.toBeInTheDocument();
+  });
+
+  it("shows a search-specific empty state when there are no matches", () => {
+    setupMock({ assets: [REAL_ESTATE_ASSET] }, "q=not+an+asset");
+    render(<AssetExplorer />);
+
+    expect(screen.getByText("No assets found")).toBeInTheDocument();
+    expect(screen.getByText(/clear the search field/i)).toBeInTheDocument();
   });
 
   // ── URL-based filtering ────────────────────────────────────────────────

@@ -37,6 +37,16 @@ export class UserRejectedError extends Error {
   }
 }
 
+/** Specialized error for when the Freighter wallet is locked. */
+export class LockedWalletError extends WalletError {
+  constructor() {
+    super(
+      "Wallet is locked. Please unlock Freighter and try again.",
+    );
+    this.name = "LockedWalletError";
+  }
+}
+
 /** Whether the Freighter extension is installed and reachable. */
 export async function isFreighterInstalled(): Promise<boolean> {
   try {
@@ -108,7 +118,17 @@ export async function signTx(
   });
   if (res.error) {
     const errorMsg = String(res.error).toLowerCase();
-    // Detect user rejection: Freighter uses "rejected" or "user denied"
+    // Locked-wallet is checked first: its messages can also mention "user"
+    // ("user must unlock"), which the rejection matcher below would swallow.
+    if (
+      errorMsg.includes("locked") ||
+      errorMsg.includes("unlock") ||
+      errorMsg.includes("not connected") ||
+      errorMsg.includes("not allowed")
+    ) {
+      throw new LockedWalletError();
+    }
+    // Detect user rejection: Freighter uses "rejected" or "user denied".
     if (
       errorMsg.includes("user") ||
       errorMsg.includes("reject") ||

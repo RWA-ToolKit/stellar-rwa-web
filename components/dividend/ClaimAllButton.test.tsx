@@ -58,6 +58,7 @@ function setup(
     error: null,
     errorType: "generic",
     pending: false,
+    estimatedFee: null,
     run,
     reset: jest.fn(),
   });

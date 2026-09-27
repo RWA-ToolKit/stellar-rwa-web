@@ -1,8 +1,22 @@
 # Environment Variables
 
-All configuration is via `NEXT_PUBLIC_*` environment variables, making them available to the browser. These control the network, RPC endpoints, deployed contract IDs, and an optional read aggregation API.
+App configuration uses `NEXT_PUBLIC_*` environment variables, making these
+settings available to the browser. The complete set of app-configurable
+variables in `.env.example` is listed here; the sections below document each
+variable and its default. Build-provider variables mentioned under app metadata
+are supplied by CI or hosting and do not need to be added to `.env.local`.
 
-Copy [.env.example](.env.example) to `.env.local` and edit as needed.
+Copy [.env.example](../.env.example) to `.env.local` and edit as needed.
+
+| Setting | Variables |
+|---|---|
+| App metadata | `NEXT_PUBLIC_APP_VERSION`, `NEXT_PUBLIC_APP_COMMIT` |
+| Network | `NEXT_PUBLIC_DEFAULT_NETWORK` |
+| Primary RPC endpoints | `NEXT_PUBLIC_TESTNET_RPC_URL`, `NEXT_PUBLIC_MAINNET_RPC_URL` |
+| RPC failover endpoints | `NEXT_PUBLIC_TESTNET_RPC_URLS_FALLBACK`, `NEXT_PUBLIC_MAINNET_RPC_URLS_FALLBACK` |
+| Testnet contract IDs | `NEXT_PUBLIC_TESTNET_REGISTRY_ID`, `NEXT_PUBLIC_TESTNET_COMPLIANCE_ID`, `NEXT_PUBLIC_TESTNET_DIVIDEND_ID` |
+| Mainnet contract IDs | `NEXT_PUBLIC_MAINNET_REGISTRY_ID`, `NEXT_PUBLIC_MAINNET_COMPLIANCE_ID`, `NEXT_PUBLIC_MAINNET_DIVIDEND_ID` |
+| Optional read API | `NEXT_PUBLIC_API_URL` |
 
 ## Network & RPC Configuration
 
@@ -134,14 +148,16 @@ All three Mainnet contract IDs default to empty strings, meaning the app **will 
 
 ### `NEXT_PUBLIC_API_URL`
 
-- **Purpose:** Optional URL of a Stellar RWA API server that provides faster read aggregations (list views, statistics, holder counts) and recent indexed contract events. When set, the app reads these aggregations from this endpoint instead of simulating every read directly against Soroban RPC, which is slower and more expensive. **Writes (signing transactions) always go through RPC regardless of this setting.**
+- **Purpose:** Optional base URL of the Stellar RWA indexing API. When configured, supported aggregate views (asset lists, platform statistics, holder lists/counts, and recent indexed contract events) are fetched from the API instead of being calculated through direct Soroban RPC simulations. **Writes (signing transactions) always use Soroban RPC regardless of this setting.**
 - **Required:** No (defaults to empty; all reads fall back to direct RPC simulations)
 - **Format:** HTTPS URL (base URL; the app appends paths like `/assets`, `/stats`, `/holders`, `/events`)
 - **Example:**
   ```
   NEXT_PUBLIC_API_URL=https://rwa-api.example.com
   ```
-- **Fallback behavior:** Asset lists, statistics, and holders fall back to Soroban RPC when the API is not set or unreachable. Transfer history requires the indexer's `/events` feed; the asset page shows an unavailable state when it cannot be loaded.
+- **Benefits:** The indexer serves pre-aggregated data, reducing RPC requests and usually making list and statistics views faster.
+- **Tradeoffs:** The app depends on the indexer's availability and freshness. A successful response may lag behind the latest on-chain state; the app does not compare API results with Soroban or detect stale data.
+- **Fallback behavior:** If the URL is unset, or a request fails (including a non-success HTTP response or invalid JSON), the affected view falls back to direct Soroban RPC reads using `simulateTransaction`. Those reads do not require the indexing API but can be slower and make more RPC requests. A successful but stale API response does not trigger this fallback. Transfer history requires the indexer's `/events` feed; the asset page shows an unavailable state when it cannot be loaded.
 
 ## App Metadata (Optional)
 

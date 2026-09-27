@@ -93,6 +93,7 @@ function setup({ address = null, data = PORTFOLIO_WITH_HOLDING }: {
     data,
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
   });
   return render(<PortfolioView />);

@@ -54,6 +54,7 @@ function setupTx() {
     hash: null,
     error: null,
     errorType: "generic",
+    estimatedFee: null,
     pending: false,
     run: mockRun,
     reset: mockReset,
@@ -138,6 +139,37 @@ describe("TokenPanel — PauseCard confirmation", () => {
       render(<TokenPanel asset={ASSET_UNPAUSED} />);
       fireEvent.click(screen.getByRole("button", { name: /pause transfers/i }));
       fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("TokenPanel — large mint confirmation", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      setupTx();
+    });
+
+    it("uses exact bigint arithmetic at the large-mint threshold", () => {
+      const asset: AssetDetail = {
+        ...ASSET_UNPAUSED,
+        metadata: {
+          ...ASSET_UNPAUSED.metadata,
+          decimals: 0,
+          totalSupply: 18_014_398_509_481_985n,
+        },
+      };
+      render(<TokenPanel asset={asset} />);
+
+      fireEvent.change(screen.getByLabelText("Recipient address"), {
+        target: { value: "GDEST" },
+      });
+      fireEvent.change(screen.getByLabelText("Amount"), {
+        target: { value: "9007199254740993" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Mint" }));
+
+      expect(screen.getByRole("dialog")).toBeInTheDocument();
+      expect(screen.getByText(/Confirm large mint\?/i)).toBeInTheDocument();
       expect(mockRun).not.toHaveBeenCalled();
     });
   });

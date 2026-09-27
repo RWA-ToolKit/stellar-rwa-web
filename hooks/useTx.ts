@@ -5,14 +5,16 @@ import type { TxPhase, TxResult, TxTelemetry, TxErrorType } from "@/types";
 import type { WriteCtx } from "@/lib/contracts";
 import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
-import { ContractError } from "@/lib/stellar";
-import { UserRejectedError } from "@/lib/freighter";
+import { ContractError, TransactionTimeoutError } from "@/lib/stellar";
+import { LockedWalletError, UserRejectedError } from "@/lib/freighter";
 
 interface RunResult {
   phase: TxPhase;
   hash: string | null;
   error: string | null;
   errorType: TxErrorType;
+  /** Estimated network fee in stroops from simulation. */
+  estimatedFee: bigint | null;
   /** True while the transaction is building/signing/submitting/confirming. */
   pending: boolean;
   /**
@@ -45,6 +47,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<TxErrorType>("generic");
+  const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
   const t = telemetry ?? noopTelemetry;
 
   const reset = useCallback(() => {
@@ -52,6 +55,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     setHash(null);
     setError(null);
     setErrorType("generic");
+    setEstimatedFee(null);
   }, []);
 
   const run = useCallback(
@@ -59,6 +63,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
       setError(null);
       setErrorType("generic");
       setHash(null);
+      setEstimatedFee(null);
       setPhase("building");
       t.onPhase?.("building");
       try {
@@ -68,29 +73,45 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
         });
         const result = await action(ctx);
         setHash(result.hash);
+        setEstimatedFee(result.estimatedFee ?? null);
         setPhase("success");
         t.onPhase?.("success");
         t.onSuccess?.(result.hash, result);
         return result;
       } catch (e) {
-        // Handle user rejection specially: reset to idle without error message
+        // A declined signature is a normal user choice, not a failure: reset to
+        // idle without an error so the form stays filled in for a retry.
         if (e instanceof UserRejectedError) {
           setPhase("idle");
           t.onPhase?.("idle");
           return null;
         }
 
-        const msg = e instanceof Error ? e.message : "Transaction failed.";
+        let msg: string;
+        let nextPhase: TxPhase = "error";
         let errType: TxErrorType = "generic";
-        if (e instanceof ContractError) {
-          console.error("Transaction failed:", e.detail);
-          errType = e.isAuth ? "auth" : "generic";
+
+        if (e instanceof TransactionTimeoutError) {
+          msg = e.message;
+          nextPhase = "timeout";
+          errType = "timeout";
+          setHash(e.hash); // Keep the hash visible so the user can check the explorer.
+        } else if (e instanceof LockedWalletError) {
+          msg = e.message;
+          errType = "locked-wallet";
+        } else {
+          msg = e instanceof Error ? e.message : "Transaction failed.";
+          if (e instanceof ContractError) {
+            console.error("Transaction failed:", e.detail);
+            errType = e.isAuth ? "auth" : "generic";
+          }
         }
+
         setError(msg);
         setErrorType(errType);
-        setPhase("error");
+        setPhase(nextPhase);
         addToast({ title: "Transaction failed", description: msg, tone: "error" });
-        t.onPhase?.("error", msg);
+        t.onPhase?.(nextPhase === "timeout" ? "error" : nextPhase, msg);
         t.onError?.(msg, errType);
         return null;
       }
@@ -103,6 +124,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     hash,
     error,
     errorType,
+    estimatedFee,
     pending: phase === "building" || phase === "signing" || phase === "submitting" || phase === "confirming",
     run,
     reset,
