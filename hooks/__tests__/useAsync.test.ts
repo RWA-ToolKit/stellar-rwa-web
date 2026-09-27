@@ -39,6 +39,7 @@ describe("useAsync", () => {
     expect(result.current.loading).toBe(true);
     expect(result.current.data).toBeNull();
     expect(result.current.error).toBeNull();
+    expect(result.current.updatedAt).toBeNull();
   });
 
   it("resolves data and clears loading on success", async () => {
@@ -49,6 +50,7 @@ describe("useAsync", () => {
 
     expect(result.current.data).toBe("hello");
     expect(result.current.error).toBeNull();
+    expect(result.current.updatedAt).toEqual(expect.any(Number));
   });
 
   it("surfaces error message and clears loading on rejection", async () => {

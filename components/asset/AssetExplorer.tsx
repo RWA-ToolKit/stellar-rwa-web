@@ -14,6 +14,7 @@ import { CardSkeletonGrid } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ASSET_TYPES } from "@/types";
+import { DataFreshness } from "@/components/ui/DataFreshness";
 
 const PAGE_SIZE = 9;
 const MAX_VISIBLE_PAGES = 5;
@@ -36,7 +37,7 @@ function isValidTypeFilter(value: string): value is TypeFilter {
  * filtered views can be linked and restored on refresh.
  */
 export function AssetExplorer() {
-  const { assets, loading, error, refetch } = useAssets();
+  const { assets, loading, error, refetch, updatedAt } = useAssets();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -160,8 +161,8 @@ export function AssetExplorer() {
           onPageChange={goToPage}
         />
       )}
+      {!loading && !error && <DataFreshness updatedAt={updatedAt} />}
     </div>
   );
 }
-
 

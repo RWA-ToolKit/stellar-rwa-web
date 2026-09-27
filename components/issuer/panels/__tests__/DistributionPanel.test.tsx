@@ -271,6 +271,7 @@ describe("DistributionPanel – CreateDistributionCard known-token presets (#323
       data: [],
       loading: false,
       error: null,
+      updatedAt: null,
       refetch: jest.fn(),
     } as ReturnType<typeof useDividends>);
   });

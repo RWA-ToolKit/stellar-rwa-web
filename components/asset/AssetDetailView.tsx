@@ -17,6 +17,7 @@ import { LoadingPanel } from "@/components/ui/Spinner";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getDisplayText } from "@/lib/display";
+import { DataFreshness } from "@/components/ui/DataFreshness";
 
 export function AssetDetailView({ id }: { id: bigint }) {
   const { network } = useWallet();
@@ -59,6 +60,9 @@ export function AssetDetailView({ id }: { id: bigint }) {
       </Link>
 
       <AssetHeader asset={detail} network={network} />
+      <div className="mt-2">
+        <DataFreshness updatedAt={asset.updatedAt} />
+      </div>
 
       {/* Compliance notice — always visible; these are gated assets. */}
       <div className="mt-5 flex items-start gap-3 rounded-2xl border border-brand-500/15 bg-brand-500/[0.04] px-4 py-3.5 text-sm text-base-100/70">
