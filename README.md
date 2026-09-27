@@ -105,6 +105,8 @@ default network, Soroban RPC URLs, and the registry / compliance / dividend
 contract ids per network. Asset-token contract ids are discovered at runtime
 from the registry.
 
+For help with wallet errors, see [Freighter Troubleshooting](docs/freighter-troubleshooting.md).
+
 ## Architecture
 
 ```
@@ -117,10 +119,14 @@ types/          Domain types mirroring the contracts
 ```
 
 - **Reads** simulate a contract invocation via Soroban RPC — no wallet, no fees.
+- Data views show when their figures were last retrieved; values served by the
+  API index may lag behind the latest Stellar ledger while the index catches up.
 - **Writes** build → simulate → assemble → sign (Freighter) → submit → poll,
   surfacing each phase to the UI and mapping contract errors to friendly text.
 - Monetary valuations are stored on-chain as **USD cents** (`i128`); token
   amounts are integers in each token's own `decimals` base.
+- For the complete contract validation, registry registration, and four-step
+  wizard flow, see [Tokenizing an asset](docs/tokenizing-an-asset.md).
 
 ### Issuer dashboard roles
 
@@ -149,8 +155,9 @@ explicit "you are not the admin" notice before letting an action be attempted.
 | `/`            | ✅     | Landing: live platform stats, featured assets, how-it-works |
 | `/explore`     | ✅     | Browse assets — filter by type, sort, paginate         |
 | `/asset/[id]`  | ✅     | Asset detail: stats, holders, dividends, gated transfer |
-| `/asset/new`   | ⏳     | Tokenize a new asset (multi-step)                      |
-| `/issuer`      | ⏳     | Issuer dashboard                                        |
-| `/issuer/compliance` | ⏳ | Manage KYC allowlist                                  |
-| `/issuer/dividends`  | ⏳ | Create/manage distributions                          |
-| `/portfolio`   | ⏳     | Investor holdings                                      |
+| `/asset/new`   | ✅     | Tokenize a new asset (four-step registration wizard)   |
+| `/issuer`      | ✅     | Issuer dashboard: token, compliance, and distributions |
+| `/portfolio`   | ✅     | Investor holdings                                      |
+
+Compliance and distribution management are tabs in the `/issuer` dashboard,
+not separate `/issuer/compliance` or `/issuer/dividends` URL routes.

@@ -7,7 +7,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { AssetEntry } from "@/types";
 
 // Render Next.js Link as a plain <a> — no router needed.
@@ -77,5 +77,51 @@ describe("AssetGrid", () => {
     const hrefs = links.map((l) => l.getAttribute("href"));
     expect(hrefs).toContain("/asset/1");
     expect(hrefs).toContain("/asset/2");
+  });
+
+  it("renders pagination controls when totalPages > 1", () => {
+    const onPageChange = jest.fn();
+    render(
+      <AssetGrid
+        assets={[ASSET_A, ASSET_B]}
+        page={1}
+        totalPages={3}
+        total={6}
+        onPageChange={onPageChange}
+      />
+    );
+
+    const nav = screen.getByRole("navigation", { name: /pagination/i });
+    expect(nav).toBeInTheDocument();
+
+    const prevBtn = screen.getByRole("button", { name: /previous page/i });
+    const nextBtn = screen.getByRole("button", { name: /next page/i });
+    const page1Btn = screen.getByRole("button", { name: "Page 1" });
+
+    // Prev disabled on page 1
+    expect(prevBtn).toBeDisabled();
+    expect(nextBtn).toBeEnabled();
+
+    // Current page conveyed to screen readers
+    expect(page1Btn).toHaveAttribute("aria-current", "page");
+
+    fireEvent.click(nextBtn);
+    expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
+  it("disables the next page button when on the last page", () => {
+    const onPageChange = jest.fn();
+    render(
+      <AssetGrid
+        assets={[ASSET_A]}
+        page={3}
+        totalPages={3}
+        total={3}
+        onPageChange={onPageChange}
+      />
+    );
+
+    const nextBtn = screen.getByRole("button", { name: /next page/i });
+    expect(nextBtn).toBeDisabled();
   });
 });

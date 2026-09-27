@@ -22,6 +22,10 @@ export interface PortfolioData {
   totalValueCents: bigint;
   /** Sum of all claimable dividend amounts across all assets. */
   totalClaimable: bigint;
+  /** Count of assets that failed to load their distributions. */
+  failedAssetCount: number;
+  /** Whether the portfolio totals are incomplete due to read failures. */
+  isIncomplete: boolean;
 }
 
 /**
@@ -34,7 +38,7 @@ export function usePortfolio() {
   return useAsync<PortfolioData>(
     async () => {
       if (!address) {
-        return { holdings: [], totalValueCents: 0n, totalClaimable: 0n };
+        return { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false };
       }
 
       // 1. Fetch all assets from registry (already filtered to active by registry contract)
@@ -42,7 +46,7 @@ export function usePortfolio() {
       const allAssets = await registry.getAllAssets(network);
 
       if (allAssets.length === 0) {
-        return { holdings: [], totalValueCents: 0n, totalClaimable: 0n };
+        return { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false };
       }
 
       // 2. For each asset, fetch balance + metadata in parallel
@@ -60,17 +64,21 @@ export function usePortfolio() {
       const held = enriched.filter(({ balance }) => balance > 0n);
 
       if (held.length === 0) {
-        return { holdings: [], totalValueCents: 0n, totalClaimable: 0n };
+        return { holdings: [], totalValueCents: 0n, totalClaimable: 0n, failedAssetCount: 0, isIncomplete: false };
       }
 
       // 4. For held assets, fetch distributions and annotate with claimable
-      const holdings: Holding[] = await Promise.all(
+      // Use Promise.allSettled to track per-asset failures instead of swallowing them
+      const holdingResults = await Promise.allSettled(
         held.map(async ({ asset, metadata, balance }) => {
           let distributions: Distribution[] = [];
           try {
             distributions = await dividend.getDistributionsForAsset(network, asset.tokenContract);
-          } catch {
-            // dividend contract may not have any distributions yet
+          } catch (error) {
+            // Log the error but continue with empty distributions
+            console.warn(`Failed to fetch distributions for asset ${asset.id.toString()}:`, error);
+            // Re-throw to be caught by allSettled
+            throw error;
           }
 
           const claimableDistributions: DistributionWithClaim[] = await Promise.all(
@@ -92,6 +100,18 @@ export function usePortfolio() {
         }),
       );
 
+      // Count failures and build holdings list
+      let failedAssetCount = 0;
+      const holdings: Holding[] = [];
+
+      for (const result of holdingResults) {
+        if (result.status === 'fulfilled') {
+          holdings.push(result.value);
+        } else {
+          failedAssetCount++;
+        }
+      }
+
       // 5. Compute portfolio-level totals
       const totalValueCents = holdings.reduce((sum, { asset, metadata, balance }) => {
         if (metadata.totalSupply === 0n) return sum;
@@ -105,7 +125,13 @@ export function usePortfolio() {
         0n,
       );
 
-      return { holdings, totalValueCents, totalClaimable };
+      return {
+        holdings,
+        totalValueCents,
+        totalClaimable,
+        failedAssetCount,
+        isIncomplete: failedAssetCount > 0
+      };
     },
     [address, network],
     Boolean(address),

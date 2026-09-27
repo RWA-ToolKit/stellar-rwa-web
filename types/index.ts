@@ -99,9 +99,12 @@ export type TxPhase =
   | "success"
   | "error";
 
-/** Optional telemetry callbacks for the transaction lifecycle. */
+/** Error type for transaction errors. */
+export type TxErrorType = "generic" | "auth";
+
+/** Telemetry callbacks for transaction lifecycle events. */
 export interface TxTelemetry {
   onPhase?: (phase: TxPhase, detail?: string) => void;
   onSuccess?: (hash: string, result: TxResult) => void;
-  onError?: (error: string, phase: TxPhase) => void;
+  onError?: (error: string, errorType: TxErrorType) => void;
 }

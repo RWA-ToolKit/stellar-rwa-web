@@ -130,6 +130,7 @@ const BASE_TX: ReturnType<typeof useTx> = {
   phase: "idle",
   hash: null,
   error: null,
+  errorType: "generic",
   pending: false,
   run: jest.fn().mockResolvedValue(null),
   reset: jest.fn(),

@@ -100,6 +100,9 @@ describe("CompliancePanel", () => {
     expect(screen.getByText(/KP · Blocked/)).toBeInTheDocument();
     expect(screen.getByText("NG")).toBeInTheDocument();
     expect(screen.getByText("US")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "A blocked jurisdiction won't appear here unless an approved address has that jurisdiction.",
+    );
   });
 
   it("renders no blocked summary when every jurisdiction is allowed", () => {
@@ -151,6 +154,7 @@ describe("CompliancePanel", () => {
     expect(
       screen.getByText(/no jurisdictions are registered/i),
     ).toBeInTheDocument();
+    expect(screen.getByRole("note")).toBeInTheDocument();
   });
 
   it("shows a spinner while the compliance data loads", () => {

@@ -246,6 +246,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   );
 
   const networkUnknown = Boolean(address) && walletNetwork === null;
+  const networkMismatch = Boolean(address) && walletNetwork !== null && walletNetwork !== network;
 
   const sign = useCallback(
     (xdr: string) => {
@@ -257,9 +258,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           new Error("Can't verify your wallet's network. Reconnect and try again."),
         );
       }
+      if (networkMismatch) {
+        return Promise.reject(
+          new Error(
+            `Your wallet is on a different network. Switch your wallet to match the app's network and try again.`,
+          ),
+        );
+      }
       return signTx(xdr, networkPassphrase(network), addressRef.current);
     },
-    [network, networkUnknown],
+    [network, networkUnknown, networkMismatch],
   );
 
   const writeCtx = useCallback(
@@ -268,9 +276,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (networkUnknown) {
         throw new Error("Can't verify your wallet's network. Reconnect and try again.");
       }
+      if (networkMismatch) {
+        throw new Error(
+          `Your wallet is on a different network. Switch your wallet to match the app's network and try again.`,
+        );
+      }
       return { network, source: addressRef.current, sign, onPhase };
     },
-    [network, sign, networkUnknown],
+    [network, sign, networkUnknown, networkMismatch],
   );
 
   const value = useMemo<WalletContextValue>(

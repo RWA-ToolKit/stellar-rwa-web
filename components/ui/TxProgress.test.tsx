@@ -60,10 +60,10 @@ describe("TxProgress", () => {
     expect(statusEl).toBeInTheDocument();
     expect(statusEl).toHaveAttribute("aria-live", "polite");
     expect(screen.getByText("Done")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /view on stellar expert/i })).toHaveAttribute(
-      "href",
-      expect.stringContaining("abc123"),
-    );
+    const link = screen.getByRole("link", { name: /view on stellar expert/i });
+    expect(link).toHaveAttribute("href", expect.stringContaining("abc123"));
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("renders success state without link when hash is null", () => {

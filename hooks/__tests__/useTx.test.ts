@@ -4,6 +4,7 @@ import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
 import type { WriteCtx } from "@/lib/contracts";
 import type { TxPhase } from "@/types";
+import { UserRejectedError } from "@/lib/freighter";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 
@@ -94,6 +95,25 @@ describe("useTx", () => {
       description: "Execution reverted",
       tone: "error",
     });
+  });
+
+  it("resets to idle when user rejects the signing prompt, without showing an error", async () => {
+    const { result } = renderHook(() => useTx());
+
+    await act(async () => {
+      const res = await result.current.run(async () => {
+        throw new UserRejectedError("User rejected the signing prompt");
+      });
+      expect(res).toBeNull();
+    });
+
+    // Should be idle, not error
+    expect(result.current.phase).toBe("idle");
+    expect(result.current.hash).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(result.current.pending).toBe(false);
+    // Should not show a toast for user rejection
+    expect(mockAddToast).not.toHaveBeenCalled();
   });
 
   it("resets state when reset is called", async () => {
