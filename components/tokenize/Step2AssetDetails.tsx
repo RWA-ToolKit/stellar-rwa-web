@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { ValidatedToken } from "@/lib/tokenizeFlow";
 import type { TokenizeFormData } from "@/lib/tokenizeFlow";
 import { ASSET_TYPES, ASSET_TYPE_LABELS } from "@/types";
-import { parseUsdToCents, formatUsdCents } from "@/lib/format";
+import { formatRawPlain, formatUsdCents, parseUsdToCents } from "@/lib/format";
 import { TokenContractPreview } from "./Step1TokenContract";
 
 interface Step2Props {
@@ -27,7 +27,7 @@ export function Step2AssetDetails({ validated, initial, onBack, onNext }: Step2P
     initial.assetType ?? (ASSET_TYPES.includes(metadata.assetType as never) ? metadata.assetType : ASSET_TYPES[0]),
   );
   const [valuationInput, setValuationInput] = useState(
-    initial.valuation ? String(Number(initial.valuation) / 100) : "",
+    initial.valuation ? formatRawPlain(initial.valuation, 2) : "",
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
 

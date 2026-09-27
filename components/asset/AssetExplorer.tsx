@@ -10,10 +10,10 @@ import {
   type TypeFilter,
   type SortKey,
 } from "./AssetFilter";
-import { CardSkeletonGrid } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ASSET_TYPES } from "@/types";
+import { DataFreshness } from "@/components/ui/DataFreshness";
 
 const PAGE_SIZE = 9;
 const MAX_VISIBLE_PAGES = 5;
@@ -36,7 +36,7 @@ function isValidTypeFilter(value: string): value is TypeFilter {
  * filtered views can be linked and restored on refresh.
  */
 export function AssetExplorer() {
-  const { assets, loading, error, refetch } = useAssets();
+  const { assets, loading, error, refetch, updatedAt } = useAssets();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -139,7 +139,7 @@ export function AssetExplorer() {
       <AssetFilter value={filter} onChange={updateFilter} counts={counts} />
 
       {loading ? (
-        <CardSkeletonGrid count={6} />
+        <AssetGrid assets={[]} loading skeletonCount={PAGE_SIZE} />
       ) : error ? (
         <ErrorState message={error} onRetry={refetch} headingLevel={2} />
       ) : filtered.length === 0 ? (
@@ -164,89 +164,16 @@ export function AssetExplorer() {
             />
           )}
         </>
+        <AssetGrid
+          assets={visible}
+          page={currentPage}
+          totalPages={totalPages}
+          total={filtered.length}
+          onPageChange={goToPage}
+        />
       )}
+      {!loading && !error && <DataFreshness updatedAt={updatedAt} />}
     </div>
   );
 }
 
-function PaginationBar({
-  page,
-  totalPages,
-  onChange,
-  total,
-}: {
-  page: number;
-  totalPages: number;
-  onChange: (p: number) => void;
-  total: number;
-}) {
-  const pages = useMemo(() => {
-    const half = Math.floor(MAX_VISIBLE_PAGES / 2);
-    let start = Math.max(1, page - half);
-    let end = Math.min(totalPages, start + MAX_VISIBLE_PAGES - 1);
-    if (end - start + 1 < MAX_VISIBLE_PAGES) {
-      start = Math.max(1, end - MAX_VISIBLE_PAGES + 1);
-    }
-    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
-  }, [page, totalPages]);
-
-  return (
-    <div className="flex items-center justify-between border-t border-white/5 pt-5">
-      <p className="text-sm text-base-100/40">
-        Page {page} of {totalPages} · {total} asset{total === 1 ? "" : "s"}
-      </p>
-      <nav className="flex items-center gap-1" aria-label="Pagination">
-        <button
-          onClick={() => onChange(page - 1)}
-          disabled={page <= 1}
-          className="btn-secondary px-3 py-2 text-sm"
-          aria-label="Previous page"
-        >
-          ←
-        </button>
-        {pages[0] > 1 && (
-          <>
-            <button onClick={() => onChange(1)} className="btn-secondary px-3 py-2 text-sm">
-              1
-            </button>
-            {pages[0] > 2 && (
-              <span className="px-1 text-sm text-base-100/30">…</span>
-            )}
-          </>
-        )}
-        {pages.map((p) => (
-          <button
-            key={p}
-            onClick={() => onChange(p)}
-            className={`px-3 py-2 text-sm font-medium rounded-lg transition-colors ${
-              p === page
-                ? "bg-brand-500/20 text-brand-300"
-                : "text-base-100/60 hover:text-base-100/90 btn-secondary"
-            }`}
-            aria-current={p === page ? "page" : undefined}
-          >
-            {p}
-          </button>
-        ))}
-        {pages[pages.length - 1] < totalPages && (
-          <>
-            {pages[pages.length - 1] < totalPages - 1 && (
-              <span className="px-1 text-sm text-base-100/30">…</span>
-            )}
-            <button onClick={() => onChange(totalPages)} className="btn-secondary px-3 py-2 text-sm">
-              {totalPages}
-            </button>
-          </>
-        )}
-        <button
-          onClick={() => onChange(page + 1)}
-          disabled={page >= totalPages}
-          className="btn-secondary px-3 py-2 text-sm"
-          aria-label="Next page"
-        >
-          →
-        </button>
-      </nav>
-    </div>
-  );
-}

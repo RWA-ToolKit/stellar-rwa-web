@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useHolders, type Holder } from "@/hooks/useHolders";
-import { formatTokenAmount, percent, truncateAddress } from "@/lib/format";
+import { formatTokenAmount, holderSharePercentages, truncateAddress } from "@/lib/format";
 import { useWallet } from "@/hooks/useWallet";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
@@ -85,6 +85,24 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
         ))}
       </tbody>
     </table>
+  const shares = holderSharePercentages(
+    holders.map((holder) => holder.balance),
+    metadata.totalSupply,
+  );
+
+  return (
+    <ul className="divide-y divide-white/5">
+      {holders.map((h, index) => (
+        <HolderRow
+          key={h.address}
+          holder={h}
+          decimals={metadata.decimals}
+          symbol={metadata.symbol}
+          share={shares[index]}
+          isYou={h.address === address}
+        />
+      ))}
+    </ul>
   );
 }
 
@@ -92,16 +110,15 @@ function HolderRow({
   holder,
   decimals,
   symbol,
-  supply,
+  share,
   isYou,
 }: {
   holder: Holder;
   decimals: number;
   symbol: string;
-  supply: bigint;
+  share: string;
   isYou: boolean;
 }) {
-  const share = percent(holder.balance, supply);
   return (
     <tr>
       <th scope="row" className="py-3 pr-3 text-left font-normal">
@@ -120,5 +137,22 @@ function HolderRow({
       </td>
       <td className="py-3 text-right text-xs text-base-100/40">{share.toFixed(2)}%</td>
     </tr>
+    <li className="flex items-center justify-between gap-3 py-3">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-sm text-base-100/80">
+          {truncateAddress(holder.address, 6, 6)}
+        </span>
+        {isYou && (
+          <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">You</span>
+        )}
+        <CopyButton value={holder.address} />
+      </div>
+      <div className="text-right">
+        <p className="text-sm font-semibold text-base-100">
+          {formatTokenAmount(holder.balance, decimals)} {symbol}
+        </p>
+        <p className="text-xs text-base-100/40">{share}% of supply</p>
+      </div>
+    </li>
   );
 }

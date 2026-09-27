@@ -31,6 +31,7 @@ function setup(holders: Holder[]) {
     data: holders,
     loading: false,
     error: null,
+    updatedAt: null,
     refetch: jest.fn(),
   });
 }
@@ -80,6 +81,7 @@ describe("HolderList", () => {
       data: null,
       loading: false,
       error: "RPC unreachable",
+      updatedAt: null,
       refetch: mockRefetch,
     });
 

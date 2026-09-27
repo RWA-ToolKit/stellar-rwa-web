@@ -44,7 +44,12 @@ NEXT_PUBLIC_TESTNET_RPC_URL=https://your-custom-rpc.example.com
 
 ## Failover / Multiple RPC URLs
 
-The app supports RPC failover: if the primary RPC URL fails **three consecutive times**, the app automatically switches to the next URL in the fallback list.
+RPC endpoints are configured independently for Testnet and Mainnet. For each
+network, the app builds an ordered candidate list from the non-empty primary
+URL, the comma-separated fallback URLs, and the built-in public RPC URL, which
+is appended as the final candidate. The app does not remove duplicate URLs, so
+avoid repeating an endpoint in the primary, fallback list, and built-in
+position.
 
 To configure multiple RPC URLs for redundancy:
 
@@ -53,18 +58,36 @@ NEXT_PUBLIC_TESTNET_RPC_URL=https://primary-rpc.example.com
 NEXT_PUBLIC_TESTNET_RPC_URLS_FALLBACK=https://fallback-1.example.com,https://fallback-2.example.com
 ```
 
-The app tries URLs in order:
+The candidate order for this example is:
 1. **Primary:** `https://primary-rpc.example.com`
-2. **Fallback 1:** `https://fallback-1.example.com` (after 3 failures against primary)
-3. **Fallback 2:** `https://fallback-2.example.com` (after 3 failures against fallback 1)
-4. **Public default:** `https://soroban-testnet.stellar.org` (always available as a last resort)
+2. **Fallback 1:** `https://fallback-1.example.com`
+3. **Fallback 2:** `https://fallback-2.example.com`
+4. **Built-in public candidate:** `https://soroban-testnet.stellar.org`
 
 ### How Failover Works
 
-- Each RPC error increments a failure counter for the current URL.
-- After **3 consecutive failures**, the cached RPC client is invalidated and rebuilt against the next URL in the list, with the failure counter reset.
-- If only one URL is configured (or all URLs are exhausted), the failure counter still increments but no failover occurs—errors bubble up to the UI.
-- The counter is **per network** (Testnet and Mainnet track failures independently) and **per browser session** (resets on page reload).
+- A wrapped RPC failure increments that network's counter for the currently
+  selected URL. A successful request does **not** clear the counter.
+- After **3 reported failures** on the current URL, the cached client switches
+  to the next candidate and the counter resets. The threshold is the fixed
+  `FAILOVER_THRESHOLD = 3` in `lib/stellar.ts`; it is not an environment
+  variable.
+- Candidates are selected in order, then **wrap around to index 0** after the
+  last candidate. The app does not permanently exhaust or remove an endpoint;
+  repeated failures can cycle through the whole list.
+- With no primary or fallback URL configured, the built-in public URL is the
+  only candidate, so failover cannot move to another endpoint and errors
+  surface to the UI.
+- Counters and the selected candidate are independent per network and live
+  only in the browser's in-memory session. Reloading the page starts from the
+  first candidate with a fresh counter.
+- Read simulations also retry transient rate-limit and network errors up to
+  three attempts with backoff. Each failed attempt is reported to the failover
+  counter; a switch updates the cached client for subsequent calls.
+
+The `NEXT_PUBLIC_*` settings are included in the browser bundle. Treat RPC URLs
+as public; do not put credentials or secrets in them. For a deployed app, set
+these values in its build environment and rebuild/redeploy after changing them.
 
 ### Example: High-Availability Setup
 
