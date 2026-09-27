@@ -67,4 +67,29 @@ describe("Step2AssetDetails", () => {
       valuation: 100_000_000n,
     });
   });
+
+  it("prefills and resubmits large valuations without losing cents", () => {
+    const onNext = jest.fn();
+    const valuation = 9_007_199_254_740_993_45n;
+
+    render(
+      <Step2AssetDetails
+        validated={validated}
+        initial={{ valuation }}
+        onBack={jest.fn()}
+        onNext={onNext}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Valuation (USD)" })).toHaveValue(
+      "9007199254740993.45",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
+
+    expect(onNext).toHaveBeenCalledWith({
+      name: "On-chain asset",
+      assetType: "real_estate",
+      valuation,
+    });
+  });
 });

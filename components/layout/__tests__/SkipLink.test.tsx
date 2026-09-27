@@ -99,4 +99,21 @@ describe("SkipLink", () => {
     // Should not throw when clicking without main-content element
     await expect(user.click(link)).resolves.toBeUndefined();
   });
+
+  it("moves real focus to the focusable main landmark on activation", async () => {
+    const user = userEvent.setup();
+    const main = document.createElement("main");
+    main.id = "main-content";
+    main.tabIndex = -1;
+    main.scrollIntoView = jest.fn();
+    document.body.appendChild(main);
+
+    render(<SkipLink />);
+    await user.tab();
+    expect(screen.getByText("Skip to main content")).toHaveFocus();
+    await user.keyboard("{Enter}");
+
+    expect(main).toHaveFocus();
+    expect(main).toHaveAttribute("tabindex", "-1");
+  });
 });

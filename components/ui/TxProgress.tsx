@@ -2,8 +2,7 @@
 
 import { useWallet } from "@/hooks/useWallet";
 import { explorerTxUrl } from "@/lib/stellar";
-import { formatStroopsToXLM } from "@/lib/format";
-import type { TxPhase } from "@/types";
+import type { TxPhase, TxErrorType } from "@/types";
 import { Spinner } from "./Spinner";
 
 const PHASE_LABEL: Record<Exclude<TxPhase, "idle">, string> = {
@@ -20,8 +19,7 @@ interface TxProgressProps {
   phase: TxPhase;
   hash: string | null;
   error: string | null;
-  /** Estimated network fee in stroops from simulation. */
-  estimatedFee?: bigint | null;
+  errorType?: TxErrorType;
   /** Called when the user dismisses a success/error result. */
   onDismiss?: () => void;
   successMessage?: string;
@@ -37,7 +35,7 @@ export function TxProgress({
   phase,
   hash,
   error,
-  estimatedFee,
+  errorType = "generic",
   onDismiss,
   successMessage = "Your transaction is confirmed.",
 }: TxProgressProps) {
@@ -77,21 +75,31 @@ export function TxProgress({
   }
 
   if (phase === "error") {
+    // Issue #369: Distinguish Auth errors from other contract errors
+    const isAuth = errorType === "auth";
+    const displayError = isAuth
+      ? error || "You are not authorized to perform this action."
+      : error ?? "The transaction did not complete.";
+
     return (
       <div
         role="alert"
         aria-live="assertive"
-        className="flex items-start justify-between gap-3 rounded-xl border border-red-500/25 bg-red-500/5 px-4 py-3 text-sm"
+        className={`flex items-start justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${
+          isAuth
+            ? "border-red-500/40 bg-red-500/10 text-red-200"
+            : "border-red-500/25 bg-red-500/5 text-red-300"
+        }`}
       >
-        <div className="flex items-start gap-2.5 text-red-300">
+        <div className="flex items-start gap-2.5">
           <svg className="mt-0.5 shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="9" />
             <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
           </svg>
-          <span>{error ?? "The transaction did not complete."}</span>
+          <span>{displayError}</span>
         </div>
         {onDismiss && (
-          <button onClick={onDismiss} className="shrink-0 text-red-300/60 hover:text-red-300" aria-label="Dismiss">
+          <button onClick={onDismiss} className="shrink-0 opacity-60 hover:opacity-100" aria-label="Dismiss">
             ✕
           </button>
         )}

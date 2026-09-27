@@ -71,10 +71,26 @@ function trimZero(n: number): string {
  */
 function compactBigint(n: bigint): string {
   const abs = n < 0n ? -n : n;
-  if (abs >= 1_000_000_000n) return trimZero(Number(n) / 1_000_000_000) + "B";
-  if (abs >= 1_000_000n) return trimZero(Number(n) / 1_000_000) + "M";
-  if (abs >= 1_000n) return trimZero(Number(n) / 1_000) + "K";
-  return n.toString();
+  let divisor: bigint;
+  let suffix: string;
+  if (abs >= 1_000_000_000n) {
+    divisor = 1_000_000_000n;
+    suffix = "B";
+  } else if (abs >= 1_000_000n) {
+    divisor = 1_000_000n;
+    suffix = "M";
+  } else if (abs >= 1_000n) {
+    divisor = 1_000n;
+    suffix = "K";
+  } else {
+    return n.toString();
+  }
+
+  const tenths = (abs * 10n + divisor / 2n) / divisor;
+  const whole = tenths / 10n;
+  const fraction = tenths % 10n;
+  const sign = n < 0n ? "-" : "";
+  return `${sign}${whole}${fraction === 0n ? "" : `.${fraction}`}${suffix}`;
 }
 
 /**
@@ -183,6 +199,58 @@ export function percent(part: bigint, whole: bigint): number {
   const clamped = part < 0n ? 0n : part > whole ? whole : part;
   const pct = Number((clamped * 10000n) / whole) / 100;
   return Math.max(0, Math.min(100, pct));
+}
+
+/**
+ * Allocate percentage shares across holder rows using largest remainders.
+ * The decimal precision grows as needed so every positive balance remains
+ * visible, while displayed shares add up to the represented share of supply.
+ */
+export function holderSharePercentages(balances: bigint[], supply: bigint): string[] {
+  if (supply <= 0n) return balances.map(() => "0.00");
+
+  const positive = balances
+    .map((balance, index) => ({ balance, index }))
+    .filter(({ balance }) => balance > 0n);
+  if (positive.length === 0) return balances.map(() => "0.00");
+
+  const totalBalance = positive.reduce((sum, holder) => sum + holder.balance, 0n);
+  let decimals = 2;
+  let scale = 100n * 10n ** BigInt(decimals);
+  let totalUnits = (totalBalance * scale + supply / 2n) / supply;
+  while (totalUnits < BigInt(positive.length)) {
+    decimals += 1;
+    scale *= 10n;
+    totalUnits = (totalBalance * scale + supply / 2n) / supply;
+  }
+
+  const remainingUnits = totalUnits - BigInt(positive.length);
+  const allocations = positive.map(({ balance, index }) => {
+    const weighted = remainingUnits * balance;
+    return {
+      index,
+      units: 1n + weighted / totalBalance,
+      remainder: weighted % totalBalance,
+    };
+  });
+  let undistributed = totalUnits - allocations.reduce((sum, item) => sum + item.units, 0n);
+  const remainderOrder = [...allocations].sort((a, b) =>
+    a.remainder === b.remainder ? a.index - b.index : a.remainder > b.remainder ? -1 : 1,
+  );
+  for (let i = 0; undistributed > 0n; i += 1) {
+    remainderOrder[i].units += 1n;
+    undistributed -= 1n;
+  }
+
+  const shares = balances.map(() => "0.00");
+  const fractionScale = 10n ** BigInt(decimals);
+  for (const allocation of allocations) {
+    const whole = allocation.units / fractionScale;
+    const fraction = (allocation.units % fractionScale).toString().padStart(decimals, "0");
+    shares[allocation.index] =
+      `${whole}.${fraction.replace(/0+$/, "").padEnd(2, "0")}`;
+  }
+  return shares;
 }
 
 /** Average Stellar ledger close time. The network's actual close time drifts

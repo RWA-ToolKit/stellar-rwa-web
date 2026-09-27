@@ -17,6 +17,7 @@ import { LoadingPanel } from "@/components/ui/Spinner";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { getDisplayText } from "@/lib/display";
+import { DataFreshness } from "@/components/ui/DataFreshness";
 
 export function AssetDetailView({ id }: { id: bigint }) {
   const { network } = useWallet();
@@ -34,12 +35,24 @@ export function AssetDetailView({ id }: { id: bigint }) {
       </div>
     );
   }
+  if (asset.notFound) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
+        <h1 className="text-2xl font-bold text-base-100">Asset not found</h1>
+        <p className="mt-2 text-base-100/50">
+          No registered asset with id {id.toString()}. The link may be wrong or the asset
+          may have been removed.
+        </p>
+        <Link href="/explore" className="btn-secondary mt-6">← Back to Explore</Link>
+      </div>
+    );
+  }
   if (asset.error || !asset.data) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <ErrorState
-          title="Asset not found"
-          message={asset.error ?? `No registered asset with id ${id.toString()}.`}
+          title="Couldn't load asset"
+          message={asset.error ?? "Something went wrong loading this asset."}
           onRetry={asset.refetch}
         />
         <div className="mt-6 text-center">
@@ -59,6 +72,9 @@ export function AssetDetailView({ id }: { id: bigint }) {
       </Link>
 
       <AssetHeader asset={detail} network={network} />
+      <div className="mt-2">
+        <DataFreshness updatedAt={asset.updatedAt} />
+      </div>
 
       {/* Compliance notice — always visible; these are gated assets. */}
       <div className="mt-5 flex items-start gap-3 rounded-2xl border border-brand-500/15 bg-brand-500/[0.04] px-4 py-3.5 text-sm text-base-100/70">
@@ -99,7 +115,7 @@ export function AssetDetailView({ id }: { id: bigint }) {
             ) : !dividends.data || dividends.data.length === 0 ? (
               <EmptyState
                 title="No distributions yet"
-                description="When the issuer distributes yield, past and active distributions show up here with your claimable share."
+                description="The asset issuer creates distributions to share yield with token holders. Completed and active distributions will appear here with your claimable share."
                 className="py-10"
               />
             ) : (

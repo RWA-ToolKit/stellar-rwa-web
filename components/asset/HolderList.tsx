@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useHolders, type Holder } from "@/hooks/useHolders";
-import { formatTokenAmount, percent, truncateAddress } from "@/lib/format";
+import { formatTokenAmount, holderSharePercentages, truncateAddress } from "@/lib/format";
 import { useWallet } from "@/hooks/useWallet";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
@@ -60,15 +60,20 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
     );
   }
 
+  const shares = holderSharePercentages(
+    holders.map((holder) => holder.balance),
+    metadata.totalSupply,
+  );
+
   return (
     <ul className="divide-y divide-white/5">
-      {holders.map((h) => (
+      {holders.map((h, index) => (
         <HolderRow
           key={h.address}
           holder={h}
           decimals={metadata.decimals}
           symbol={metadata.symbol}
-          supply={metadata.totalSupply}
+          share={shares[index]}
           isYou={h.address === address}
         />
       ))}
@@ -80,16 +85,15 @@ function HolderRow({
   holder,
   decimals,
   symbol,
-  supply,
+  share,
   isYou,
 }: {
   holder: Holder;
   decimals: number;
   symbol: string;
-  supply: bigint;
+  share: string;
   isYou: boolean;
 }) {
-  const share = percent(holder.balance, supply);
   return (
     <li className="flex items-center justify-between gap-3 py-3">
       <div className="flex items-center gap-2">
@@ -105,7 +109,7 @@ function HolderRow({
         <p className="text-sm font-semibold text-base-100">
           {formatTokenAmount(holder.balance, decimals)} {symbol}
         </p>
-        <p className="text-xs text-base-100/40">{share.toFixed(2)}% of supply</p>
+        <p className="text-xs text-base-100/40">{share}% of supply</p>
       </div>
     </li>
   );

@@ -64,6 +64,12 @@ describe("NetworkSelector", () => {
       expect(screen.getByRole("button", { name: /mainnet/i })).toBeInTheDocument();
     });
 
+    it("exposes a named group and announces the current network", () => {
+      setup({ address: null, network: "mainnet" });
+      expect(screen.getByRole("group", { name: "Network" })).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent("Current network: Mainnet");
+    });
+
     it("does not render a locked chip", () => {
       setup({ address: null });
       // A locked chip renders as a <span> with no role button
@@ -148,15 +154,26 @@ describe("NetworkSelector", () => {
       expect(screen.getByText("Mainnet")).toBeInTheDocument();
     });
 
-    it("uses walletNetwork when available, falling back to network", () => {
-      // walletNetwork takes priority for the label
+    it("uses walletNetwork when available and matches network", () => {
+      // walletNetwork takes priority for the label when they match
+      setup({
+        address: "GABCDEF1234",
+        network: "mainnet",
+        walletNetwork: "mainnet",
+        networkUnknown: false,
+      });
+      expect(screen.getByText("Mainnet")).toBeInTheDocument();
+    });
+
+    it("shows network mismatch warning when wallet and app networks differ", () => {
+      // When walletNetwork differs from network, show the mismatch warning
       setup({
         address: "GABCDEF1234",
         network: "testnet",
         walletNetwork: "mainnet",
         networkUnknown: false,
       });
-      expect(screen.getByText("Mainnet")).toBeInTheDocument();
+      expect(screen.getByText(/network mismatch/i)).toBeInTheDocument();
     });
 
     it("falls back to network label when walletNetwork is null but connected", () => {
