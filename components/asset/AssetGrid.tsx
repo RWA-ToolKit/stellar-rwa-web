@@ -1,23 +1,34 @@
 import type { AssetEntry } from "@/types";
 import { AssetCard } from "./AssetCard";
+import { CardSkeletonGrid } from "@/components/ui/Skeleton";
 
 const MAX_VISIBLE_PAGES = 5;
 
 interface AssetGridProps {
   assets: AssetEntry[];
+  /** Render card-shaped skeletons instead of `assets` while data loads. */
+  loading?: boolean;
+  /** Number of skeleton cards to show while loading. */
+  skeletonCount?: number;
   page?: number;
   totalPages?: number;
   total?: number;
   onPageChange?: (page: number) => void;
 }
 
+/** Responsive grid of asset cards, with optional pagination. */
 export function AssetGrid({
   assets,
+  loading = false,
+  skeletonCount = 6,
   page,
   totalPages,
   total,
   onPageChange,
 }: AssetGridProps) {
+  // Skeletons stand in for the whole grid, so there is nothing to paginate yet.
+  if (loading) return <CardSkeletonGrid count={skeletonCount} />;
+
   const showPagination =
     Boolean(page && totalPages && totalPages > 1 && onPageChange);
 

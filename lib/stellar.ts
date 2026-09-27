@@ -375,6 +375,17 @@ export class RateLimitError extends Error {
 }
 
 /**
+ * True when a failed read means "no such record" (contract error #4) rather
+ * than a transient/RPC failure.
+ */
+export function isNotFoundError(e: unknown): boolean {
+  return (
+    e instanceof ContractError &&
+    /Error\(Contract,\s*#4\)/.test(e.detail ?? "")
+  );
+}
+
+/**
  * Map a raw Soroban error string to a friendlier message. Contract errors
  * surface as `Error(Contract, #N)`; we translate the codes we know about.
  * Returns an object with the message and a flag indicating if this is an Auth error.
