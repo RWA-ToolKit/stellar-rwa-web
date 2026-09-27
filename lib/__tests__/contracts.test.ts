@@ -1,4 +1,9 @@
-import { contractIds } from "@/lib/contracts";
+jest.mock("@/lib/stellar", () => ({
+  readContract: jest.fn(),
+}));
+
+import { assetToken, contractIds } from "@/lib/contracts";
+import { readContract } from "@/lib/stellar";
 import type { Network } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -25,6 +30,23 @@ describe("contractIds", () => {
         process.env.NEXT_PUBLIC_TESTNET_DIVIDEND_ID ||
           "CAR4XY3CEBQWFOL27JEWFW34KXSIZA7RFKDQMEIV7ZU723RWY37I2SYX"
       );
+    });
+
+    describe("assetToken.decimals", () => {
+      it("reads token decimals from its own contract", async () => {
+        (readContract as jest.Mock).mockResolvedValue(2);
+
+        await expect(assetToken.decimals("testnet", "CTOKEN")).resolves.toBe(2);
+        expect(readContract).toHaveBeenCalledWith("testnet", "CTOKEN", "decimals");
+      });
+
+      it.each([-1, 1.5, 256, undefined])("rejects invalid decimals value %s", async (decimals) => {
+        (readContract as jest.Mock).mockResolvedValue(decimals);
+
+        await expect(assetToken.decimals("testnet", "CTOKEN")).rejects.toThrow(
+          "returned invalid decimals",
+        );
+      });
     });
 
     it("returns contract IDs for mainnet", () => {

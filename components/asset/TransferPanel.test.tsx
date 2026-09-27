@@ -144,7 +144,7 @@ describe("TransferPanel", () => {
       metadata: { ...asset.metadata, paused: true },
     } as AssetDetail;
     setup(pausedAsset);
-    const run = mockUseTx.mock.results[0].value.run;
+    const run = mockUseTx.mock.results[0]!.value.run;
 
     expect(
       screen.getByText(/transfers are paused by the issuer.*unpauses the token/i),
@@ -269,6 +269,9 @@ describe("TransferPanel", () => {
       fireEvent.change(input, { target: { value: "1.25" } });
       expect(input).not.toHaveAttribute("aria-invalid");
       expect(input).not.toHaveAttribute("aria-describedby");
+    });
+  });
+
   describe("double submission prevention", () => {
     it("disables submit button while transaction is pending", () => {
       mockUseWallet.mockReturnValue({ address: SENDER } as ReturnType<typeof useWallet>);

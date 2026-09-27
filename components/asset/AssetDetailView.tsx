@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { useAsset, useBalance } from "@/hooks/useAsset";
 import { useDividends } from "@/hooks/useDividends";
+import { useActivity } from "@/hooks/useActivity";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
 import { getLatestLedger } from "@/lib/stellar";
@@ -13,6 +14,8 @@ import { TransferPanel } from "./TransferPanel";
 import { CompliancePanel } from "./CompliancePanel";
 import { HolderList } from "./HolderList";
 import { DistributionCard } from "@/components/dividend/DistributionCard";
+import { ClaimAllButton } from "@/components/dividend/ClaimAllButton";
+import { ActivityPanel } from "./ActivityPanel";
 import { LoadingPanel } from "@/components/ui/Spinner";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -24,6 +27,11 @@ export function AssetDetailView({ id }: { id: bigint }) {
   const asset = useAsset(id);
   const balance = useBalance(asset.data?.tokenContract ?? null);
   const dividends = useDividends(asset.data?.tokenContract ?? null);
+  const [activityRefreshKey, setActivityRefreshKey] = useState(0);
+  const activity = useActivity(
+    asset.data?.tokenContract ?? null,
+    activityRefreshKey,
+  );
   const ledger = useAsync(() => getLatestLedger(network), [network]);
   const [holderCount, setHolderCount] = useState<number | undefined>(undefined);
   const [holdersRefreshKey, setHoldersRefreshKey] = useState(0);
@@ -120,6 +128,13 @@ export function AssetDetailView({ id }: { id: bigint }) {
               />
             ) : (
               <div className="space-y-4">
+                <ClaimAllButton
+                  distributions={dividends.data}
+                  onClaimed={() => {
+                    dividends.refetch();
+                    balance.refetch();
+                  }}
+                />
                 {dividends.data.map((d) => (
                   <DistributionCard
                     key={d.id.toString()}
@@ -139,6 +154,17 @@ export function AssetDetailView({ id }: { id: bigint }) {
             <h2 className="mb-1 text-lg font-semibold text-base-100">Holders</h2>
             <HolderList asset={detail} onCount={setHolderCount} refreshKey={holdersRefreshKey} />
           </section>
+
+          <section className="card p-6">
+            <h2 className="mb-4 text-lg font-semibold text-base-100">Transfer history</h2>
+            <ActivityPanel
+              events={activity.data}
+              loading={activity.loading}
+              error={activity.error}
+              decimals={detail.metadata.decimals}
+              onRetry={activity.refetch}
+            />
+          </section>
         </div>
 
         {/* Right: stats sidebar + transfer */}
@@ -147,7 +173,10 @@ export function AssetDetailView({ id }: { id: bigint }) {
             <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-base-100/55">
               Overview
             </h2>
-            <AssetStats asset={detail} holders={holderCount} />
+            <AssetStats
+              asset={detail}
+              {...(holderCount !== undefined ? { holders: holderCount } : {})}
+            />
           </div>
 
           <div className="card p-6">
@@ -168,6 +197,7 @@ export function AssetDetailView({ id }: { id: bigint }) {
                 balance.refetch();
                 dividends.refetch();
                 setHoldersRefreshKey((k) => k + 1);
+                setActivityRefreshKey((k) => k + 1);
               }}
             />
           </div>

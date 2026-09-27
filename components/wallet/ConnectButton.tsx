@@ -74,7 +74,12 @@ export function ConnectButton() {
 
       {open && (
         <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <button
+            type="button"
+            className="fixed inset-0 z-10 cursor-default border-0 bg-transparent p-0"
+            aria-label="Close wallet menu"
+            onClick={() => setOpen(false)}
+          />
           <div
             role="menu"
             className="absolute right-0 z-20 mt-2 w-64 animate-fade-in rounded-2xl border border-white/10 bg-base-850 p-3 shadow-2xl shadow-black/40"

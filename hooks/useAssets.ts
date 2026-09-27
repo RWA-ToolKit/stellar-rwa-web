@@ -3,15 +3,17 @@
 import { useMemo } from "react";
 import { registry } from "@/lib/contracts";
 import { api } from "@/lib/api";
+import { cacheAssetEntries } from "@/lib/assetCache";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
 import type { AssetEntry, Network } from "@/types";
 
 async function loadAssets(network: Network, includeInactive?: boolean): Promise<AssetEntry[]> {
   const fromApi = await api.getAllAssets();
-  if (fromApi) return includeInactive ? fromApi : fromApi.filter((a) => a.active);
-  const all = await registry.getAllAssets(network);
-  return includeInactive ? all : all.filter((a) => a.active);
+  const all = fromApi ?? await registry.getAllAssets(network);
+  const assets = includeInactive ? all : all.filter((a) => a.active);
+  cacheAssetEntries(network, assets);
+  return assets;
 }
 
 export function useAssets(opts?: { includeInactive?: boolean }) {

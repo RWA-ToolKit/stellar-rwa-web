@@ -69,7 +69,14 @@ export function AssetHeader({ asset, network }: AssetHeaderProps) {
         </span>
         <span className="flex items-center gap-1.5">
           Issuer
-          <span className="font-mono text-base-100/70">{truncateAddress(asset.issuer, 6, 6)}</span>
+          <a
+            href={explorerContractUrl(network, asset.issuer).replace("/contract/", "/account/")}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-mono text-base-100/70 hover:text-brand-300"
+          >
+            {truncateAddress(asset.issuer, 6, 6)}
+          </a>
           <CopyButton value={asset.issuer} />
         </span>
       </div>

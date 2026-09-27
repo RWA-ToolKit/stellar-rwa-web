@@ -24,7 +24,8 @@ export function Step2AssetDetails({ validated, initial, onBack, onNext }: Step2P
 
   const [name, setName] = useState(initial.name ?? metadata.name ?? "");
   const [assetType, setAssetType] = useState(
-    initial.assetType ?? (ASSET_TYPES.includes(metadata.assetType as never) ? metadata.assetType : ASSET_TYPES[0]),
+    initial.assetType ??
+      (ASSET_TYPES.find((type) => type === metadata.assetType) ?? "real_estate"),
   );
   const [valuationInput, setValuationInput] = useState(
     initial.valuation ? formatRawPlain(initial.valuation, 2) : "",

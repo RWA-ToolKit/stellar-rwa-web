@@ -28,6 +28,7 @@ jest.mock("@stellar/stellar-sdk", () => ({
 // ── mock getLatestLedger ───────────────────────────────────────────────────
 
 const mockGetLatestLedger = jest.fn<Promise<number>, unknown[]>();
+const mockUseAllowlist = jest.fn();
 
 jest.mock("@/lib/stellar", () => ({
   ...jest.requireActual("@/lib/stellar"),
@@ -43,12 +44,7 @@ jest.mock("@/hooks/useWallet", () => ({
 // ── mock useCompliance (useAllowlist) ─────────────────────────────────────
 
 jest.mock("@/hooks/useCompliance", () => ({
-  useAllowlist: jest.fn(() => ({
-    data: [],
-    loading: false,
-    error: null,
-    refetch: jest.fn(),
-  })),
+  useAllowlist: (...args: unknown[]) => mockUseAllowlist(...args),
 }));
 
 // ── mock useTx ─────────────────────────────────────────────────────────────
@@ -93,7 +89,26 @@ jest.mock("@/components/ui/Spinner", () => ({
 }));
 
 jest.mock("@/components/ui/ConfirmDialog", () => ({
-  ConfirmDialog: () => null,
+  ConfirmDialog: ({
+    open,
+    title,
+    description,
+    confirmLabel,
+    onConfirm,
+  }: {
+    open: boolean;
+    title: string;
+    description: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  }) =>
+    open ? (
+      <div role="dialog">
+        <h2>{title}</h2>
+        <p>{description}</p>
+        <button onClick={onConfirm}>{confirmLabel}</button>
+      </div>
+    ) : null,
 }));
 
 jest.mock("@/components/ui/CopyButton", () => ({
@@ -167,6 +182,12 @@ async function fillAndSubmit({
 describe("CompliancePanel — AddToAllowlistCard expiry-ledger validation (#322)", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseAllowlist.mockReturnValue({
+      data: [],
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
     // Default: ledger fetch succeeds with a known current ledger.
     mockGetLatestLedger.mockResolvedValue(CURRENT_LEDGER);
   });
@@ -294,5 +315,27 @@ describe("CompliancePanel — AddToAllowlistCard expiry-ledger validation (#322)
       expect(mockRun).toHaveBeenCalledTimes(1);
     });
     expect(screen.queryByText(/already in the past/i)).not.toBeInTheDocument();
+  });
+
+  it("confirms removal with the full address and immediate transfer impact", async () => {
+    const address = "G1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGH";
+    mockUseAllowlist.mockReturnValue({
+      data: [{ address, status: "Approved", jurisdiction: "US" }],
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+    mockRun.mockResolvedValue({ hash: "abc" });
+
+    render(<CompliancePanel asset={makeAsset()} />);
+    fireEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(address);
+    expect(dialog).toHaveTextContent(/immediately/i);
+    expect(dialog).toHaveTextContent(/sending, or receiving/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /remove address/i }));
+    await waitFor(() => expect(mockRun).toHaveBeenCalledTimes(1));
   });
 });

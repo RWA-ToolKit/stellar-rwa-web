@@ -14,6 +14,8 @@ interface ClaimButtonProps {
   distributionId: bigint;
   claimable: bigint;
   claimed: boolean;
+  expired?: boolean;
+  decimals: number;
   onClaimed?: () => void;
   onPendingClaim?: (amount: bigint) => void;
 }
@@ -27,6 +29,8 @@ export function ClaimButton({
   distributionId,
   claimable,
   claimed,
+  expired = false,
+  decimals,
   onClaimed,
   onPendingClaim,
 }: ClaimButtonProps) {
@@ -45,6 +49,13 @@ export function ClaimButton({
     return (
       <span className="chip border border-white/10 bg-white/5 text-base-100/55">
         Claimed
+      </span>
+    );
+  }
+  if (expired) {
+    return (
+      <span className="chip border border-red-500/25 bg-red-500/10 text-red-300">
+        Claim deadline passed
       </span>
     );
   }
@@ -71,7 +82,7 @@ export function ClaimButton({
         >
           {nothing
             ? "Nothing to claim"
-            : `Claim ${formatTokenAmount(claimable, PAYMENT_TOKEN_DECIMALS)}`}
+            : `Claim ${formatTokenAmount(claimable, decimals)}`}
         </button>
       ) : (
         <TxProgress

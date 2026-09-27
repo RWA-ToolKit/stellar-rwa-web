@@ -2,6 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { useAssets, usePlatformStats, useIssuerAssets } from "../useAssets";
 import { registry } from "@/lib/contracts";
 import { api } from "@/lib/api";
+import { getCachedAsset } from "@/lib/assetCache";
 import type { AssetEntry } from "@/types";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
@@ -67,6 +68,7 @@ describe("useAssets", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.assets).toEqual([asset]);
+    expect(getCachedAsset("testnet", asset.id)).toEqual(asset);
     expect(result.current.error).toBeNull();
     // Contract should not be called when api returns data
     expect(registry.getAllAssets).not.toHaveBeenCalled();

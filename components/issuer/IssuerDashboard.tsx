@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { formatUsdCents } from "@/lib/format";
 import { truncateAddress } from "@/lib/display";
+import { explorerAddressUrl } from "@/lib/stellar";
 import type { AssetEntry } from "@/types";
 import { DataFreshness } from "@/components/ui/DataFreshness";
 
@@ -52,7 +53,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export function IssuerDashboard() {
-  const { address } = useWallet();
+  const { address, network } = useWallet();
   const [selectedAsset, setSelectedAsset] = useState<AssetEntry | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>("token");
 
@@ -129,9 +130,14 @@ export function IssuerDashboard() {
             <AssetContextBar
               asset={selectedAsset}
               loading={assetDetail.loading}
-              paused={assetDetail.data?.metadata.paused}
               error={assetDetail.error}
-              admin={assetDetail.data?.metadata.admin}
+              {...(assetDetail.data
+                ? {
+                    paused: assetDetail.data.metadata.paused,
+                    admin: assetDetail.data.metadata.admin,
+                  }
+                : {})}
+              network={network}
               updatedAt={assetDetail.updatedAt}
             />
 
@@ -225,6 +231,7 @@ function AssetContextBar({
   paused,
   error,
   admin,
+  network,
   updatedAt,
 }: {
   asset: AssetEntry;
@@ -232,27 +239,10 @@ function AssetContextBar({
   paused?: boolean;
   error?: string | null;
   admin?: string;
+  network: import("@/types").Network;
   updatedAt: number | null;
 }) {
   return (
-    <div className="card flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <AssetTypeBadge type={asset.assetType} />
-        {loading ? (
-          <Skeleton className="h-4 w-16" />
-        ) : paused ? (
-          <span className="chip border border-amber-500/30 bg-amber-500/10 text-amber-300">
-            Paused
-          </span>
-        ) : null}
-        <span className="text-base font-semibold text-base-100">{asset.name}</span>
-        <span className="text-sm text-base-100/55">#{asset.id.toString()}</span>
-      </div>
-      <div className="text-right">
-        <p className="text-sm font-bold text-gold-300">
-          {formatUsdCents(asset.valuation, { compact: true })}
-        </p>
-        {error && <p className="text-[11px] text-red-400/80">Metadata unavailable</p>}
     <div className="space-y-2">
       <div className="card space-y-3 px-5 py-3.5">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -266,7 +256,7 @@ function AssetContextBar({
               </span>
             ) : null}
             <span className="text-base font-semibold text-base-100">{asset.name}</span>
-            <span className="text-sm text-base-100/40">#{asset.id.toString()}</span>
+            <span className="text-sm text-base-100/55">#{asset.id.toString()}</span>
           </div>
           <div className="text-right">
             <p className="text-sm font-bold text-gold-300">
@@ -280,7 +270,14 @@ function AssetContextBar({
           <div className="flex items-center justify-between gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
             <div>
               <p className="text-xs font-medium text-base-100/60">Controlled by</p>
-              <p className="font-mono text-xs text-base-100/80">{truncateAddress(admin)}</p>
+              <a
+                href={explorerAddressUrl(network ?? "testnet", admin)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs text-base-100/80 hover:text-brand-300"
+              >
+                {truncateAddress(admin)}
+              </a>
             </div>
             <CopyButton value={admin} label="" className="shrink-0" />
           </div>

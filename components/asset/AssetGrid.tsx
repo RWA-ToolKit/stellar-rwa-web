@@ -70,6 +70,8 @@ function PaginationBar({
     start = Math.max(1, end - MAX_VISIBLE_PAGES + 1);
   }
   const pages = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  const firstPage = pages[0];
+  const lastPage = pages[pages.length - 1];
 
   return (
     <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-white/5 pt-5">
@@ -90,7 +92,7 @@ function PaginationBar({
           ←
         </button>
 
-        {pages[0] > 1 && (
+        {firstPage !== undefined && firstPage > 1 && (
           <>
             <button
               type="button"
@@ -100,7 +102,7 @@ function PaginationBar({
             >
               1
             </button>
-            {pages[0] > 2 && (
+            {firstPage > 2 && (
               <span className="px-1 text-sm text-base-100/30" aria-hidden="true">
                 …
               </span>
@@ -128,9 +130,9 @@ function PaginationBar({
           );
         })}
 
-        {pages[pages.length - 1] < totalPages && (
+        {lastPage !== undefined && lastPage < totalPages && (
           <>
-            {pages[pages.length - 1] < totalPages - 1 && (
+            {lastPage < totalPages - 1 && (
               <span className="px-1 text-sm text-base-100/30" aria-hidden="true">
                 …
               </span>

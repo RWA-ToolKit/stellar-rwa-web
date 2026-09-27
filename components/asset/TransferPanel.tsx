@@ -70,7 +70,6 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   const recipientInvalid =
     recipientFormatValid && !recipientCompliance.loading && !recipientCompliance.data?.allowed;
   const amountInvalid = !!amountError;
-  const formValid = recipientFormatValid && amountValid && !amountError;
   const formValid = recipientFormatValid && !isOwnAddress && amountValid && !amountError;
 
   async function onSubmit(e: React.FormEvent) {
@@ -142,6 +141,14 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
           <ComplianceBadge status={status} />
         )}
       </div>
+      {compliance.data?.record && (
+        <p className="text-xs text-base-100/40">
+          Approval{" "}
+          {compliance.data.record.expiresAt === 0
+            ? "does not expire."
+            : `expires at ledger ${compliance.data.record.expiresAt}.`}
+        </p>
+      )}
 
       {/* A failed compliance read is not the same as "not approved". */}
       {compliance.error && (

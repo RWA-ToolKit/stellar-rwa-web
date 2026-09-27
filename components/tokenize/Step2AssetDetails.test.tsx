@@ -85,7 +85,7 @@ describe("Step2AssetDetails", () => {
       expect(document.getElementById(input.getAttribute("aria-describedby")!)).toHaveTextContent(text);
     }
   });
-});
+
   it("prefills and resubmits large valuations without losing cents", () => {
     const onNext = jest.fn();
     const valuation = 9_007_199_254_740_993_45n;

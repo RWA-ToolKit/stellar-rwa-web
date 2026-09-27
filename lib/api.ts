@@ -50,6 +50,15 @@ export interface ApiHolderResult {
   balance: string;
 }
 
+export interface ApiEvent {
+  id: number;
+  contract: string;
+  event_type: string;
+  ledger: number;
+  timestamp: string | null;
+  data: Record<string, unknown>;
+}
+
 function toAssetEntry(a: ApiAssetEntry): AssetEntry {
   return {
     id: BigInt(a.id),
@@ -90,6 +99,10 @@ export const api = {
 
   getStats(): Promise<ApiStatsResult | null> {
     return fetchJson<ApiStatsResult>(apiUrl("/stats"));
+  },
+
+  getEvents(): Promise<ApiEvent[] | null> {
+    return fetchJson<ApiEvent[]>(apiUrl("/events"));
   },
 
   async getHolders(tokenContract: string): Promise<{ address: string; balance: bigint }[] | null> {

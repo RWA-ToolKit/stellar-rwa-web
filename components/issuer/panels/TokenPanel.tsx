@@ -29,13 +29,13 @@ export function TokenPanel({ asset, onMinted, onPauseToggled, isAdmin = true }: 
       <MintCard
         tokenContract={tokenContract}
         metadata={metadata}
-        onMinted={onMinted}
+        {...(onMinted !== undefined ? { onMinted } : {})}
         isAdmin={isAdmin}
       />
       <PauseCard
         tokenContract={tokenContract}
         paused={metadata.paused}
-        onToggled={onPauseToggled}
+        {...(onPauseToggled !== undefined ? { onToggled: onPauseToggled } : {})}
         isAdmin={isAdmin}
       />
     </div>

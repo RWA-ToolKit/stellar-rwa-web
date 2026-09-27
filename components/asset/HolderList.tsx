@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useHolders, type Holder } from "@/hooks/useHolders";
 import { formatTokenAmount, holderSharePercentages, truncateAddress } from "@/lib/format";
 import { useWallet } from "@/hooks/useWallet";
+import { explorerAddressUrl } from "@/lib/stellar";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -73,7 +74,7 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
           holder={h}
           decimals={metadata.decimals}
           symbol={metadata.symbol}
-          share={shares[index]}
+          share={shares[index] ?? "0.00"}
           isYou={h.address === address}
         />
       ))}
@@ -97,9 +98,14 @@ function HolderRow({
   return (
     <li className="flex items-center justify-between gap-3 py-3">
       <div className="flex items-center gap-2">
-        <span className="font-mono text-sm text-base-100/80">
+        <a
+          href={explorerAddressUrl(useWallet().network ?? "testnet", holder.address)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-mono text-sm text-base-100/80 hover:text-brand-300"
+        >
           {truncateAddress(holder.address, 6, 6)}
-        </span>
+        </a>
         {isYou && (
           <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">You</span>
         )}
@@ -109,8 +115,7 @@ function HolderRow({
         <p className="text-sm font-semibold text-base-100">
           {formatTokenAmount(holder.balance, decimals)} {symbol}
         </p>
-        <p className="text-xs text-base-100/55">{share.toFixed(2)}% of supply</p>
-        <p className="text-xs text-base-100/40">{share}% of supply</p>
+        <p className="text-xs text-base-100/55">{share}% of supply</p>
       </div>
     </li>
   );
