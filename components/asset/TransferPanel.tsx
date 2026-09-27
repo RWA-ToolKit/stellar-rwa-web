@@ -37,6 +37,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   const trimmedTo = to.trim();
   const recipientFormatValid =
     StrKey.isValidEd25519PublicKey(trimmedTo) || StrKey.isValidContract(trimmedTo);
+  const isOwnAddress = recipientFormatValid && trimmedTo === address;
   const recipientCompliance = useCompliance(
     metadata.complianceContract,
     recipientFormatValid ? trimmedTo : null,
@@ -65,7 +66,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   } catch {
     amountValid = false;
   }
-  const formValid = recipientFormatValid && amountValid && !amountError;
+  const formValid = recipientFormatValid && !isOwnAddress && amountValid && !amountError;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -174,6 +175,11 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
                   transfer.
                 </span>
               )}
+            </p>
+          )}
+          {isOwnAddress && (
+            <p role="alert" aria-live="polite" className="mt-1.5 text-xs text-amber-300">
+              This is your connected wallet address. Choose a different recipient to avoid an unnecessary self-transfer.
             </p>
           )}
         </div>

@@ -110,6 +110,18 @@ describe("TransferPanel", () => {
     expect(screen.getByRole("button", { name: "Transfer" })).toBeDisabled();
   });
 
+  it("warns and disables transfer when the recipient is your own address", () => {
+    setup();
+
+    fireEvent.change(screen.getByLabelText("Recipient address"), {
+      target: { value: SENDER },
+    });
+    fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "10" } });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/your connected wallet address/i);
+    expect(screen.getByRole("button", { name: "Transfer" })).toBeDisabled();
+  });
+
   it("surfaces a warning when the recipient is not KYC-approved", () => {
     setup();
 
