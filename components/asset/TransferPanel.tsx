@@ -9,6 +9,7 @@ import { useTx } from "@/hooks/useTx";
 import { useCompliance } from "@/hooks/useCompliance";
 import { formatTokenAmount, formatRawPlain, parseTokenAmount } from "@/lib/format";
 import { TxProgress } from "@/components/ui/TxProgress";
+import { ErrorState } from "@/components/ui/ErrorState";
 import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 
 interface TransferPanelProps {
@@ -37,6 +38,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   const trimmedTo = to.trim();
   const recipientFormatValid =
     StrKey.isValidEd25519PublicKey(trimmedTo) || StrKey.isValidContract(trimmedTo);
+  const isOwnAddress = recipientFormatValid && trimmedTo === address;
   const recipientCompliance = useCompliance(
     metadata.complianceContract,
     recipientFormatValid ? trimmedTo : null,
@@ -65,11 +67,16 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   } catch {
     amountValid = false;
   }
-  const formValid = recipientFormatValid && amountValid && !amountError;
+  const formValid = recipientFormatValid && !isOwnAddress && amountValid && !amountError;
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
+
+    if (paused) {
+      setFormError("Transfers are paused by the issuer for this asset.");
+      return;
+    }
 
     const recipient = to.trim();
     if (!StrKey.isValidEd25519PublicKey(recipient) && !StrKey.isValidContract(recipient)) {
@@ -132,8 +139,18 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
         )}
       </div>
 
+      {/* A failed compliance read is not the same as "not approved". */}
+      {compliance.error && (
+        <ErrorState
+          title="Couldn't check your compliance status"
+          message={compliance.error}
+          onRetry={compliance.refetch}
+          className="py-6"
+        />
+      )}
+
       {/* Explicit gating messages. */}
-      {!compliance.loading && !approved && (
+      {!compliance.loading && !compliance.error && !approved && (
         <p role="alert" aria-live="polite" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 text-xs text-amber-200/90">
           {status === "None"
             ? "Your address isn't on this asset's KYC allowlist. Ask the issuer to approve you before you can hold or transfer it."
@@ -146,7 +163,8 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
       )}
       {paused && (
         <p role="alert" aria-live="polite" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3.5 py-2.5 text-xs text-amber-200/90">
-          Transfers are paused by the issuer for this asset.
+          Transfers are paused by the issuer for this asset. You can transfer once
+          the issuer unpauses the token.
         </p>
       )}
 
@@ -174,6 +192,11 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
                   transfer.
                 </span>
               )}
+            </p>
+          )}
+          {isOwnAddress && (
+            <p role="alert" aria-live="polite" className="mt-1.5 text-xs text-amber-300">
+              This is your connected wallet address. Choose a different recipient to avoid an unnecessary self-transfer.
             </p>
           )}
         </div>
@@ -237,6 +260,8 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
           >
             {complianceLoading
               ? "Checking compliance…"
+              : paused
+                ? "Transfers paused"
               : canTransfer
                 ? "Transfer"
                 : "Transfer unavailable"}

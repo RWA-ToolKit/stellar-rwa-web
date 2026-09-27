@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import type { DistributionWithClaim } from "@/hooks/useDividends";
 import {
@@ -19,7 +20,9 @@ interface DistributionCardProps {
 /** A single dividend distribution with progress and a claim action. */
 export function DistributionCard({ distribution, currentLedger, onClaimed }: DistributionCardProps) {
   const d = distribution;
-  const pct = percent(d.distributed, d.totalAmount);
+  const [pendingClaim, setPendingClaim] = useState(0n);
+  const displayedDistributed = d.distributed + pendingClaim;
+  const pct = percent(displayedDistributed, d.totalAmount);
   const when =
     currentLedger !== null ? approxDate(d.createdAt, currentLedger) : null;
 
@@ -57,9 +60,9 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
 
       <div className="mt-4">
         <div className="mb-1.5 flex items-center justify-between text-xs text-base-100/50">
-          <span>Claimed</span>
+          <span>{pendingClaim > 0n ? "Claimed (including pending)" : "Claimed"}</span>
           <span>
-            {formatTokenAmount(d.distributed, d.paymentTokenDecimals)} / {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
+            {formatTokenAmount(displayedDistributed, d.paymentTokenDecimals)} / {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
             {" "}({pct.toFixed(1)}%)
           </span>
         </div>
@@ -69,6 +72,11 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             style={{ width: `${pct}%` }}
           />
         </div>
+        {pendingClaim > 0n && (
+          <p role="status" className="mt-1.5 text-xs text-amber-300">
+            Claim submitted — awaiting on-chain confirmation.
+          </p>
+        )}
       </div>
 
       {(d.claimable > 0n || d.claimed) && (
@@ -79,6 +87,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
             claimed={d.claimed}
             decimals={d.paymentTokenDecimals}
             onClaimed={onClaimed}
+            onPendingClaim={setPendingClaim}
           />
         </div>
       )}

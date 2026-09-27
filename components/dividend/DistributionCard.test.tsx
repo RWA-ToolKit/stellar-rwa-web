@@ -17,27 +17,33 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { DistributionWithClaim } from "@/hooks/useDividends";
 
 // ── mock ClaimButton ───────────────────────────────────────────────────────
 
 jest.mock("./ClaimButton", () => ({
+  PAYMENT_TOKEN_DECIMALS: 7,
   ClaimButton: ({
     distributionId,
     claimed,
     claimable,
+    onPendingClaim,
   }: {
     distributionId: bigint;
     claimed: boolean;
     claimable: bigint;
+    onPendingClaim?: (amount: bigint) => void;
   }) => (
-    <div
+    <button
       data-testid="claim-button"
       data-distribution-id={distributionId.toString()}
       data-claimed={String(claimed)}
       data-claimable={claimable.toString()}
-    />
+      onClick={() => onPendingClaim?.(claimable)}
+    >
+      Mock claim
+    </button>
   ),
 }));
 
@@ -132,6 +138,26 @@ describe("DistributionCard", () => {
       />,
     );
     expect(screen.getByText(/25\.0%/)).toBeInTheDocument();
+  });
+
+  it("includes a submitted claim in progress while clearly marking it pending", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution({
+          distributed: 250_0000000n,
+          totalAmount: 1000_0000000n,
+          claimable: 100_0000000n,
+        })}
+        currentLedger={null}
+      />,
+    );
+
+    const claim = screen.getByTestId("claim-button");
+    expect(claim).toBeInTheDocument();
+    fireEvent.click(claim);
+    expect(screen.getByText(/claimed \(including pending\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/350 \/ 1,000 \(35\.0%\)/)).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/awaiting on-chain confirmation/i);
   });
 
   it("renders 100.0% when fully distributed", () => {

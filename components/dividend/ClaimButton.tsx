@@ -1,10 +1,14 @@
 "use client";
 
+import { useEffect } from "react";
 import { dividend } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { useWallet } from "@/hooks/useWallet";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { formatTokenAmount } from "@/lib/format";
+
+/** Stellar classic / SAC payment tokens use 7 decimals. */
+export const PAYMENT_TOKEN_DECIMALS = 7;
 
 interface ClaimButtonProps {
   distributionId: bigint;
@@ -12,6 +16,7 @@ interface ClaimButtonProps {
   claimed: boolean;
   decimals: number;
   onClaimed?: () => void;
+  onPendingClaim?: (amount: bigint) => void;
 }
 
 /**
@@ -19,9 +24,20 @@ interface ClaimButtonProps {
  * (with an explanatory label) when there is nothing to claim or it's already
  * been claimed.
  */
-export function ClaimButton({ distributionId, claimable, claimed, decimals, onClaimed }: ClaimButtonProps) {
+export function ClaimButton({
+  distributionId,
+  claimable,
+  claimed,
+  decimals,
+  onClaimed,
+  onPendingClaim,
+}: ClaimButtonProps) {
   const { address } = useWallet();
   const tx = useTx();
+
+  useEffect(() => {
+    onPendingClaim?.(tx.phase === "confirming" ? claimable : 0n);
+  }, [claimable, onPendingClaim, tx.phase]);
 
   if (!address) {
     return <p className="text-xs text-base-100/40">Connect a wallet to claim.</p>;

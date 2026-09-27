@@ -56,7 +56,7 @@ jest.mock("@stellar/stellar-sdk", () => ({
   ...jest.requireActual("@stellar/stellar-sdk"),
   StrKey: {
     isValidEd25519PublicKey: () => false,
-    isValidContract: () => false,
+    isValidContract: (address: string) => address.startsWith("C"),
   },
 }));
 
@@ -89,9 +89,11 @@ const percentSpy = jest.spyOn(formatModule, "percent");
 
 import { useDividends } from "@/hooks/useDividends";
 import type { DistributionWithClaim } from "@/hooks/useDividends";
+import { useAsync } from "@/hooks/useAsync";
 import { DistributionPanel } from "../DistributionPanel";
 
 const mockUseDividends = useDividends as jest.MockedFunction<typeof useDividends>;
+const mockUseAsync = useAsync as jest.Mock;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -261,6 +263,7 @@ describe("DistributionPanel – CreateDistributionCard known-token presets (#323
       data: [],
       loading: false,
       error: null,
+      updatedAt: null,
       refetch: jest.fn(),
     } as ReturnType<typeof useDividends>);
   });
@@ -322,5 +325,74 @@ describe("DistributionPanel – CreateDistributionCard known-token presets (#323
     fireEvent.click(screen.getByRole("button", { name: /use native xlm .sac. \(CDLZFC/i }));
 
     expect(mockRunFn).not.toHaveBeenCalled();
+  });
+
+  it("clearly blocks creation when the dividend contract allowance is too low", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
+    mockUseAsync.mockImplementation((_loader: unknown, deps: unknown[]) => ({
+      // Two deps is the payment-token decimals read, which must resolve before
+      // the requested amount can be parsed and compared.
+      data:
+        deps.length === 2
+          ? { token: deps[1], decimals: 7 }
+          : deps.length === 4
+            ? { token: deps[1], amount: 5_0000000n }
+            : { token: deps[1], amount: 100_0000000n },
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    }));
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    fireEvent.change(screen.getByLabelText(/payment token contract/i), {
+      target: { value: XLM_SAC_TESTNET },
+    });
+    fireEvent.change(screen.getByLabelText(/total pool amount/i), {
+      target: { value: "10" },
+    });
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/not approved to spend enough/i);
+    expect(screen.getByRole("button", { name: /create distribution/i })).toBeDisabled();
+  });
+
+  it("blocks creation when the requested pool exceeds the payment-token balance", () => {
+    mockUseWallet.mockReturnValue({ address: "GTESTADDRESS", network: "testnet" } as ReturnType<typeof useWallet>);
+    const run = jest.fn();
+    const { useTx: mockUseTxFn } = require("@/hooks/useTx") as { useTx: jest.Mock };
+    mockUseTxFn.mockReturnValue({
+      phase: "idle",
+      hash: null,
+      error: null,
+      errorType: "generic",
+      pending: false,
+      run,
+      reset: jest.fn(),
+    });
+    mockUseAsync.mockImplementation((_loader: unknown, deps: unknown[]) => ({
+      // Two deps is the payment-token decimals read.
+      data:
+        deps.length === 2
+          ? { token: deps[1], decimals: 7 }
+          : deps.length === 4
+            ? { token: deps[1], amount: 100_0000000n }
+            : { token: deps[1], amount: 5_0000000n },
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    }));
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    fireEvent.change(screen.getByLabelText(/payment token contract/i), {
+      target: { value: XLM_SAC_TESTNET },
+    });
+    fireEvent.change(screen.getByLabelText(/total pool amount/i), {
+      target: { value: "10" },
+    });
+
+    const submitButton = screen.getByRole("button", { name: /create distribution/i });
+    expect(submitButton).toBeDisabled();
+    fireEvent.submit(submitButton.closest("form")!);
+    expect(screen.getByText(/exceeds your payment-token balance/i)).toBeInTheDocument();
+    expect(run).not.toHaveBeenCalled();
   });
 });
