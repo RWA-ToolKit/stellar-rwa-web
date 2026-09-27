@@ -144,21 +144,24 @@ export function IssuerDashboard() {
             />
 
             {/* Tab bar */}
-            <div className="flex gap-1 rounded-2xl border border-white/5 bg-white/[0.02] p-1">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? "bg-white/10 text-base-100"
-                      : "text-base-100/55 hover:text-base-100"
-                  }`}
-                >
-                  {tab.icon}
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-              ))}
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+              <div className="flex gap-1 rounded-2xl border border-white/5 bg-white/[0.02] p-1 inline-flex min-w-full sm:w-full">
+                {TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`flex flex-shrink-0 items-center justify-center gap-1 sm:gap-2 rounded-xl px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap ${
+                      activeTab === tab.id
+                        ? "bg-white/10 text-base-100"
+                        : "text-base-100/55 hover:text-base-100"
+                    }`}
+                  >
+                    {tab.icon}
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    <span className="sm:hidden">{tab.label.charAt(0)}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Panel content */}

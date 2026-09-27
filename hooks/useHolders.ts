@@ -4,6 +4,7 @@ import { compliance, assetToken } from "@/lib/contracts";
 import { api } from "@/lib/api";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
+import { dedupeRequest } from "@/lib/requestCache";
 
 export interface Holder {
   address: string;
@@ -37,7 +38,11 @@ export function useHolders(
           .sort((a, b) => (a.balance > b.balance ? -1 : a.balance < b.balance ? 1 : 0));
       }
 
-      const addresses = await compliance.getAllowlist(network, complianceId);
+      // Dedupe allowlist reads across concurrent hooks
+      const addresses = await dedupeRequest(
+        `allowlist:${network}:${complianceId}`,
+        () => compliance.getAllowlist(network, complianceId)
+      );
       const holders = await Promise.all(
         addresses.map(async (address) => ({
           address,
