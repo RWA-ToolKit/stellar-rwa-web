@@ -1,6 +1,7 @@
 import {
   compactNumber,
   formatRawPlain,
+  formatStroopsToXLM,
   formatTokenAmount,
   formatUsdCents,
   holderSharePercentages,

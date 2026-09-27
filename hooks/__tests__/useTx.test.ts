@@ -4,7 +4,8 @@ import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
 import type { WriteCtx } from "@/lib/contracts";
 import type { TxPhase } from "@/types";
-import { UserRejectedError } from "@/lib/freighter";
+import { LockedWalletError, UserRejectedError } from "@/lib/freighter";
+import { TransactionTimeoutError } from "@/lib/stellar";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 

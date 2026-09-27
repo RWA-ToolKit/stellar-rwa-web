@@ -2,6 +2,7 @@
 
 import { useWallet } from "@/hooks/useWallet";
 import { explorerTxUrl } from "@/lib/stellar";
+import { formatStroopsToXLM } from "@/lib/format";
 import type { TxPhase, TxErrorType } from "@/types";
 import { Spinner } from "./Spinner";
 
@@ -20,6 +21,8 @@ interface TxProgressProps {
   hash: string | null;
   error: string | null;
   errorType?: TxErrorType;
+  /** Estimated network fee in stroops from simulation. */
+  estimatedFee?: bigint | null;
   /** Called when the user dismisses a success/error result. */
   onDismiss?: () => void;
   successMessage?: string;
@@ -36,6 +39,7 @@ export function TxProgress({
   hash,
   error,
   errorType = "generic",
+  estimatedFee,
   onDismiss,
   successMessage = "Your transaction is confirmed.",
 }: TxProgressProps) {

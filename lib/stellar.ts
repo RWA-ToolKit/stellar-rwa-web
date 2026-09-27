@@ -21,7 +21,7 @@ import {
   xdr,
 } from "@stellar/stellar-sdk";
 import type { Network, TxResult } from "@/types";
-import { parseContractError } from "@/lib/contractErrors";
+import { isAuthError, parseContractError } from "@/lib/contractErrors";
 
 interface NetworkConfig {
   /** Ordered candidates; the first is primary, the rest are failover RPCs. */
@@ -242,8 +242,7 @@ export async function readContract<T = unknown>(
     withFailover(network, (server) => server.simulateTransaction(tx)),
   );
   if (rpc.Api.isSimulationError(sim)) {
-    const { message, isAuth } = parseContractError(sim.error);
-    throw new ContractError(message, sim.error, isAuth);
+    throw new ContractError(parseContractError(sim.error), sim.error, isAuthError(sim.error));
   }
   const retval = sim.result?.retval;
   if (!retval) return undefined as T;
@@ -287,8 +286,7 @@ export async function invokeContract(
   // user to sign, and so the transaction carries the right footprint + fees.
   const sim = await server.simulateTransaction(built);
   if (rpc.Api.isSimulationError(sim)) {
-    const { message, isAuth } = parseContractError(sim.error);
-    throw new ContractError(message, sim.error, isAuth);
+    throw new ContractError(parseContractError(sim.error), sim.error, isAuthError(sim.error));
   }
   const prepared = rpc.assembleTransaction(built, sim).build();
 
@@ -387,22 +385,19 @@ export function isNotFoundError(e: unknown): boolean {
 }
 
 /**
- * Map a raw Soroban error string to a friendlier message. Contract errors
- * surface as `Error(Contract, #N)`; we translate the codes we know about.
- * Returns an object with the message and a flag indicating if this is an Auth error.
+ * Specialized error for when a transaction times out waiting for confirmation.
+ * The transaction hash is stored so the user can check the explorer.
  */
-function parseContractError(raw: string): { message: string; isAuth: boolean } {
-  const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
-  if (codeMatch) {
-    const code = Number(codeMatch[1]);
-    const isAuth = code === 3; // Error code 3 is Auth
-    const message = KNOWN_CONTRACT_ERRORS[code] ?? `Contract rejected the call (code ${code}).`;
-    return { message, isAuth };
+export class TransactionTimeoutError extends ContractError {
+  readonly hash: string;
+  constructor(hash: string) {
+    super(
+      "Transaction confirmation timed out. The transaction may still land — check the explorer.",
+      hash,
+    );
+    this.name = "TransactionTimeoutError";
+    this.hash = hash;
   }
-  if (/trustline|insufficient/i.test(raw)) {
-    return { message: "Insufficient balance or a missing trustline for the payment token.", isAuth: false };
-  }
-  return { message: "The contract call could not be completed.", isAuth: false };
 }
 
 

@@ -30,6 +30,18 @@ export const CONTRACT_ERROR_CODES: Record<number, string> = {
   9: "Amount overflow.",
 };
 
+/** The contract error code meaning "caller not authorised" (see code 3 above). */
+const AUTH_ERROR_CODE = 3;
+
+/**
+ * Whether a raw Soroban error string is an authorisation failure, so callers
+ * can present it differently from other contract errors.
+ */
+export function isAuthError(raw: string): boolean {
+  const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
+  return codeMatch !== null && Number(codeMatch[1]) === AUTH_ERROR_CODE;
+}
+
 /**
  * Parse a Soroban error string and return a user-friendly message.
  * Contract errors surface as `Error(Contract, #N)`; unknown codes produce a sane fallback.

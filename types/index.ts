@@ -103,11 +103,12 @@ export type TxPhase =
   | "error";
 
 /** Error type for transaction errors. */
-export type TxErrorType = "generic" | "auth";
+export type TxErrorType = "generic" | "auth" | "locked-wallet" | "timeout";
 
 /** Telemetry callbacks for transaction lifecycle events. */
 export interface TxTelemetry {
   onPhase?: (phase: TxPhase, detail?: string) => void;
   onSuccess?: (hash: string, result: TxResult) => void;
+  /** Called on transaction error with a typed classification of what went wrong. */
   onError?: (error: string, errorType: TxErrorType) => void;
 }
