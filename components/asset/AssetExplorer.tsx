@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAssets } from "@/hooks/useAssets";
 import { AssetGrid } from "./AssetGrid";
@@ -34,11 +34,18 @@ function isValidTypeFilter(value: string): value is TypeFilter {
  * Search, filter and page state are serialised into the URL (q, type, sort,
  * page) so filtered views can be linked and restored on refresh.
  */
+const DEBOUNCE_DELAY_MS = 300;
+
 export function AssetExplorer() {
   const { assets, loading, error, refetch, updatedAt } = useAssets();
   const router = useRouter();
   const searchParams = useSearchParams();
   const search = searchParams.get("q") ?? "";
+
+  const [pendingSearch, setPendingSearch] = useState(search);
+  const [pendingFilter, setPendingFilter] = useState<FilterValue | null>(null);
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [filterTimeout, setFilterTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Derive filter and page from URL search params, falling back to defaults.
   const filter: FilterValue = useMemo(() => {
@@ -142,9 +149,14 @@ export function AssetExplorer() {
 
   const updateFilter = useCallback(
     (next: FilterValue) => {
-      router.push(buildUrl({ type: next.type, sort: next.sort, page: 1 }));
+      setPendingFilter(next);
+      if (filterTimeout) clearTimeout(filterTimeout);
+      const timer = setTimeout(() => {
+        router.push(buildUrl({ type: next.type, sort: next.sort, page: 1 }));
+      }, DEBOUNCE_DELAY_MS);
+      setFilterTimeout(timer);
     },
-    [router, buildUrl],
+    [router, buildUrl, filterTimeout],
   );
 
   const goToPage = useCallback(
@@ -156,9 +168,14 @@ export function AssetExplorer() {
 
   const updateSearch = useCallback(
     (next: string) => {
-      router.replace(buildUrl({ q: next, page: 1 }), { scroll: false });
+      setPendingSearch(next);
+      if (searchTimeout) clearTimeout(searchTimeout);
+      const timer = setTimeout(() => {
+        router.replace(buildUrl({ q: next, page: 1 }), { scroll: false });
+      }, DEBOUNCE_DELAY_MS);
+      setSearchTimeout(timer);
     },
-    [router, buildUrl],
+    [router, buildUrl, searchTimeout],
   );
 
   return (
