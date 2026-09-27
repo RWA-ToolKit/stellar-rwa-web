@@ -52,7 +52,7 @@ describe("HolderList", () => {
     expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual([
       "Address",
       "Balance",
-      "Share of supply",
+      "Share",
     ]);
     const rows = screen.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(2);

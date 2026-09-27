@@ -1,3 +1,4 @@
+import type { JSX } from "react";
 import type { AssetType } from "@/types";
 import { assetTypeLabel } from "@/lib/format";
 

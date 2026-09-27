@@ -11,7 +11,7 @@ interface StepIndicatorProps {
 /** Linear step progress indicator for the tokenize wizard. */
 export function StepIndicator({ steps, current }: StepIndicatorProps) {
   return (
-    <nav aria-label="Wizard progress" className="mb-8">
+    <nav aria-label="Wizard progress" className="mb-6 sm:mb-8">
       <ol className="flex items-center gap-0">
         {steps.map((step, i) => {
           const done = step.id < current;
@@ -21,7 +21,7 @@ export function StepIndicator({ steps, current }: StepIndicatorProps) {
               {/* Node */}
               <div className="flex flex-col items-center">
                 <div
-                  className={`flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors ${
+                  className={`flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-colors ${
                     done
                       ? "border-brand-500 bg-brand-500 text-base-950"
                       : active
@@ -31,25 +31,26 @@ export function StepIndicator({ steps, current }: StepIndicatorProps) {
                   aria-current={active ? "step" : undefined}
                 >
                   {done ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                       <path d="M20 6 9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   ) : (
-                    step.id
+                    <span className="text-xs">{step.id}</span>
                   )}
                 </div>
                 <span
-                  className={`mt-1.5 hidden text-[11px] font-medium sm:block ${
+                  className={`mt-1 sm:mt-1.5 text-[10px] sm:text-[11px] font-medium ${
                     active ? "text-brand-300" : done ? "text-base-100/60" : "text-base-100/55"
                   }`}
                 >
-                  {step.label}
+                  <span className="block sm:hidden text-center">{step.label.split(" ")[0]}</span>
+                  <span className="hidden sm:block">{step.label}</span>
                 </span>
               </div>
               {/* Connector line (not after last) */}
               {i < steps.length - 1 && (
                 <div
-                  className={`mx-2 mb-5 h-px flex-1 transition-colors ${
+                  className={`mx-1 sm:mx-2 mb-0 sm:mb-5 h-px flex-1 transition-colors ${
                     done ? "bg-brand-500/60" : "bg-white/10"
                   }`}
                 />

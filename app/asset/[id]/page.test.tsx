@@ -28,7 +28,7 @@ describe("asset page metadata", () => {
       valuation: 500_000_000n,
     });
 
-    const metadata = await generateMetadata({ params: { id: "7" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ id: "7" }) });
 
     expect(metadata.title).toBe("Lagos Office Tower");
     expect(metadata.description).toContain("$5,000,000");
@@ -52,7 +52,7 @@ describe("asset page metadata", () => {
       valuation: 125_000n,
     });
 
-    const metadata = await generateMetadata({ params: { id: "7" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ id: "7" }) });
 
     expect(registry.getAsset).toHaveBeenCalledWith("testnet", 7n);
     expect(metadata.title).toBe("Registry Asset");
@@ -60,7 +60,7 @@ describe("asset page metadata", () => {
   });
 
   it("uses safe generic metadata for invalid ids", async () => {
-    const metadata = await generateMetadata({ params: { id: "not-an-id" } });
+    const metadata = await generateMetadata({ params: Promise.resolve({ id: "not-an-id" }) });
 
     expect(metadata.title).toBe("Asset #not-an-id");
     expect(metadata.description).toContain("tokenized asset #not-an-id");

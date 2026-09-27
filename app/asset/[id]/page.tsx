@@ -7,16 +7,17 @@ import { DEFAULT_NETWORK } from "@/lib/stellar";
 import { formatUsdCents } from "@/lib/format";
 
 interface PageProps {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const id = parseId(params.id);
+  const { id: rawId } = await params;
+  const id = parseId(rawId);
   const asset = id === null ? null : await getAssetForMetadata(id);
-  const name = asset?.name ?? `Asset #${params.id}`;
+  const name = asset?.name ?? `Asset #${rawId}`;
   const description = asset
     ? `${name} is valued at ${formatUsdCents(asset.valuation)}. Explore its holders and dividend history on Stellar RWA.`
-    : `Details, holders and dividend history for tokenized asset #${params.id} on Stellar.`;
+    : `Details, holders and dividend history for tokenized asset #${rawId} on Stellar.`;
 
   return {
     title: name,
@@ -60,14 +61,15 @@ function parseId(raw: string): bigint | null {
   }
 }
 
-export default function AssetPage({ params }: PageProps) {
-  const id = parseId(params.id);
+export default async function AssetPage({ params }: PageProps) {
+  const { id: rawId } = await params;
+  const id = parseId(rawId);
 
   if (id === null) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
         <h1 className="text-2xl font-bold text-base-100">Invalid asset id</h1>
-        <p className="mt-2 text-base-100/55">“{params.id}” is not a valid asset id.</p>
+        <p className="mt-2 text-base-100/55">“{rawId}” is not a valid asset id.</p>
         <Link href="/explore" className="btn-secondary mt-6">← Back to Explore</Link>
       </div>
     );

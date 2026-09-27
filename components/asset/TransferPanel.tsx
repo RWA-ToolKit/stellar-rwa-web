@@ -188,7 +188,7 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
             onChange={(e) => setTo(e.target.value)}
             placeholder="G… or C…"
             disabled={!canTransfer || complianceLoading || tx.pending}
-            className="input font-mono text-xs"
+            className="input font-mono text-xs sm:text-sm overflow-x-auto"
             spellCheck={false}
             aria-invalid={recipientInvalid || undefined}
             aria-describedby={recipientInvalid ? "transfer-to-error" : undefined}
