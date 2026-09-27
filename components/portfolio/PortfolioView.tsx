@@ -6,30 +6,64 @@ import { useWallet } from "@/hooks/useWallet";
 import { usePortfolio } from "@/hooks/usePortfolio";
 import { PortfolioSummary } from "@/components/portfolio/PortfolioSummary";
 import { HoldingRow } from "@/components/portfolio/HoldingRow";
+import { ClaimAllButton } from "@/components/dividend/ClaimAllButton";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { truncateAddress } from "@/lib/format";
+import { DataFreshness } from "@/components/ui/DataFreshness";
 
-function HoldingsSkeleton() {
+/**
+ * Placeholder for the loaded portfolio: mirrors PortfolioSummary, the
+ * "Your Holdings" header and `HoldingRow` so the page doesn't shift on load.
+ * The wrapper is the single live region announced to screen readers.
+ */
+function PortfolioSkeleton() {
   return (
-    <div className="space-y-4">
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="card p-5 space-y-3">
-          <div className="flex items-center justify-between gap-4">
-            <div className="space-y-2 flex-1">
-              <Skeleton className="h-5 w-24" />
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-32" />
-            </div>
-            <div className="space-y-2 text-right">
-              <Skeleton className="h-4 w-16 ml-auto" />
-              <Skeleton className="h-7 w-28 ml-auto" />
-            </div>
+    <div
+      role="status"
+      aria-busy="true"
+      aria-label="Loading your portfolio…"
+      className="space-y-8"
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="card p-5">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="mt-2 h-8 w-32" />
           </div>
+        ))}
+      </div>
+
+      <section>
+        <div className="mb-4 flex items-center justify-between">
+          <Skeleton className="h-7 w-40" />
+          <Skeleton className="h-5 w-44" />
         </div>
-      ))}
+        <div className="space-y-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="card overflow-hidden">
+              <div className="flex flex-wrap items-center gap-4 p-5">
+                <div className="min-w-0 flex-1">
+                  <Skeleton className="h-7 w-24 rounded-full" />
+                  <Skeleton className="mt-1 h-6 w-48 max-w-full" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+                <div className="flex flex-wrap gap-6">
+                  {[0, 1].map((j) => (
+                    <div key={j} className="space-y-0.5">
+                      <Skeleton className="h-4 w-16 ml-auto" />
+                      <Skeleton className="h-7 w-24 ml-auto" />
+                      {j === 0 && <Skeleton className="h-4 w-20 ml-auto" />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -37,7 +71,7 @@ function HoldingsSkeleton() {
 /** The full portfolio UI — requires a connected wallet. */
 export function PortfolioView() {
   const { address } = useWallet();
-  const { data, loading, error, refetch } = usePortfolio();
+  const { data, loading, error, refetch, updatedAt } = usePortfolio();
 
   // Passed to HoldingRow so a successful claim triggers a re-fetch
   const handleClaimed = useCallback(() => {
@@ -66,21 +100,7 @@ export function PortfolioView() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="card p-5 space-y-2">
-              <Skeleton className="h-3 w-20" />
-              <Skeleton className="h-8 w-32" />
-            </div>
-          ))}
-        </div>
-        <HoldingsSkeleton />
-      </div>
-    );
-  }
+  if (loading) return <PortfolioSkeleton />;
 
   if (error) {
     return (
@@ -116,9 +136,15 @@ export function PortfolioView() {
   const withClaimable = data.holdings.filter((h) => h.totalClaimable > 0n);
   const withoutClaimable = data.holdings.filter((h) => h.totalClaimable === 0n);
   const ordered = [...withClaimable, ...withoutClaimable];
+  const claimableDistributions = data.holdings.flatMap((holding) =>
+    holding.claimableDistributions.filter(
+      (distribution) => !distribution.claimed && distribution.claimable > 0n,
+    ),
+  );
 
   return (
     <div className="space-y-8">
+      <DataFreshness updatedAt={updatedAt} />
       <PortfolioSummary data={data} />
 
       <section>
@@ -131,13 +157,19 @@ export function PortfolioView() {
         </div>
 
         {withClaimable.length > 0 && (
-          <div className="mb-2 flex items-center gap-2">
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/20 text-[10px] font-bold text-brand-300">
-              {withClaimable.length}
-            </span>
-            <p className="text-xs text-brand-300/80 font-medium">
-              {withClaimable.length === 1 ? "asset has" : "assets have"} claimable dividends
-            </p>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-500/20 text-[10px] font-bold text-brand-300">
+                {withClaimable.length}
+              </span>
+              <p className="text-xs text-brand-300/80 font-medium">
+                {withClaimable.length === 1 ? "asset has" : "assets have"} claimable dividends
+              </p>
+            </div>
+            <ClaimAllButton
+              distributions={claimableDistributions}
+              onClaimed={handleClaimed}
+            />
           </div>
         )}
 

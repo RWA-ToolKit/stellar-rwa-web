@@ -28,6 +28,8 @@ function renderFilter(
     <AssetFilter
       value={value}
       onChange={onChange}
+      search=""
+      onSearchChange={jest.fn()}
       {...(counts !== undefined ? { counts } : {})}
     />,
   );

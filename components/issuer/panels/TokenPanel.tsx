@@ -90,8 +90,10 @@ function MintCard({
     }
 
     // Check if this is a large mint that requires confirmation
-    const supplyIncrease = (Number(raw) * 100) / Number(metadata.totalSupply);
-    if (supplyIncrease > LARGE_MINT_THRESHOLD_PERCENT) {
+    if (
+      raw * 100n >
+      metadata.totalSupply * BigInt(LARGE_MINT_THRESHOLD_PERCENT)
+    ) {
       setPendingMint({ recipient, raw });
       setConfirmOpen(true);
       return;

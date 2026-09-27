@@ -148,6 +148,14 @@ function CreateDistributionCard({
       setFormError("Total amount must be greater than zero.");
       return;
     }
+    if (balance !== null && raw > balance) {
+      setFormError("Total amount exceeds your payment-token balance.");
+      return;
+    }
+    if (allowance !== null && raw > allowance) {
+      setFormError("The dividend contract allowance is insufficient. Approve it to spend at least the requested amount before creating this distribution.");
+      return;
+    }
 
     const res = await tx.run((ctx) =>
       dividend.createDistribution(ctx, tokenContract, pt, raw),
@@ -249,10 +257,11 @@ function CreateDistributionCard({
             Insufficient balance — your wallet holds less than the requested distribution amount.
           </p>
         )}
-        {needsApproval && !insufficientBalance && (
+        {needsApproval && (
           <p role="alert" className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200/90">
             The dividend contract is not approved to spend enough of this token on your behalf.
-            Submit an <strong className="font-semibold">approve</strong> transaction for at least{" "}
+            Creating this distribution is blocked until you submit an{" "}
+            <strong className="font-semibold">approve</strong> transaction for at least{" "}
             {formatTokenAmount(requestedRaw ?? 0n, PAYMENT_TOKEN_DECIMALS)} tokens before funding
             this distribution.
           </p>
@@ -284,9 +293,17 @@ function CreateDistributionCard({
         {tx.phase === "idle" ? (
           <button
             type="submit"
-            disabled={tx.pending || !isAdmin}
+            disabled={tx.pending || !isAdmin || insufficientBalance || needsApproval}
             className="btn-primary"
-            title={!isAdmin ? "Only the asset admin can create distributions" : ""}
+            title={
+              !isAdmin
+                ? "Only the asset admin can create distributions"
+                : insufficientBalance
+                  ? "The requested amount exceeds your payment-token balance"
+                  : needsApproval
+                    ? "Approve the dividend contract before creating this distribution"
+                    : ""
+            }
           >
             Create distribution
           </button>

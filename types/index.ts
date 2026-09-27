@@ -87,6 +87,8 @@ export interface TxResult {
   hash: string;
   /** scValToNative-decoded return value, when the method returns one. */
   returnValue?: unknown;
+  /** Estimated network fee in stroops from the simulation, when available. */
+  estimatedFee?: bigint;
 }
 
 /** Phases surfaced to the user while a transaction is in flight. */
@@ -97,14 +99,16 @@ export type TxPhase =
   | "submitting"
   | "confirming"
   | "success"
+  | "timeout"
   | "error";
 
 /** Error type for transaction errors. */
-export type TxErrorType = "generic" | "auth";
+export type TxErrorType = "generic" | "auth" | "locked-wallet" | "timeout";
 
 /** Telemetry callbacks for transaction lifecycle events. */
 export interface TxTelemetry {
   onPhase?: (phase: TxPhase, detail?: string) => void;
   onSuccess?: (hash: string, result: TxResult) => void;
+  /** Called on transaction error with a typed classification of what went wrong. */
   onError?: (error: string, errorType: TxErrorType) => void;
 }

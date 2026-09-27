@@ -54,4 +54,10 @@ describe("CardSkeletonGrid", () => {
     const hiddenEls = container.querySelectorAll('[aria-hidden="true"]');
     expect(hiddenEls.length).toBeGreaterThan(0);
   });
+
+  it("is announced to screen readers as a busy status region", () => {
+    const { getByRole } = render(<CardSkeletonGrid count={2} label="Loading assets…" />);
+    const region = getByRole("status", { name: "Loading assets…" });
+    expect(region).toHaveAttribute("aria-busy", "true");
+  });
 });

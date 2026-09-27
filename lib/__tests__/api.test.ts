@@ -186,6 +186,31 @@ describe("api.getStats", () => {
   });
 });
 
+describe("api.getEvents", () => {
+  it("fetches indexed contract events from the events endpoint", async () => {
+    const events = [
+      {
+        id: 42,
+        contract: "CTOKEN",
+        event_type: "Transfer",
+        ledger: 3514152,
+        timestamp: "2026-07-09T08:43:12.101Z",
+        data: { from: "GA", to: "GB", amount: "100" },
+      },
+    ];
+    mockFetch.mockResolvedValue(okResponse(events));
+
+    expect(await api.getEvents()).toEqual(events);
+    expect(mockFetch).toHaveBeenCalledWith("https://api.example.com/events");
+  });
+
+  it("returns null when the events endpoint is unavailable", async () => {
+    mockFetch.mockResolvedValue(errorResponse(503));
+
+    expect(await api.getEvents()).toBeNull();
+  });
+});
+
 // ==============================================================================
 // api.getAssets — pagination params
 // ==============================================================================

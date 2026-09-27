@@ -14,12 +14,12 @@ export default function ExplorePage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight text-base-100">Explore Assets</h1>
         <p className="mt-2 max-w-2xl text-base-100/50">
-          Every asset here is a compliance-gated token on Stellar. Browse by class,
-          sort by valuation, and open any asset to view its supply, holders and
-          dividend history.
+          Every asset here is a compliance-gated token on Stellar. Search by name,
+          ID, issuer or token, browse by class, sort by valuation, and open any
+          asset to view its supply, holders and dividend history.
         </p>
       </div>
-      <Suspense fallback={<CardSkeletonGrid count={6} />}>
+      <Suspense fallback={<CardSkeletonGrid count={9} />}>
         <AssetExplorer />
       </Suspense>
     </div>

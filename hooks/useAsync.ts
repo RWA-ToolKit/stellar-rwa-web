@@ -6,6 +6,7 @@ export interface AsyncState<T> {
   data: T | null;
   loading: boolean;
   error: string | null;
+  updatedAt: number | null;
   refetch: () => void;
 }
 
@@ -22,6 +23,7 @@ export function useAsync<T>(
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(enabled);
   const [error, setError] = useState<string | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const reqId = useRef(0);
   // Serialize deps to a stable string key so memoization is by value, not by
   // array identity/length — unstable references or a changing-length caller
@@ -40,6 +42,7 @@ export function useAsync<T>(
       .then((res) => {
         if (id === reqId.current) {
           setData(res);
+          setUpdatedAt(Date.now());
           setLoading(false);
         }
       })
@@ -56,5 +59,5 @@ export function useAsync<T>(
     run();
   }, [run]);
 
-  return { data, loading, error, refetch: run };
+  return { data, loading, error, updatedAt, refetch: run };
 }
