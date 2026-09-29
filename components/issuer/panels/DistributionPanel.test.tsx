@@ -41,6 +41,11 @@ jest.mock("@/hooks/useDividends", () => ({
   useDividends: jest.fn(),
 }));
 
+jest.mock("@/hooks/useHolders", () => ({
+  useHolders: jest.fn(),
+  fetchOnChainHolders: jest.fn(),
+}));
+
 // ── mock contracts so tx.run() doesn't go to the network ──────────────────
 
 jest.mock("@/lib/contracts", () => ({
@@ -119,11 +124,16 @@ import { useTx } from "@/hooks/useTx";
 import { useDividends } from "@/hooks/useDividends";
 import type { DistributionWithClaim } from "@/hooks/useDividends";
 import { useWallet } from "@/hooks/useWallet";
+import { fetchOnChainHolders, useHolders } from "@/hooks/useHolders";
 import { DistributionPanel } from "./DistributionPanel";
 
 const mockUseTx = useTx as jest.MockedFunction<typeof useTx>;
 const mockUseDividends = useDividends as jest.MockedFunction<typeof useDividends>;
 const mockUseWallet = useWallet as jest.MockedFunction<typeof useWallet>;
+const mockUseHolders = useHolders as jest.MockedFunction<typeof useHolders>;
+const mockFetchOnChainHolders = fetchOnChainHolders as jest.MockedFunction<
+  typeof fetchOnChainHolders
+>;
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -203,6 +213,9 @@ const mockAsset: AssetDetail = {
   },
 };
 
+const holderAddress = "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA";
+const holderSnapshot = [{ address: holderAddress, balance: 1_000_000n }];
+
 // ── tests ──────────────────────────────────────────────────────────────────
 
 describe("DistributionPanel", () => {
@@ -214,6 +227,14 @@ describe("DistributionPanel", () => {
     } as ReturnType<typeof useWallet>);
     setupTx();
     setupDividends();
+    mockUseHolders.mockReturnValue({
+      data: holderSnapshot,
+      loading: false,
+      error: null,
+      updatedAt: 1,
+      refetch: jest.fn(),
+    });
+    mockFetchOnChainHolders.mockResolvedValue(holderSnapshot);
   });
 
   describe("CreateDistributionCard", () => {
@@ -327,6 +348,57 @@ describe("DistributionPanel", () => {
       await waitFor(() => {
         expect(run).toHaveBeenCalled();
       });
+    });
+
+    it("shows the eligible holder count and snapshot balance", () => {
+      render(<DistributionPanel asset={mockAsset} />);
+
+      expect(screen.getByText(/snapshot: 1 eligible holders/i)).toBeInTheDocument();
+      expect(screen.getByText(/total balance: 0\.1 TST/i)).toBeInTheDocument();
+    });
+
+    it("requires review when the on-chain snapshot changed since preview", async () => {
+      const user = userEvent.setup();
+      const run = jest.fn().mockResolvedValue({ hash: "abc123" });
+      setupTx({ run });
+      mockFetchOnChainHolders.mockResolvedValue([
+        { address: holderAddress, balance: 900_000n },
+      ]);
+
+      render(<DistributionPanel asset={mockAsset} />);
+      await user.type(screen.getByLabelText(/payment token contract/i), VALID_PAYMENT_TOKEN);
+      await user.type(screen.getByLabelText(/total pool amount/i), "100.5");
+      await user.click(screen.getByRole("button", { name: /create distribution/i }));
+
+      expect(run).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toHaveTextContent(/balances changed/i);
+      expect(screen.getByText(/total balance: 0\.09 TST/i)).toBeInTheDocument();
+    });
+
+    it("blocks snapshots whose encoded argument exceeds the transaction size budget", async () => {
+      const user = userEvent.setup();
+      const run = jest.fn().mockResolvedValue({ hash: "abc123" });
+      const oversizedSnapshot = Array.from({ length: 1000 }, () => ({
+        address: holderAddress,
+        balance: 1_000_000n,
+      }));
+      setupTx({ run });
+      mockUseHolders.mockReturnValue({
+        data: oversizedSnapshot,
+        loading: false,
+        error: null,
+        updatedAt: 1,
+        refetch: jest.fn(),
+      });
+      mockFetchOnChainHolders.mockResolvedValue(oversizedSnapshot);
+
+      render(<DistributionPanel asset={mockAsset} />);
+      await user.type(screen.getByLabelText(/payment token contract/i), VALID_PAYMENT_TOKEN);
+      await user.type(screen.getByLabelText(/total pool amount/i), "100.5");
+      await user.click(screen.getByRole("button", { name: /create distribution/i }));
+
+      expect(run).not.toHaveBeenCalled();
+      expect(screen.getByRole("alert")).toHaveTextContent(/too large for one soroban transaction/i);
     });
 
     it("clears form inputs after successful creation", async () => {

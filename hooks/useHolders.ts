@@ -5,10 +5,31 @@ import { api } from "@/lib/api";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
 import { dedupeRequest } from "@/lib/requestCache";
+import type { Network } from "@/types";
 
 export interface Holder {
   address: string;
   balance: bigint;
+}
+
+export async function fetchOnChainHolders(
+  network: Network,
+  complianceId: string,
+  tokenContract: string,
+): Promise<Holder[]> {
+  const addresses = await dedupeRequest(
+    `allowlist:${network}:${complianceId}`,
+    () => compliance.getAllowlist(network, complianceId),
+  );
+  const holders = await Promise.all(
+    addresses.map(async (address) => ({
+      address,
+      balance: await assetToken.balance(network, tokenContract, address),
+    })),
+  );
+  return holders
+    .filter((holder) => holder.balance > 0n)
+    .sort((a, b) => (a.balance > b.balance ? -1 : a.balance < b.balance ? 1 : 0));
 }
 
 /**
@@ -39,19 +60,7 @@ export function useHolders(
       }
 
       // Dedupe allowlist reads across concurrent hooks
-      const addresses = await dedupeRequest(
-        `allowlist:${network}:${complianceId}`,
-        () => compliance.getAllowlist(network, complianceId)
-      );
-      const holders = await Promise.all(
-        addresses.map(async (address) => ({
-          address,
-          balance: await assetToken.balance(network, tokenContract!, address),
-        })),
-      );
-      return holders
-        .filter((h) => h.balance > 0n)
-        .sort((a, b) => (a.balance > b.balance ? -1 : a.balance < b.balance ? 1 : 0));
+      return fetchOnChainHolders(network, complianceId, tokenContract);
     },
     [complianceId, tokenContract, network, refreshKey],
     Boolean(complianceId && tokenContract),

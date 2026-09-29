@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from "@testing-library/react";
-import { useHolders } from "../useHolders";
+import { fetchOnChainHolders, useHolders } from "../useHolders";
 import { compliance, assetToken } from "@/lib/contracts";
 import { api } from "@/lib/api";
 
@@ -96,6 +96,21 @@ describe("useHolders", () => {
       { address: "ADDR_3", balance: 800n },
       { address: "ADDR_1", balance: 200n },
     ]);
+  });
+
+  it("fetches a fresh on-chain snapshot without using the indexing API", async () => {
+    (compliance.getAllowlist as jest.Mock).mockResolvedValue(["ADDR_1", "ADDR_2"]);
+    (assetToken.balance as jest.Mock).mockImplementation((_net, _contract, address) =>
+      Promise.resolve(address === "ADDR_1" ? 200n : 0n),
+    );
+
+    await expect(
+      fetchOnChainHolders("testnet", "COMP_A", "TOKEN_A"),
+    ).resolves.toEqual([{ address: "ADDR_1", balance: 200n }]);
+
+    expect(api.getHolders).not.toHaveBeenCalled();
+    expect(compliance.getAllowlist).toHaveBeenCalledWith("testnet", "COMP_A");
+    expect(assetToken.balance).toHaveBeenCalledTimes(2);
   });
 
   it("refetches when refreshKey changes", async () => {

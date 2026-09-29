@@ -35,6 +35,17 @@ jest.mock("@/hooks/useDividends", () => ({
   useDividends: jest.fn(),
 }));
 
+jest.mock("@/hooks/useHolders", () => ({
+  useHolders: jest.fn(() => ({
+    data: [],
+    loading: false,
+    error: null,
+    updatedAt: null,
+    refetch: jest.fn(),
+  })),
+  fetchOnChainHolders: jest.fn().mockResolvedValue([]),
+}));
+
 // ── mock useTx (CreateDistributionCard) ───────────────────────────────────
 
 jest.mock("@/hooks/useTx", () => ({
