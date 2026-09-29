@@ -80,3 +80,21 @@ transaction status before manually retrying a timeout.
 | Typed contract methods and IDs | `lib/contracts.ts` |
 | RPC simulation, transaction lifecycle, retry, and failover | `lib/stellar.ts` |
 | Wallet connection and signing | `hooks/useWallet.tsx`, `lib/freighter.ts` |
+
+## Registry pagination
+
+The registry contract's `get_all_assets` method on the current contracts repo
+(`main` branch) takes `(start_id: u64, limit: u32)` and returns a page of
+entries rather than the entire list in one call.
+
+`registry.getAllAssets` in `lib/contracts.ts` pages through the registry
+automatically using a page size of 50 entries per call, concatenating results
+until a page returns fewer entries than the page size (signalling end-of-list).
+Start IDs are derived from the last entry's `id` field plus one.
+
+**Backward compatibility:** The old no-argument `get_all_assets()` signature is
+still supported via a fallback.  If the first paginated call returns a Soroban
+argument-count error (`WrongNumberOfArguments` / `ArgsInvalid`), the function
+retries with no arguments and emits a `console.warn` so operators know the
+deployed registry needs updating.  Once all deployments are on the current
+contracts, the fallback branch can be removed.
