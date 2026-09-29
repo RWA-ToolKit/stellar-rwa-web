@@ -150,11 +150,12 @@ All three Mainnet contract IDs default to empty strings, meaning the app **will 
 
 - **Purpose:** Optional base URL of the Stellar RWA indexing API. When configured, supported aggregate views (asset lists, platform statistics, holder lists/counts, and recent indexed contract events) are fetched from the API instead of being calculated through direct Soroban RPC simulations. **Writes (signing transactions) always use Soroban RPC regardless of this setting.**
 - **Required:** No (defaults to empty; all reads fall back to direct RPC simulations)
-- **Format:** HTTPS URL (base URL; the app appends paths like `/assets`, `/stats`, `/holders`, `/events`)
+- **Format:** HTTPS URL (base URL; the app automatically appends `/v1` and then route paths like `/assets`, `/stats`, `/holders`, `/events`)
 - **Example:**
   ```
   NEXT_PUBLIC_API_URL=https://rwa-api.example.com
   ```
+- **Note:** Do _not_ include `/v1` in this value — the app adds it automatically. The API server mounts all data routes under `/v1`; only health and meta routes (`/`, `/version`, `/health`, `/metrics`) are unversioned.
 - **Benefits:** The indexer serves pre-aggregated data, reducing RPC requests and usually making list and statistics views faster.
 - **Tradeoffs:** The app depends on the indexer's availability and freshness. A successful response may lag behind the latest on-chain state; the app does not compare API results with Soroban or detect stale data.
 - **Fallback behavior:** If the URL is unset, or a request fails (including a non-success HTTP response or invalid JSON), the affected view falls back to direct Soroban RPC reads using `simulateTransaction`. Those reads do not require the indexing API but can be slower and make more RPC requests. A successful but stale API response does not trigger this fallback. Transfer history requires the indexer's `/events` feed; the asset page shows an unavailable state when it cannot be loaded.
