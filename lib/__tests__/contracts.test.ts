@@ -33,19 +33,65 @@ describe("contractIds", () => {
     });
 
     describe("assetToken.decimals", () => {
+      beforeEach(() => jest.clearAllMocks());
+
       it("reads token decimals from its own contract", async () => {
         (readContract as jest.Mock).mockResolvedValue(2);
 
-        await expect(assetToken.decimals("testnet", "CTOKEN")).resolves.toBe(2);
-        expect(readContract).toHaveBeenCalledWith("testnet", "CTOKEN", "decimals");
+        await expect(assetToken.decimals("testnet", "CTOKEN_VALID")).resolves.toBe(2);
+        expect(readContract).toHaveBeenCalledWith("testnet", "CTOKEN_VALID", "decimals");
+      });
+
+      it("shares one in-flight decimals read for concurrent calls", async () => {
+        (readContract as jest.Mock).mockResolvedValue(6);
+
+        const results = await Promise.all(
+          Array.from({ length: 5 }, () =>
+            assetToken.decimals("testnet", "CTOKEN_SHARED"),
+          ),
+        );
+
+        expect(results).toEqual([6, 6, 6, 6, 6]);
+        expect(readContract).toHaveBeenCalledTimes(1);
+        expect(readContract).toHaveBeenCalledWith(
+          "testnet",
+          "CTOKEN_SHARED",
+          "decimals",
+        );
+      });
+
+      it("caches decimals separately by network and token", async () => {
+        (readContract as jest.Mock).mockResolvedValue(7);
+
+        await Promise.all([
+          assetToken.decimals("testnet", "CTOKEN_TESTNET"),
+          assetToken.decimals("mainnet", "CTOKEN_TESTNET"),
+          assetToken.decimals("testnet", "CTOKEN_OTHER"),
+        ]);
+
+        expect(readContract).toHaveBeenCalledTimes(3);
+      });
+
+      it("retries a decimals read after a failure", async () => {
+        (readContract as jest.Mock)
+          .mockRejectedValueOnce(new Error("RPC unavailable"))
+          .mockResolvedValueOnce(8);
+
+        await expect(
+          assetToken.decimals("testnet", "CTOKEN_RETRY"),
+        ).rejects.toThrow("RPC unavailable");
+        await expect(
+          assetToken.decimals("testnet", "CTOKEN_RETRY"),
+        ).resolves.toBe(8);
+        expect(readContract).toHaveBeenCalledTimes(2);
       });
 
       it.each([-1, 1.5, 256, undefined])("rejects invalid decimals value %s", async (decimals) => {
         (readContract as jest.Mock).mockResolvedValue(decimals);
 
-        await expect(assetToken.decimals("testnet", "CTOKEN")).rejects.toThrow(
-          "returned invalid decimals",
-        );
+        await expect(
+          assetToken.decimals("testnet", `CTOKEN_INVALID_${String(decimals)}`),
+        ).rejects.toThrow("returned invalid decimals");
       });
     });
 

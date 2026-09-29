@@ -259,6 +259,8 @@ export const registry = {
 
 // ================= Asset token =================
 
+const decimalsCache = new Map<string, Promise<number>>();
+
 export const assetToken = {
   getMetadata(network: Network, tokenId: string): Promise<AssetMetadata> {
     return readContract<RawMetadata>(network, tokenId, "get_metadata").then(
@@ -266,12 +268,24 @@ export const assetToken = {
     );
   },
 
-  async decimals(network: Network, tokenId: string): Promise<number> {
-    const decimals = await readContract<number>(network, tokenId, "decimals");
-    if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) {
-      throw new Error(`Token ${tokenId} returned invalid decimals.`);
-    }
-    return decimals;
+  decimals(network: Network, tokenId: string): Promise<number> {
+    const key = `${network}:${tokenId}`;
+    const cached = decimalsCache.get(key);
+    if (cached) return cached;
+
+    const pending = readContract<number>(network, tokenId, "decimals").then(
+      (decimals) => {
+        if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255) {
+          throw new Error(`Token ${tokenId} returned invalid decimals.`);
+        }
+        return decimals;
+      },
+    );
+    decimalsCache.set(key, pending);
+    void pending.catch(() => {
+      if (decimalsCache.get(key) === pending) decimalsCache.delete(key);
+    });
+    return pending;
   },
 
   balance(network: Network, tokenId: string, holder: string): Promise<bigint> {
