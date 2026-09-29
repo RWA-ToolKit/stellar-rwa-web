@@ -181,14 +181,75 @@ function toDistribution(r: RawDist): Distribution {
 
 // ================= Registry =================
 
+/**
+ * How many entries to request per page when calling the paginated
+ * `get_all_assets(start_id, limit)` contract method.  50 is a safe default
+ * that stays well inside Soroban's per-simulation instruction budget while
+ * still reducing round trips for typical registries.
+ */
+const GET_ALL_ASSETS_PAGE_SIZE = 50;
+
 export const registry = {
+  /**
+   * Fetches all assets from the registry, paging through them automatically.
+   *
+   * The contracts repo's registry (main branch) exposes:
+   *   `get_all_assets(start_id: u64, limit: u32) -> Vec<AssetEntry>`
+   *
+   * This replaces the old no-argument signature which worked only with older
+   * deployments.  For backward compatibility, if the first paginated call
+   * fails with an argument-count error (indicating an old contract that takes
+   * no arguments), the function retries with the legacy no-argument call and
+   * logs a deprecation notice so operators know to upgrade.
+   *
+   * Paging continues until a page returns fewer entries than the page size,
+   * which signals that we've reached the end of the list.
+   */
   async getAllAssets(network: Network): Promise<AssetEntry[]> {
-    const raw = await readContract<RawEntry[]>(
-      network,
-      contractIds(network).registry,
-      "get_all_assets",
-    );
-    return (raw ?? []).map(toAssetEntry);
+    const registryId = contractIds(network).registry;
+    const limit = GET_ALL_ASSETS_PAGE_SIZE;
+    const all: RawEntry[] = [];
+    let startId = 0n;
+
+    try {
+      // Paginated path (new contract signature).
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const page = await readContract<RawEntry[]>(
+          network,
+          registryId,
+          "get_all_assets",
+          [arg.u64(startId), arg.u32(limit)],
+        );
+        const entries = page ?? [];
+        all.push(...entries);
+        if (entries.length < limit) break;
+        // Advance: the next page starts after the last entry's id.
+        startId = BigInt(entries[entries.length - 1].id) + 1n;
+      }
+    } catch (err) {
+      // Detect argument-count mismatches from old deployments that take no
+      // arguments.  Soroban surfaces these as a simulation error whose detail
+      // contains "WrongNumberOfArguments" or "ArgsInvalid".
+      const detail = err instanceof Error ? err.message + (err as { detail?: string }).detail : String(err);
+      const isArgError = /WrongNumberOfArguments|ArgsInvalid|wrong.*arg|arg.*count/i.test(detail);
+      if (!isArgError) throw err;
+
+      // Fallback: legacy no-argument call.
+      console.warn(
+        "[registry.getAllAssets] Paginated call failed with an argument error — " +
+        "falling back to the legacy no-argument get_all_assets. " +
+        "Upgrade the registry contract to remove this fallback.",
+      );
+      const raw = await readContract<RawEntry[]>(
+        network,
+        registryId,
+        "get_all_assets",
+      );
+      return (raw ?? []).map(toAssetEntry);
+    }
+
+    return all.map(toAssetEntry);
   },
 
   async getAsset(network: Network, id: bigint): Promise<AssetEntry> {
