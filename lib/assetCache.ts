@@ -1,4 +1,5 @@
-import { assetToken } from "@/lib/contracts";
+import { api } from "@/lib/api";
+import { assetToken, registry } from "@/lib/contracts";
 import type { AssetEntry, AssetMetadata, Network } from "@/types";
 
 const PREFETCH_TTL_MS = 15_000;
@@ -17,6 +18,22 @@ export function cacheAssetEntries(network: Network, assets: AssetEntry[]): void 
     network,
     new Map(assets.map((asset) => [asset.id.toString(), asset])),
   );
+}
+
+export function getCachedAssetEntries(network: Network): AssetEntry[] | null {
+  const assets = assetsByNetwork.get(network);
+  return assets ? Array.from(assets.values()) : null;
+}
+
+export async function loadAssetEntries(
+  network: Network,
+  includeInactive = false,
+): Promise<AssetEntry[]> {
+  const fromApi = await api.getAllAssets();
+  const all = fromApi ?? await registry.getAllAssets(network);
+  const assets = includeInactive ? all : all.filter((asset) => asset.active);
+  cacheAssetEntries(network, assets);
+  return assets;
 }
 
 export function getCachedAsset(network: Network, id: bigint): AssetEntry | null {
