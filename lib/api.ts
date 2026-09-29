@@ -4,9 +4,25 @@ const BASE = typeof process !== "undefined"
   ? process.env.NEXT_PUBLIC_API_URL
   : undefined;
 
+/**
+ * Build a full API URL for `path`.
+ *
+ * The stellar-rwa-api server mounts all data routes under `/v1`:
+ *   /v1/assets, /v1/stats, /v1/events, /v1/assets/:id/holders
+ * Only health/meta routes (/, /version, /health, /metrics) are unversioned.
+ *
+ * `NEXT_PUBLIC_API_URL` is documented as the bare server origin
+ * (e.g. https://rwa-api.example.com), so the `/v1` prefix is added here
+ * rather than requiring every operator to append it manually.  If the env
+ * var already ends with `/v1` we do not double-append it, so operators who
+ * worked around the old bug are not broken.
+ */
 function apiUrl(path: string): string {
   if (!BASE) return "";
-  return `${BASE.replace(/\/+$/, "")}${path}`;
+  const base = BASE.replace(/\/+$/, "");
+  // Avoid double-appending /v1 if the operator already included it.
+  const versioned = /\/v\d+$/.test(base) ? base : `${base}/v1`;
+  return `${versioned}${path}`;
 }
 
 async function fetchJson<T>(url: string): Promise<T | null> {

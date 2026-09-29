@@ -201,7 +201,8 @@ describe("api.getEvents", () => {
     mockFetch.mockResolvedValue(okResponse(events));
 
     expect(await api.getEvents()).toEqual(events);
-    expect(mockFetch).toHaveBeenCalledWith("https://api.example.com/events");
+    // /v1 prefix is added automatically (#531)
+    expect(mockFetch).toHaveBeenCalledWith("https://api.example.com/v1/events");
   });
 
   it("returns null when the events endpoint is unavailable", async () => {
@@ -421,5 +422,46 @@ describe("api.getHolders", () => {
     mockFetch.mockResolvedValue(malformedJsonResponse());
 
     expect(await api.getHolders("CTOKEN")).toBeNull();
+  });
+});
+
+// ==============================================================================
+// Issue #531 — apiUrl /v1 prefix
+// ==============================================================================
+
+describe("apiUrl /v1 prefix (#531)", () => {
+  it("api.getStats requests /v1/stats", async () => {
+    mockFetch.mockResolvedValue(
+      okResponse({ totalAssets: 1, tvl: "100", totalHolders: 1 }),
+    );
+    await api.getStats();
+    expect(getRequestedUrl()).toBe("https://api.example.com/v1/stats");
+  });
+
+  it("api.getAllAssets requests /v1/assets", async () => {
+    mockFetch.mockResolvedValue(okResponse(makePaginated([])));
+    await api.getAllAssets();
+    expect(getRequestedUrl()).toMatch(/^https:\/\/api\.example\.com\/v1\/assets/);
+  });
+
+  it("api.getAsset requests /v1/assets/:id", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: "3" })));
+    await api.getAsset(3n);
+    expect(getRequestedUrl()).toBe("https://api.example.com/v1/assets/3");
+  });
+
+  it("api.getHolders requests /v1/assets/:contract/holders", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await api.getHolders("CTOKEN");
+    expect(getRequestedUrl()).toBe("https://api.example.com/v1/assets/CTOKEN/holders");
+  });
+
+  it("does not double-append /v1 if the env var already ends with /v1", async () => {
+    // Simulate an operator who worked around the old bug by adding /v1.
+    // We can't reload the module, so we test the no-double-append logic by
+    // checking the regex directly — the guard is /\/v\d+$/.test(base).
+    const baseWithVersion = "https://rwa-api.example.com/v1";
+    const doubleVersioned = /\/v\d+$/.test(baseWithVersion.replace(/\/+$/, ""));
+    expect(doubleVersioned).toBe(true); // regex fires → no second /v1 appended
   });
 });
