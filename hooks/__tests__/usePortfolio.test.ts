@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { usePortfolio } from "../usePortfolio";
 import { registry, assetToken, dividend } from "@/lib/contracts";
+import { getCachedAssetEntries, loadAssetEntries } from "@/lib/assetCache";
 import { useWallet } from "@/hooks/useWallet";
 import type { AssetEntry, AssetMetadata, Distribution } from "@/types";
 
@@ -20,6 +21,11 @@ jest.mock("@/lib/contracts", () => ({
     claimable: jest.fn(),
     hasClaimed: jest.fn(),
   },
+}));
+
+jest.mock("@/lib/assetCache", () => ({
+  getCachedAssetEntries: jest.fn(),
+  loadAssetEntries: jest.fn(),
 }));
 
 jest.mock("@/hooks/useWallet", () => ({
@@ -76,6 +82,8 @@ function makeDistribution(overrides: Partial<Distribution> = {}): Distribution {
 describe("usePortfolio", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (getCachedAssetEntries as jest.Mock).mockReturnValue(null);
+    (loadAssetEntries as jest.Mock).mockResolvedValue([]);
     mockUseWallet.mockReturnValue({ network: "testnet", address: "GUSER123" });
     (assetToken.decimals as jest.Mock).mockResolvedValue(7);
   });
@@ -99,7 +107,7 @@ describe("usePortfolio", () => {
 
     const dist1 = makeDistribution({ id: BigInt(10), assetToken: "TOKEN_A" });
 
-    (registry.getAllAssets as jest.Mock).mockResolvedValue([asset1, asset2]);
+    (getCachedAssetEntries as jest.Mock).mockReturnValue([asset1, asset2]);
 
     (assetToken.balance as jest.Mock).mockImplementation((_net, token) => {
       if (token === "TOKEN_A") return Promise.resolve(50n); // 50% of supply -> 5000
@@ -136,7 +144,7 @@ describe("usePortfolio", () => {
     const asset = makeAsset({ tokenContract: "TOKEN_A" });
     const first = makeDistribution({ id: 1n, paymentToken: "PAYMENT_2" });
     const second = makeDistribution({ id: 2n, paymentToken: "PAYMENT_7" });
-    (registry.getAllAssets as jest.Mock).mockResolvedValue([asset]);
+    (getCachedAssetEntries as jest.Mock).mockReturnValue([asset]);
     (assetToken.balance as jest.Mock).mockResolvedValue(100n);
     (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata({ totalSupply: 100n }));
     (dividend.getDistributionsForAsset as jest.Mock).mockResolvedValue([first, second]);
@@ -159,7 +167,7 @@ describe("usePortfolio", () => {
 
   it("returns empty holdings when user balance is 0 for all assets", async () => {
     const asset1 = makeAsset({ id: BigInt(1), tokenContract: "TOKEN_A" });
-    (registry.getAllAssets as jest.Mock).mockResolvedValue([asset1]);
+    (getCachedAssetEntries as jest.Mock).mockReturnValue([asset1]);
     (assetToken.balance as jest.Mock).mockResolvedValue(0n);
     (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata());
 
@@ -174,5 +182,67 @@ describe("usePortfolio", () => {
       failedAssetCount: 0,
       isIncomplete: false,
     });
+  });
+
+  it("uses the shared loader when there is no cached asset list", async () => {
+    const asset = makeAsset();
+    (loadAssetEntries as jest.Mock).mockResolvedValue([asset]);
+    (assetToken.balance as jest.Mock).mockResolvedValue(0n);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata());
+
+    const { result } = renderHook(() => usePortfolio());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(loadAssetEntries).toHaveBeenCalledWith("testnet");
+    expect(registry.getAllAssets).not.toHaveBeenCalled();
+  });
+
+  it("keeps healthy holdings when one asset balance read fails", async () => {
+    const failingAsset = makeAsset({ id: 1n, tokenContract: "TOKEN_FAIL" });
+    const healthyAsset = makeAsset({ id: 2n, tokenContract: "TOKEN_HEALTHY" });
+    (getCachedAssetEntries as jest.Mock).mockReturnValue([failingAsset, healthyAsset]);
+    (assetToken.balance as jest.Mock).mockImplementation((_network, token) =>
+      token === "TOKEN_FAIL"
+        ? Promise.reject(new Error("Token unavailable"))
+        : Promise.resolve(50n),
+    );
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(
+      makeMetadata({ totalSupply: 100n }),
+    );
+    (dividend.getDistributionsForAsset as jest.Mock).mockResolvedValue([]);
+
+    const { result } = renderHook(() => usePortfolio());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.data?.holdings.map(({ asset }) => asset.tokenContract)).toEqual([
+      "TOKEN_HEALTHY",
+    ]);
+    expect(result.current.data?.failedAssetCount).toBe(1);
+    expect(result.current.data?.isIncomplete).toBe(true);
+  });
+
+  it("excludes inactive cached assets from holdings and totals", async () => {
+    const activeAsset = makeAsset({ id: 1n, tokenContract: "TOKEN_ACTIVE", valuation: 1000n });
+    const inactiveAsset = makeAsset({
+      id: 2n,
+      tokenContract: "TOKEN_INACTIVE",
+      active: false,
+      valuation: 10_000n,
+    });
+    (getCachedAssetEntries as jest.Mock).mockReturnValue([activeAsset, inactiveAsset]);
+    (assetToken.balance as jest.Mock).mockResolvedValue(100n);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(
+      makeMetadata({ totalSupply: 100n }),
+    );
+    (dividend.getDistributionsForAsset as jest.Mock).mockResolvedValue([]);
+
+    const { result } = renderHook(() => usePortfolio());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.data?.holdings.map(({ asset }) => asset.tokenContract)).toEqual([
+      "TOKEN_ACTIVE",
+    ]);
+    expect(assetToken.balance).toHaveBeenCalledTimes(1);
+    expect(result.current.data?.totalValueCents).toBe(1000n);
   });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { assetToken, dividend } from "@/lib/contracts";
+import { getCachedAssetEntries, loadAssetEntries } from "@/lib/assetCache";
 import { useWallet } from "@/hooks/useWallet";
 import { useAsync } from "@/hooks/useAsync";
 import type { AssetEntry, AssetMetadata, Distribution } from "@/types";
@@ -28,7 +29,7 @@ export interface PortfolioData {
   totalValueCents: bigint;
   /** Claimable totals grouped by payment token and decimal scale. */
   totalClaimable: ClaimableTotal[];
-  /** Count of assets that failed to load their distributions. */
+  /** Count of assets with failed balance, metadata, or distribution reads. */
   failedAssetCount: number;
   /** Whether the portfolio totals are incomplete due to read failures. */
   isIncomplete: boolean;
@@ -47,16 +48,18 @@ export function usePortfolio() {
         return { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false };
       }
 
-      // 1. Fetch all assets from registry (already filtered to active by registry contract)
-      const { registry } = await import("@/lib/contracts");
-      const allAssets = await registry.getAllAssets(network);
+      // Reuse the shared asset list when available; otherwise use its API-first loader.
+      const cachedAssets = getCachedAssetEntries(network);
+      const allAssets = (cachedAssets ?? await loadAssetEntries(network)).filter(
+        (asset) => asset.active,
+      );
 
       if (allAssets.length === 0) {
         return { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false };
       }
 
-      // 2. For each asset, fetch balance + metadata in parallel
-      const enriched = await Promise.all(
+      // 2. Isolate balance/metadata failures so other holdings remain visible.
+      const assetResults = await Promise.allSettled(
         allAssets.map(async (asset) => {
           const [balance, metadata] = await Promise.all([
             assetToken.balance(network, asset.tokenContract, address),
@@ -65,12 +68,27 @@ export function usePortfolio() {
           return { asset, metadata, balance };
         }),
       );
+      let failedAssetCount = 0;
+      const enriched: { asset: AssetEntry; metadata: AssetMetadata; balance: bigint }[] = [];
+      for (const result of assetResults) {
+        if (result.status === "fulfilled") {
+          enriched.push(result.value);
+        } else {
+          failedAssetCount++;
+        }
+      }
 
       // 3. Filter down to assets the wallet actually holds
       const held = enriched.filter(({ balance }) => balance > 0n);
 
       if (held.length === 0) {
-        return { holdings: [], totalValueCents: 0n, totalClaimable: [], failedAssetCount: 0, isIncomplete: false };
+        return {
+          holdings: [],
+          totalValueCents: 0n,
+          totalClaimable: [],
+          failedAssetCount,
+          isIncomplete: failedAssetCount > 0,
+        };
       }
 
       // 4. For held assets, fetch distributions and annotate with claimable
@@ -105,7 +123,6 @@ export function usePortfolio() {
       );
 
       // Count failures and build holdings list
-      let failedAssetCount = 0;
       const holdings: Holding[] = [];
 
       for (const result of holdingResults) {
