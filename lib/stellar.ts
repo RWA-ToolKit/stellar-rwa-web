@@ -315,6 +315,32 @@ export async function invokeContract(
     );
   }
 
+  // TRY_AGAIN_LATER means the RPC node did not admit the transaction to its
+  // queue — typically due to network congestion.  The transaction was never
+  // accepted, so polling for its hash will always return NOT_FOUND for the
+  // full 30-second window and then throw a TransactionTimeoutError pointing
+  // at a hash that will never land.  Surface a clear, retryable message
+  // instead so the user knows to try again rather than watching the explorer.
+  if (sent.status === "TRY_AGAIN_LATER") {
+    throw new ContractError(
+      "The network is congested and could not accept the transaction right now. Please try again in a moment.",
+      `sendTransaction returned TRY_AGAIN_LATER for hash ${sent.hash}`,
+    );
+  }
+
+  // DUPLICATE means a transaction with the same hash is already in the queue
+  // or has already been processed.  Re-submitting won't help; poll the
+  // existing hash so we can return the final result rather than throwing.
+  // Fall through to the polling phase — the hash is valid and the node knows
+  // about it.
+  if (sent.status !== "PENDING" && sent.status !== "DUPLICATE") {
+    // Guard against any future unknown statuses.
+    throw new ContractError(
+      `Unexpected submission status: ${sent.status}.`,
+      JSON.stringify(sent),
+    );
+  }
+
   onPhase?.("confirming");
   const final = await pollTransaction(network, server, sent.hash);
   if (final.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
