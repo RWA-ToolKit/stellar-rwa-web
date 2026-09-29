@@ -291,7 +291,9 @@ export async function invokeContract(
 
   // Simulate first so we can surface a clean contract error before asking the
   // user to sign, and so the transaction carries the right footprint + fees.
-  const sim = await server.simulateTransaction(built);
+  const sim = await withRetry(() =>
+    withFailover(network, (rpcServer) => rpcServer.simulateTransaction(built)),
+  );
   if (rpc.Api.isSimulationError(sim)) {
     throw new ContractError(parseContractError(sim.error), sim.error, isAuthError(sim.error));
   }
@@ -305,7 +307,7 @@ export async function invokeContract(
   const signedTx = TransactionBuilder.fromXDR(signedXdr, passphrase);
 
   onPhase?.("submitting");
-  const sent = await server.sendTransaction(signedTx);
+  const sent = await withFailover(network, () => server.sendTransaction(signedTx));
   if (sent.status === "ERROR") {
     throw new ContractError(
       "The network rejected the transaction.",
@@ -314,7 +316,7 @@ export async function invokeContract(
   }
 
   onPhase?.("confirming");
-  const final = await pollTransaction(server, sent.hash);
+  const final = await pollTransaction(network, server, sent.hash);
   if (final.status !== rpc.Api.GetTransactionStatus.SUCCESS) {
     throw new ContractError(
       "The transaction failed on-chain.",
@@ -336,6 +338,7 @@ export async function invokeContract(
 }
 
 async function pollTransaction(
+  network: Network,
   server: rpc.Server,
   hash: string,
   timeoutMs = 30000,
@@ -344,7 +347,18 @@ async function pollTransaction(
   // Poll roughly every ledger (~2s) until the RPC knows the transaction.
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const res = await server.getTransaction(hash);
+    let res: rpc.Api.GetTransactionResponse;
+    try {
+      res = await server.getTransaction(hash);
+    } catch (error) {
+      reportServerFailure(network);
+      if (!isTransientRpcError(error)) throw error;
+      if (Date.now() - start > timeoutMs) {
+        throw new TransactionTimeoutError(hash);
+      }
+      await sleep(2000);
+      continue;
+    }
     if (res.status !== rpc.Api.GetTransactionStatus.NOT_FOUND) return res;
     if (Date.now() - start > timeoutMs) {
       throw new TransactionTimeoutError(hash);
