@@ -84,6 +84,7 @@ export const ASSET_METADATA = {
 /** Values the simulated contract reads resolve to, tunable per test. */
 interface SimConfig {
   balance: number;
+  allowance: number;
   walletApproved: boolean;
   recipientApproved: boolean;
   claimable: number;
@@ -226,7 +227,9 @@ function simulatedRetval(
     case "balance":
       return nativeToScVal(BigInt(cfg.balance), { type: "i128" });
     case "allowance":
-      return nativeToScVal(0n, { type: "i128" });
+      return nativeToScVal(BigInt(cfg.allowance), { type: "i128" });
+    case "decimals":
+      return nativeToScVal(0, { type: "u32" });
     case "total_supply":
       return nativeToScVal(ASSET_METADATA.total_supply, { type: "i128" });
     case "asset_count":
@@ -368,6 +371,8 @@ export async function mockRpc(
   opts: {
     /** Fake balance for the connected wallet on the token contract. */
     balance?: number;
+    /** Fake payment-token allowance for issuer distribution tests. */
+    allowance?: number;
     /** Whether the wallet address is compliance-approved. */
     walletApproved?: boolean;
     /** Whether the recipient address is compliance-approved. */
@@ -380,6 +385,7 @@ export async function mockRpc(
 ) {
   const {
     balance = 500,
+    allowance = 0,
     walletApproved = true,
     recipientApproved = true,
     claimable = 10_0000000,
@@ -473,6 +479,7 @@ export async function mockRpc(
         const retval = invocation
           ? simulatedRetval(invocation.fn, invocation.args, {
               balance,
+              allowance,
               walletApproved,
               recipientApproved,
               claimable,
@@ -565,11 +572,14 @@ export async function mockRpc(
   // we still set up the handler so tests work whether the env var is set or not).
   await page.route(/\/api\//, async (route: Route) => {
     const url = route.request().url();
-    if (url.match(/\/assets\/\d+\/holders/)) {
+    if (url.match(/\/assets\/[^/?]+\/holders/)) {
       return route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify([{ address: WALLET_ADDRESS, balance: String(balance) }]),
+        body: JSON.stringify([
+          { address: WALLET_ADDRESS, balance: String(balance) },
+          { address: RECIPIENT_ADDRESS, balance: String(balance) },
+        ]),
       });
     }
     if (url.match(/\/assets\/\d+$/)) {
@@ -606,6 +616,7 @@ export async function mockRpc(
   // route handlers (they exist for documentation / future expansion).
   void walletApproved;
   void recipientApproved;
+  void allowance;
   void claimable;
   void hasClaimed;
 }

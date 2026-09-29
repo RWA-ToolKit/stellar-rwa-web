@@ -220,6 +220,14 @@ export const arg = {
   u32: (v: number): xdr.ScVal => nativeToScVal(v, { type: "u32" }),
   u64: (v: bigint | number): xdr.ScVal => nativeToScVal(BigInt(v), { type: "u64" }),
   i128: (v: bigint): xdr.ScVal => nativeToScVal(v, { type: "i128" }),
+  vecOfTuples: (values: readonly (readonly [string, bigint])[]): xdr.ScVal =>
+    nativeToScVal(
+      values.map(([address, balance]) =>
+        nativeToScVal([new Address(address), balance], {
+          type: ["address", "i128"],
+        }),
+      ),
+    ),
 };
 
 /**

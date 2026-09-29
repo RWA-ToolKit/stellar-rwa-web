@@ -1,9 +1,12 @@
 jest.mock("@/lib/stellar", () => ({
+  ...jest.requireActual("@/lib/stellar"),
+  invokeContract: jest.fn(),
   readContract: jest.fn(),
 }));
 
-import { assetToken, contractIds } from "@/lib/contracts";
-import { readContract } from "@/lib/stellar";
+import { scValToNative } from "@stellar/stellar-sdk";
+import { assetToken, contractIds, dividend } from "@/lib/contracts";
+import { arg, invokeContract, readContract } from "@/lib/stellar";
 import type { Network } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -140,5 +143,81 @@ describe("contractIds", () => {
       ).toBeTruthy();
       expect(ids.dividend === "" || ids.dividend.match(stellarFormat)).toBeTruthy();
     });
+  });
+});
+
+describe("dividend.createDistribution", () => {
+  const account = "GAIQGTOBTTLLDJ4SWGGESM7UWJ2DI4K3ZNHUSHPDKJL2IE5FKY3BSRAA";
+  const assetTokenId = "CBX5SMLTXX6JP4HA5GQIO2V6QM7WCUGL2GZ6D4U773HMRI6RXISKPUR3";
+  const paymentTokenId = "CBUERYDM7DXTZLLKDBRJKUBPFJ7M4OSUN4T7XKUARU345RLXNAIQD2IU";
+  const ctx = { network: "testnet" as const, source: account, sign: jest.fn() };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (invokeContract as jest.Mock).mockResolvedValue({ hash: "tx-hash" });
+  });
+
+  it("sends the eligible snapshot to create_distribution", async () => {
+    const eligible: [string, bigint][] = [[account, 125n]];
+
+    await dividend.createDistribution(ctx, assetTokenId, paymentTokenId, 1000n, eligible);
+
+    expect(invokeContract).toHaveBeenCalledWith(
+      "testnet",
+      account,
+      contractIds("testnet").dividend,
+      "create_distribution",
+      [
+        arg.address(account),
+        arg.address(assetTokenId),
+        arg.address(paymentTokenId),
+        arg.i128(1000n),
+        arg.vecOfTuples(eligible),
+      ],
+      ctx.sign,
+      undefined,
+    );
+    const args = (invokeContract as jest.Mock).mock.calls[0][4];
+    expect(args.map((value: { type: string }) => value.type)).toEqual([
+      "scvAddress",
+      "scvAddress",
+      "scvAddress",
+      "scvI128",
+      "scvVec",
+    ]);
+    expect(scValToNative(args[4])).toEqual(eligible);
+  });
+
+  it("uses the deadline entrypoint after the eligible snapshot when a deadline is set", async () => {
+    const eligible: [string, bigint][] = [[account, 125n]];
+
+    await dividend.createDistribution(ctx, assetTokenId, paymentTokenId, 1000n, eligible, 1234);
+
+    expect(invokeContract).toHaveBeenCalledWith(
+      "testnet",
+      account,
+      contractIds("testnet").dividend,
+      "create_distribution_deadline",
+      [
+        arg.address(account),
+        arg.address(assetTokenId),
+        arg.address(paymentTokenId),
+        arg.i128(1000n),
+        arg.vecOfTuples(eligible),
+        arg.u32(1234),
+      ],
+      ctx.sign,
+      undefined,
+    );
+    const args = (invokeContract as jest.Mock).mock.calls[0][4];
+    expect(args.map((value: { type: string }) => value.type)).toEqual([
+      "scvAddress",
+      "scvAddress",
+      "scvAddress",
+      "scvI128",
+      "scvVec",
+      "scvU32",
+    ]);
+    expect(scValToNative(args[4])).toEqual(eligible);
   });
 });

@@ -475,15 +475,25 @@ export const dividend = {
     assetToken: string,
     paymentToken: string,
     totalAmount: bigint,
+    eligible: readonly (readonly [string, bigint])[],
     claimDeadline = 0,
   ): Promise<TxResult> {
-    return write(ctx, contractIds(ctx.network).dividend, "create_distribution", [
+    const args = [
       arg.address(ctx.source),
       arg.address(assetToken),
       arg.address(paymentToken),
       arg.i128(totalAmount),
-      arg.u32(claimDeadline),
-    ]);
+      arg.vecOfTuples(eligible),
+    ];
+    if (claimDeadline > 0) {
+      return write(
+        ctx,
+        contractIds(ctx.network).dividend,
+        "create_distribution_deadline",
+        [...args, arg.u32(claimDeadline)],
+      );
+    }
+    return write(ctx, contractIds(ctx.network).dividend, "create_distribution", args);
   },
 
   claim(ctx: WriteCtx, id: bigint): Promise<TxResult> {

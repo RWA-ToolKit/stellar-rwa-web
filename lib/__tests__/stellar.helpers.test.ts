@@ -116,4 +116,12 @@ describe("arg builders", () => {
     expect(scValToNative(v)).toBe(big);
     expect(scValToNative(arg.i128(-5n))).toBe(-5n);
   });
+
+  it("encodes eligible holders as a vector of address/i128 tuples", () => {
+    const eligible: [string, bigint][] = [[ACCOUNT, 125n]];
+    const value = arg.vecOfTuples(eligible);
+
+    expect(value.type).toBe("scvVec");
+    expect(scValToNative(value)).toEqual(eligible);
+  });
 });

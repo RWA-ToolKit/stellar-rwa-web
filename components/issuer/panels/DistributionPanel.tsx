@@ -10,7 +10,9 @@ import { useAsync } from "@/hooks/useAsync";
 import { useWallet } from "@/hooks/useWallet";
 import { getLatestLedger } from "@/lib/stellar";
 import { useDividends } from "@/hooks/useDividends";
+import { fetchOnChainHolders, useHolders, type Holder } from "@/hooks/useHolders";
 import { parseTokenAmount, formatTokenAmount, truncateAddress } from "@/lib/format";
+import { arg } from "@/lib/stellar";
 import { ActionCard } from "@/components/issuer/ActionCard";
 import { TxProgress } from "@/components/ui/TxProgress";
 import { Spinner } from "@/components/ui/Spinner";
@@ -54,6 +56,9 @@ const KNOWN_TOKENS: Record<Network, KnownToken[]> = {
   ],
 };
 
+// Leave room for the rest of the transaction envelope and its auth data.
+const MAX_SNAPSHOT_XDR_BYTES = 48 * 1024;
+
 interface DistributionPanelProps {
   asset: AssetDetail;
   onCreated?: () => void;
@@ -69,6 +74,9 @@ export function DistributionPanel({ asset, onCreated, isAdmin = true }: Distribu
       </div>
       <CreateDistributionCard
         tokenContract={asset.tokenContract}
+        complianceContract={asset.metadata.complianceContract}
+        assetDecimals={asset.metadata.decimals}
+        assetSymbol={asset.metadata.symbol}
         {...(onCreated !== undefined ? { onCreated } : {})}
         isAdmin={isAdmin}
       />
@@ -79,12 +87,26 @@ export function DistributionPanel({ asset, onCreated, isAdmin = true }: Distribu
 
 // ---- Create distribution ----
 
+function sameHolderSnapshot(left: Holder[], right: Holder[]): boolean {
+  if (left.length !== right.length) return false;
+  const balancesByAddress = new Map(left.map(({ address, balance }) => [address, balance]));
+  return right.every(
+    ({ address, balance }) => balancesByAddress.get(address) === balance,
+  );
+}
+
 function CreateDistributionCard({
   tokenContract,
+  complianceContract,
+  assetDecimals,
+  assetSymbol,
   onCreated,
   isAdmin = true,
 }: {
   tokenContract: string;
+  complianceContract: string;
+  assetDecimals: number;
+  assetSymbol: string;
   onCreated?: () => void;
   isAdmin?: boolean;
 }) {
@@ -94,6 +116,21 @@ function CreateDistributionCard({
   const [totalAmount, setTotalAmount] = useState("");
   const [claimDeadline, setClaimDeadline] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+  const [snapshotRefreshing, setSnapshotRefreshing] = useState(false);
+  const [refreshedSnapshot, setRefreshedSnapshot] = useState<{
+    key: string;
+    holders: Holder[];
+  } | null>(null);
+  const holderState = useHolders(complianceContract, tokenContract);
+  const snapshotKey = `${complianceContract}:${tokenContract}`;
+  const holderSnapshot =
+    refreshedSnapshot?.key === snapshotKey
+      ? refreshedSnapshot.holders
+      : holderState.data;
+  const snapshotTotal = (holderSnapshot ?? []).reduce(
+    (total, holder) => total + holder.balance,
+    0n,
+  );
 
   // Only fetch when the input looks like a valid contract address.
   const isValidPt =
@@ -211,8 +248,42 @@ function CreateDistributionCard({
       }
     }
 
+    let eligible: Holder[];
+    setSnapshotRefreshing(true);
+    try {
+      eligible = await fetchOnChainHolders(network, complianceContract, tokenContract);
+    } catch (err) {
+      setFormError(
+        err instanceof Error
+          ? `Unable to refresh holder snapshot: ${err.message}`
+          : "Unable to refresh holder snapshot. Try again.",
+      );
+      return;
+    } finally {
+      setSnapshotRefreshing(false);
+    }
+    if (!holderSnapshot || !sameHolderSnapshot(holderSnapshot, eligible)) {
+      setRefreshedSnapshot({ key: snapshotKey, holders: eligible });
+      setFormError("Holder balances changed. Review the updated snapshot and submit again.");
+      return;
+    }
+    if (eligible.length === 0) {
+      setFormError("No eligible holders have a balance in this asset.");
+      return;
+    }
+    const eligibleTuples = eligible.map(
+      ({ address, balance }) => [address, balance] as const,
+    );
+    const snapshotBytes = arg.vecOfTuples(eligibleTuples).toXDR().length;
+    if (snapshotBytes > MAX_SNAPSHOT_XDR_BYTES) {
+      setFormError(
+        `The ${eligible.length}-holder snapshot is too large for one Soroban transaction. Reduce the eligible holder count and try again.`,
+      );
+      return;
+    }
+
     const res = await tx.run((ctx) =>
-      dividend.createDistribution(ctx, tokenContract, pt, raw, deadline),
+      dividend.createDistribution(ctx, tokenContract, pt, raw, eligibleTuples, deadline),
     );
     if (res) {
       setPaymentToken("");
@@ -225,7 +296,7 @@ function CreateDistributionCard({
   return (
     <ActionCard
       title="Create distribution"
-      description="Fund a new dividend distribution. The payment token will be distributed proportionally to all token holders at snapshot time."
+      description="Fund a new dividend distribution. Eligible holders receive shares based on their balances in the confirmed snapshot."
       accent="bg-gold-500/10 text-gold-400"
       icon={
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -234,6 +305,26 @@ function CreateDistributionCard({
       }
     >
       <form onSubmit={onSubmit} className="space-y-3">
+        <div className="rounded-lg border border-white/5 bg-white/[0.03] px-3 py-2 text-xs">
+          {holderSnapshot === null ? (
+            <span className="text-base-100/55">
+              {holderState.loading
+                ? "Loading holder snapshot…"
+                : "Holder snapshot is unavailable. Refresh the page and try again."}
+            </span>
+          ) : holderSnapshot.length === 0 ? (
+            <span className="text-base-100/55">No eligible holders</span>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+              <span className="text-base-100/70">
+                Snapshot: {holderSnapshot.length} eligible holders
+              </span>
+              <span className="text-base-100/70">
+                Total balance: {formatTokenAmount(snapshotTotal, assetDecimals)} {assetSymbol}
+              </span>
+            </div>
+          )}
+        </div>
         <div>
           <label htmlFor="dist-payment-token" className="label">Payment token contract</label>
           <input
@@ -373,7 +464,7 @@ function CreateDistributionCard({
         {tx.phase === "idle" ? (
           <button
             type="submit"
-            disabled={tx.pending || !isAdmin || insufficientBalance || needsApproval}
+            disabled={tx.pending || snapshotRefreshing || !isAdmin || insufficientBalance || needsApproval}
             className="btn-primary"
             title={
               !isAdmin
@@ -385,7 +476,7 @@ function CreateDistributionCard({
                     : ""
             }
           >
-            Create distribution
+            {snapshotRefreshing ? "Refreshing holder snapshot…" : "Create distribution"}
           </button>
         ) : (
           <TxProgress
