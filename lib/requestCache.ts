@@ -9,7 +9,7 @@ type CacheEntry<T> = {
   timestamp: number;
 };
 
-const inFlightRequests = new Map<CacheKey, CacheEntry<any>>();
+const inFlightRequests = new Map<CacheKey, CacheEntry<unknown>>();
 const CACHE_DURATION_MS = 5000; // 5 seconds
 
 /**
