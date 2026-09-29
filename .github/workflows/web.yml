@@ -41,7 +41,7 @@ jobs:
 
       # ── Bundle size budget ────────────────────────────────────────────────
       # Guards against accidentally re-introducing large un-tree-shaken chunks
-      # of @stellar/stellar-sdk or recharts (see issues #96 / #97 / #235).
+      # of @stellar/stellar-sdk (see issues #96 / #97 / #235).
       # size-limit reads .size-limit.json; adjust budgets there when the
       # baseline legitimately changes, so reviewers can see the intent.
       # Budgets are kept ~7% above the measured gzip sizes (411.8 kB total,
