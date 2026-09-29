@@ -47,6 +47,30 @@ export class LockedWalletError extends WalletError {
   }
 }
 
+export function normalizeFreighterError(
+  error: unknown,
+): { message: string; code?: number } {
+  if (typeof error === "string") return { message: error };
+  if (error instanceof Error) {
+    const code = (error as Error & { code?: unknown }).code;
+    return {
+      message: error.message,
+      ...(typeof code === "number" ? { code } : {}),
+    };
+  }
+  if (error && typeof error === "object") {
+    const value = error as { code?: unknown; message?: unknown };
+    return {
+      message:
+        typeof value.message === "string" && value.message.length > 0
+          ? value.message
+          : "Freighter returned an unknown error.",
+      ...(typeof value.code === "number" ? { code: value.code } : {}),
+    };
+  }
+  return { message: error == null ? "Freighter returned an unknown error." : String(error) };
+}
+
 /** Whether the Freighter extension is installed and reachable. */
 export async function isFreighterInstalled(): Promise<boolean> {
   try {
@@ -75,7 +99,7 @@ export async function connect(): Promise<string> {
     );
   }
   const res = await fRequestAccess();
-  if (res.error) throw new WalletError(String(res.error));
+  if (res.error) throw new WalletError(normalizeFreighterError(res.error).message);
   if (!res.address) throw new WalletError("No account returned by Freighter.");
   return res.address;
 }
@@ -117,27 +141,27 @@ export async function signTx(
     address,
   });
   if (res.error) {
-    const errorMsg = String(res.error).toLowerCase();
-    // Locked-wallet is checked first: its messages can also mention "user"
-    // ("user must unlock"), which the rejection matcher below would swallow.
+    const { message } = normalizeFreighterError(res.error);
+    const errorMsg = message.toLowerCase();
     if (
       errorMsg.includes("locked") ||
       errorMsg.includes("unlock") ||
-      errorMsg.includes("not connected") ||
-      errorMsg.includes("not allowed")
+      errorMsg.includes("not connected")
     ) {
       throw new LockedWalletError();
     }
+    if (errorMsg.includes("not allowed")) {
+      throw new WalletError("Freighter has not granted this app access");
+    }
     // Detect user rejection: Freighter uses "rejected" or "user denied".
     if (
-      errorMsg.includes("user") ||
       errorMsg.includes("reject") ||
       errorMsg.includes("cancel") ||
       errorMsg.includes("denied")
     ) {
-      throw new UserRejectedError(String(res.error));
+      throw new UserRejectedError(message);
     }
-    throw new WalletError(String(res.error));
+    throw new WalletError(message);
   }
   if (!res.signedTxXdr) throw new WalletError("Freighter returned no signature.");
   return res.signedTxXdr;

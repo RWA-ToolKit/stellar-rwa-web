@@ -60,6 +60,7 @@ import {
   WalletError,
   LockedWalletError,
   UserRejectedError,
+  normalizeFreighterError,
   isFreighterInstalled,
   isAppAllowed,
   connect,
@@ -128,6 +129,33 @@ describe("isAppAllowed", () => {
   });
 });
 
+describe("normalizeFreighterError", () => {
+  it("preserves the message and code from FreighterApiError objects", () => {
+    expect(normalizeFreighterError({ code: 4001, message: "User denied" })).toEqual({
+      message: "User denied",
+      code: 4001,
+    });
+  });
+
+  it("normalizes objects without a code and Error instances", () => {
+    expect(normalizeFreighterError({ message: "Wallet locked" })).toEqual({
+      message: "Wallet locked",
+    });
+    expect(normalizeFreighterError(new Error("Simulation failed"))).toEqual({
+      message: "Simulation failed",
+    });
+  });
+
+  it("preserves strings and never stringifies an unknown object", () => {
+    expect(normalizeFreighterError("User denied")).toEqual({
+      message: "User denied",
+    });
+    expect(normalizeFreighterError({})).toEqual({
+      message: "Freighter returned an unknown error.",
+    });
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Issue #386 — connect
 // ---------------------------------------------------------------------------
@@ -152,7 +180,9 @@ describe("connect", () => {
 
   it("throws WalletError when requestAccess returns an error shape", async () => {
     mockIsConnected.mockResolvedValue({ isConnected: true });
-    mockRequestAccess.mockResolvedValue({ error: "User rejected" });
+    mockRequestAccess.mockResolvedValue({
+      error: { code: 4001, message: "User rejected" },
+    });
     await expect(connect()).rejects.toThrow(WalletError);
     await expect(connect()).rejects.toThrow("User rejected");
   });
@@ -306,7 +336,9 @@ describe("signTx", () => {
   });
 
   it("throws UserRejectedError when signTransaction reports the user declined", async () => {
-    mockSignTransaction.mockResolvedValue({ error: "User denied" });
+    mockSignTransaction.mockResolvedValue({
+      error: { code: 4001, message: "User denied" },
+    });
     await expect(
       signTx("XDR", TESTNET_PASSPHRASE, "GTEST"),
     ).rejects.toThrow(UserRejectedError);
@@ -316,7 +348,9 @@ describe("signTx", () => {
   });
 
   it("throws WalletError when signTransaction returns an error shape unrelated to rejection or a locked wallet", async () => {
-    mockSignTransaction.mockResolvedValue({ error: "Simulation failed" });
+    mockSignTransaction.mockResolvedValue({
+      error: { code: 9999, message: "Simulation failed" },
+    });
     await expect(
       signTx("XDR", TESTNET_PASSPHRASE, "GTEST"),
     ).rejects.toThrow(WalletError);
@@ -352,7 +386,6 @@ describe("signTx", () => {
   it.each([
     "Freighter is locked. Please unlock it.",
     "Please unlock your Freighter wallet",
-    "This app is not allowed to access your wallet",
     "Wallet is not connected",
     "LOCKED: Please try again",
   ])("throws LockedWalletError for %j", async (errorMsg) => {
@@ -360,6 +393,36 @@ describe("signTx", () => {
     await expect(
       signTx("XDR", TESTNET_PASSPHRASE, "GTEST"),
     ).rejects.toBeInstanceOf(LockedWalletError);
+  });
+
+  it("classifies an object error without a code as a locked wallet", async () => {
+    mockSignTransaction.mockResolvedValue({
+      error: { message: "Freighter wallet is locked" },
+    });
+    await expect(signTx("XDR", TESTNET_PASSPHRASE, "GTEST")).rejects.toBeInstanceOf(
+      LockedWalletError,
+    );
+  });
+
+  it("gives app access errors a distinct message", async () => {
+    mockSignTransaction.mockResolvedValue({
+      error: { code: 1001, message: "This app is not allowed to access your wallet" },
+    });
+    await expect(signTx("XDR", TESTNET_PASSPHRASE, "GTEST")).rejects.toThrow(
+      "Freighter has not granted this app access",
+    );
+  });
+
+  it("does not classify an unrelated message containing user as a rejection", async () => {
+    mockSignTransaction.mockResolvedValue({
+      error: { code: 9999, message: "The user profile could not be loaded" },
+    });
+    await expect(signTx("XDR", TESTNET_PASSPHRASE, "GTEST")).rejects.toBeInstanceOf(
+      WalletError,
+    );
+    await expect(signTx("XDR", TESTNET_PASSPHRASE, "GTEST")).rejects.toThrow(
+      "The user profile could not be loaded",
+    );
   });
 });
 
