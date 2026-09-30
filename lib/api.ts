@@ -25,14 +25,33 @@ function apiUrl(path: string): string {
   return `${versioned}${path}`;
 }
 
+/**
+ * How long a single API request may take before we give up and treat the
+ * indexing API as unavailable.
+ *
+ * Without this, `fetch` waits for the platform default (minutes) when the API
+ * is slow or black-holed. The "API first, RPC fallback" design only falls back
+ * once `fetchJson` returns `null`, so a hung API would stall every list and
+ * stat view instead of degrading to RPC, and no loading state would ever end.
+ * On the server the same call is awaited by `generateMetadata` before the
+ * asset page can stream, delaying it for every visitor and crawler.
+ */
+export const API_TIMEOUT_MS = 5_000;
+
 async function fetchJson<T>(url: string): Promise<T | null> {
   if (!url) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) return null;
     return await res.json();
   } catch {
+    // A timeout aborts the request and lands here, which is exactly the
+    // "API unavailable" signal callers use to fall back to RPC.
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
