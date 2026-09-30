@@ -1,16 +1,20 @@
 /**
- * Tests for lib/api.ts
+ * Tests for lib/api.ts, written against **recorded real API payloads** (see
+ * ./apiFixtures.ts) rather than the shapes the client used to assume.
  *
- * fetchJson silently returns null on any failure. These tests pin that
- * contract so a future refactor can't accidentally start throwing.
+ * fetchJson silently returns null on any failure. These tests pin that contract
+ * so a future refactor can't accidentally start throwing.
  *
  * Scenarios covered:
  *   - non-OK HTTP response (404, 500)
  *   - network-level throw (fetch itself rejects)
  *   - malformed JSON body (res.json() rejects)
- *   - missing API base URL (fetch is never called)
- *   - pagination truncation: getAllAssets / getAssetsByIssuer use pageSize=500
- *     and return only the first page regardless of totalPages
+ *   - bare-array responses (no `{ data, total, ... }` envelope)
+ *   - offset/limit pagination instead of the ignored `pageSize=500`
+ *   - snake_case fields mapped to the app's camelCase AssetEntry
+ *   - holder requests keyed on the numeric asset id, not a contract address
+ *   - `issuer` filtered client-side (the API ignores the query param)
+ *   - a malformed payload falls back to "API unavailable" instead of throwing
  *
  * We avoid the real `Response` constructor (not available in jsdom without
  * extra polyfills) and instead build minimal plain objects that satisfy the
@@ -21,38 +25,15 @@
 // is populated for all tests.
 process.env.NEXT_PUBLIC_API_URL = "https://api.example.com";
 
-import { api, type ApiPaginatedResult, type ApiAssetEntry } from "../api";
+import { api, ApiShapeError, toAssetEntry } from "../api";
+import {
+  makeApiAsset,
+  makeApiEvent,
+  makeApiHolder,
+  makeApiStats,
+} from "../testFixtures/recordedResponses";
 
-// ── helpers ────────────────────────────────────────────────────────────────────
-
-/** Minimal ApiAssetEntry fixture. */
-function makeApiAsset(overrides: Partial<ApiAssetEntry> = {}): ApiAssetEntry {
-  return {
-    id: "1",
-    tokenContract: "CTOKEN",
-    issuer: "GISSUER",
-    name: "Lagos Office Tower",
-    assetType: "real_estate",
-    valuation: "500000000",
-    createdAt: 100,
-    active: true,
-    ...overrides,
-  };
-}
-
-function makePaginated<T>(
-  data: T[],
-  overrides: Partial<Omit<ApiPaginatedResult<T>, "data">> = {},
-): ApiPaginatedResult<T> {
-  return {
-    data,
-    total: data.length,
-    page: 1,
-    pageSize: 20,
-    totalPages: 1,
-    ...overrides,
-  };
-}
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 /**
  * Build a mock response object that looks like a successful fetch Response.
@@ -82,27 +63,39 @@ function malformedJsonResponse(): { ok: boolean; json: () => Promise<never> } {
   };
 }
 
+/** A full page of exactly `count` assets, for the pagination loop. */
+function fullPage(count: number) {
+  return Array.from({ length: count }, (_, i) => makeApiAsset({ id: i + 1 }));
+}
+
 // ── mock global fetch ──────────────────────────────────────────────────────────
 
 // We need a flexible mock type here since our helpers return plain objects
 // rather than real Response instances (jsdom doesn't provide the constructor).
-// The cast to unknown then to jest.MockedFunction lets us call mockResolvedValue
-// with our minimal response fixtures without satisfying the full Response interface.
-// fetchJson only uses `.ok` and `.json()` so these fixtures are safe.
+// The cast to unknown then to a structural type lets us call mockResolvedValue
+// with our minimal response fixtures without satisfying the full Response
+// interface. fetchJson only uses `.ok` and `.json()` so these fixtures are safe.
 const mockFetch = jest.fn() as unknown as {
   mockResolvedValue(v: unknown): void;
   mockRejectedValue(v: unknown): void;
+  mockImplementation(fn: (url: string) => Promise<unknown>): void;
   mockReset(): void;
   mock: { calls: unknown[][] };
 };
 
-function getRequestedUrl(): string {
-  const call = mockFetch.mock.calls[0];
-  const url = call?.[0];
+/** The URL passed to the nth fetch call. */
+function requestedUrl(n = 0): string {
+  const url = mockFetch.mock.calls[n]?.[0];
   if (typeof url !== "string") {
     throw new Error("Expected fetch to be called with a URL string.");
   }
   return url;
+}
+
+/** Run `fn` with `console.warn` silenced (shape mismatches log once). */
+function withSilencedWarnings<T>(fn: () => Promise<T>): Promise<T> {
+  const spy = jest.spyOn(console, "warn").mockImplementation(() => {});
+  return fn().finally(() => spy.mockRestore());
 }
 
 beforeAll(() => {
@@ -116,7 +109,7 @@ afterEach(() => {
 });
 
 // ==============================================================================
-// fetchJson error-handling (exercised through api.getStats for brevity)
+// fetchJson error handling (exercised through api.getStats for brevity)
 // ==============================================================================
 
 describe("fetchJson error handling", () => {
@@ -145,23 +138,8 @@ describe("fetchJson error handling", () => {
     expect(await api.getStats()).toBeNull();
   });
 
-  it("does not call fetch and returns null when the API base URL is empty", async () => {
-    // The module caches BASE at import time, so we can't change the env here
-    // and see a different result. Instead we verify the guard by confirming
-    // that apiUrl('') returns '' and fetchJson('') returns null early.
-    // We do this by temporarily monkey-patching — but the simplest way is to
-    // call a method that we know will be called with an empty url when BASE
-    // would be absent. Since the module already loaded with the URL set, we
-    // test the url-empty guard by calling fetchJson indirectly via a spy:
-    // passing a mock that verifies fetch is NOT called at all.
-    // Approach: the empty-url guard is `if (!url) return null` in fetchJson.
-    // We confirm this with the getStats path that we own by deleting the env
-    // and calling a fresh dynamic import — but that's too complex in CJS.
-    // Instead: just confirm fetch is never called when we pass an empty url
-    // string by verifying the guard on getStats with fetch returning nothing.
-    // The behaviour is already confirmed by the module source; this test
-    // protects the other direction — that fetch IS called when url is set.
-    mockFetch.mockResolvedValue(okResponse({ totalAssets: 1, tvl: "100", totalHolders: 1 }));
+  it("calls fetch and parses the body when the URL is set", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiStats()));
 
     const result = await api.getStats();
 
@@ -171,113 +149,107 @@ describe("fetchJson error handling", () => {
 });
 
 // ==============================================================================
-// api.getStats — happy path
+// GET /assets — bare array, offset/limit paging
 // ==============================================================================
 
-describe("api.getStats", () => {
-  it("returns parsed stats on a 200 response", async () => {
-    mockFetch.mockResolvedValue(
-      okResponse({ totalAssets: 5, tvl: "10000000", totalHolders: 42 }),
-    );
+describe("GET /assets response shape (#532)", () => {
+  it("reads a bare JSON array, not a { data, total } envelope", async () => {
+    mockFetch.mockResolvedValue(okResponse([makeApiAsset()]));
 
-    const result = await api.getStats();
+    const page = await api.getAssetsPage();
 
-    expect(result).toEqual({ totalAssets: 5, tvl: "10000000", totalHolders: 42 });
-  });
-});
-
-describe("api.getEvents", () => {
-  it("fetches indexed contract events from the events endpoint", async () => {
-    const events = [
-      {
-        id: 42,
-        contract: "CTOKEN",
-        event_type: "Transfer",
-        ledger: 3514152,
-        timestamp: "2026-07-09T08:43:12.101Z",
-        data: { from: "GA", to: "GB", amount: "100" },
-      },
-    ];
-    mockFetch.mockResolvedValue(okResponse(events));
-
-    expect(await api.getEvents()).toEqual(events);
-    // /v1 prefix is added automatically (#531)
-    expect(mockFetch).toHaveBeenCalledWith("https://api.example.com/v1/events");
+    expect(Array.isArray(page)).toBe(true);
+    expect(page).toHaveLength(1);
   });
 
-  it("returns null when the events endpoint is unavailable", async () => {
-    mockFetch.mockResolvedValue(errorResponse(503));
+  it("returns null when the body is an envelope instead of an array", async () => {
+    // Guards the exact bug: the old client did raw.data.map on a bare array.
+    mockFetch.mockResolvedValue(okResponse({ data: [makeApiAsset()], total: 1 }));
 
-    expect(await api.getEvents()).toBeNull();
+    expect(await api.getAssetsPage()).toBeNull();
   });
-});
 
-// ==============================================================================
-// api.getAssets — pagination params
-// ==============================================================================
+  it("sends offset/limit and the asset_type filter, not page/pageSize/sort", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
 
-describe("api.getAssets", () => {
-  it("passes page, pageSize, type and sort as query params", async () => {
-    mockFetch.mockResolvedValue(okResponse(makePaginated([])));
+    await api.getAssetsPage({ assetType: "real_estate", active: true });
 
-    await api.getAssets(2, 10, "real_estate", "valuation");
+    const url = requestedUrl();
+    expect(url).toContain("offset=0");
+    expect(url).toContain("limit=100");
+    expect(url).toContain("asset_type=real_estate");
+    expect(url).toContain("active=true");
+    // These were unknown to the API and silently ignored.
+    expect(url).not.toContain("pageSize");
+    expect(url).not.toContain("page=");
+    expect(url).not.toContain("sort=");
+  });
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const url = getRequestedUrl();
-    expect(url).toContain("page=2");
-    expect(url).toContain("pageSize=10");
-    expect(url).toContain("type=real_estate");
-    expect(url).toContain("sort=valuation");
+  it("clamps limit to the API maximum of 100", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+
+    // The old client asked for pageSize=500, which the API ignores, capping
+    // the response at 50 and silently truncating the list.
+    await api.getAssetsPage({ limit: 500 });
+
+    expect(requestedUrl()).toContain("limit=100");
   });
 
   it("returns null for a non-OK response", async () => {
     mockFetch.mockResolvedValue(errorResponse(503));
 
-    expect(await api.getAssets()).toBeNull();
+    expect(await api.getAssetsPage()).toBeNull();
   });
 
   it("returns null when fetch throws", async () => {
     mockFetch.mockRejectedValue(new Error("network down"));
 
-    expect(await api.getAssets()).toBeNull();
+    expect(await api.getAssetsPage()).toBeNull();
   });
 });
 
-// ==============================================================================
-// api.getAllAssets — pageSize=500 truncation
-// ==============================================================================
+describe("api.getAllAssets pagination loop (#532)", () => {
+  it("walks every page instead of requesting pageSize=500 once", async () => {
+    // Three pages: two full pages of 100, then a short final page.
+    mockFetch.mockImplementation((url: string) => {
+      const offset = Number(new URL(url).searchParams.get("offset"));
+      if (offset === 0 || offset === 100) {
+        return Promise.resolve(okResponse(fullPage(100)));
+      }
+      return Promise.resolve(okResponse([makeApiAsset({ id: 201 })]));
+    });
 
-describe("api.getAllAssets", () => {
-  it("requests exactly pageSize=500 (one-shot fetch, no multi-page loop)", async () => {
-    const assets = [makeApiAsset({ id: "1" }), makeApiAsset({ id: "2" })];
-    // Simulate a server that has more pages but getAllAssets only fetches one.
+    const result = await api.getAllAssets();
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(result).toHaveLength(201);
+    expect(result?.[0]?.id).toBe(1n);
+    expect(result?.[200]?.id).toBe(201n);
+  });
+
+  it("stops after a single request when the first page is short", async () => {
     mockFetch.mockResolvedValue(
-      okResponse(makePaginated(assets, { total: 1000, totalPages: 2, pageSize: 500 })),
+      okResponse([makeApiAsset(), makeApiAsset({ id: 2 })]),
     );
 
     const result = await api.getAllAssets();
 
-    // Only one fetch call — no pagination loop.
     expect(mockFetch).toHaveBeenCalledTimes(1);
-    const url = getRequestedUrl();
-    expect(url).toContain("pageSize=500");
-
-    // Only the assets from the single page are returned.
     expect(result).toHaveLength(2);
   });
 
-  it("maps id and valuation strings to bigints (preserving precision beyond MAX_SAFE_INTEGER)", async () => {
-    // 9007199254740993 is Number.MAX_SAFE_INTEGER + 1 — would lose precision
-    // if converted via Number().
+  it("maps id and valuation_cents to bigints (preserving precision beyond MAX_SAFE_INTEGER)", async () => {
+    // 9007199254740993 is Number.MAX_SAFE_INTEGER + 1 — it would lose
+    // precision if converted via Number().
     mockFetch.mockResolvedValue(
-      okResponse(makePaginated([makeApiAsset({ id: "42", valuation: "9007199254740993" })])),
+      okResponse([makeApiAsset({ id: 42, valuation_cents: "9007199254740993" })]),
     );
 
     const result = await api.getAllAssets();
 
-    expect(
-      result?.map(({ id, valuation }) => [id, valuation]),
-    ).toEqual([[42n, 9007199254740993n]]);
+    expect(result?.map(({ id, valuation }) => [id, valuation])).toEqual([
+      [42n, 9007199254740993n],
+    ]);
   });
 
   it("returns null for a non-OK response", async () => {
@@ -297,24 +269,54 @@ describe("api.getAllAssets", () => {
 
     expect(await api.getAllAssets()).toBeNull();
   });
+
+  it("falls back to RPC (null) when a page is malformed rather than throwing", async () => {
+    // BigInt("not-a-number") used to throw out of the hook as a load error.
+    mockFetch.mockResolvedValue(
+      okResponse([makeApiAsset({ valuation_cents: "not-a-number" })]),
+    );
+
+    expect(await withSilencedWarnings(() => api.getAllAssets())).toBeNull();
+  });
+
+  it("falls back to RPC (null) when a required field is missing", async () => {
+    const broken = makeApiAsset();
+    delete (broken as Record<string, unknown>).token_contract;
+    mockFetch.mockResolvedValue(okResponse([broken]));
+
+    expect(await withSilencedWarnings(() => api.getAllAssets())).toBeNull();
+  });
 });
 
 // ==============================================================================
-// api.getAsset
+// GET /assets/:id
 // ==============================================================================
 
 describe("api.getAsset", () => {
-  it("returns a mapped AssetEntry for a valid response", async () => {
-    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: "7" })));
+  it("maps a real Asset payload to an AssetEntry", async () => {
+    const payload = makeApiAsset({ id: 7 });
+    mockFetch.mockResolvedValue(okResponse(payload));
 
     const result = await api.getAsset(7n);
 
     expect(result).not.toBeNull();
     expect(result!.id).toBe(7n);
-    expect(result!.tokenContract).toBe("CTOKEN");
-    expect(result!.issuer).toBe("GISSUER");
-    expect(result!.valuation).toBe(500000000n);
+    expect(result!.tokenContract).toBe(payload.token_contract);
+    expect(result!.issuer).toBe(payload.issuer);
+    expect(result!.name).toBe("Lagos Office Tower");
+    expect(result!.assetType).toBe("real_estate");
+    expect(result!.valuation).toBe(50000000000n);
+    // createdAt comes from created_at_ledger.
+    expect(result!.createdAt).toBe(3514152);
     expect(result!.active).toBe(true);
+  });
+
+  it("requests the numeric registry id, not a contract address", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 3 })));
+
+    await api.getAsset(3n);
+
+    expect(requestedUrl()).toBe("https://api.example.com/v1/assets/3");
   });
 
   it("returns null for a 404 response", async () => {
@@ -334,94 +336,220 @@ describe("api.getAsset", () => {
 
     expect(await api.getAsset(1n)).toBeNull();
   });
+
+  it("returns null for a malformed payload instead of throwing", async () => {
+    mockFetch.mockResolvedValue(okResponse({ id: 1, name: "missing fields" }));
+
+    expect(await withSilencedWarnings(() => api.getAsset(1n))).toBeNull();
+  });
 });
 
 // ==============================================================================
-// api.getAssetsByIssuer — pageSize=500 truncation
+// getAssetsByIssuer — client-side filter, no issuer query param
 // ==============================================================================
 
-describe("api.getAssetsByIssuer", () => {
-  it("requests exactly pageSize=500 and URL-encodes the issuer address", async () => {
-    mockFetch.mockResolvedValue(okResponse(makePaginated([])));
+describe("api.getAssetsByIssuer (#532)", () => {
+  const issuer = "GISSUER_A";
 
-    await api.getAssetsByIssuer("GISSUER+SPECIAL");
+  it("does not send an issuer query param the API would ignore", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const url = getRequestedUrl();
-    expect(url).toContain("pageSize=500");
-    expect(url).toContain(encodeURIComponent("GISSUER+SPECIAL"));
+    await api.getAssetsByIssuer(issuer);
+
+    // Unknown query params are silently ignored, which used to return every
+    // asset unfiltered in the issuer view.
+    expect(requestedUrl()).not.toContain("issuer");
   });
 
-  it("returns only the first page regardless of totalPages (no loop)", async () => {
-    const assets = Array.from({ length: 3 }, (_, i) =>
-      makeApiAsset({ id: String(i + 1) }),
-    );
+  it("filters the full list client-side", async () => {
     mockFetch.mockResolvedValue(
-      okResponse(makePaginated(assets, { total: 900, totalPages: 2, pageSize: 500 })),
+      okResponse([
+        makeApiAsset({ id: 1, issuer }),
+        makeApiAsset({ id: 2, issuer: "GISSUER_B" }),
+        makeApiAsset({ id: 3, issuer }),
+      ]),
     );
 
-    const result = await api.getAssetsByIssuer("GISSUER");
+    const result = await api.getAssetsByIssuer(issuer);
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(result).toHaveLength(3);
+    expect(result?.map((a) => a.id)).toEqual([1n, 3n]);
+  });
+
+  it("returns an empty list when no asset belongs to the issuer", async () => {
+    mockFetch.mockResolvedValue(
+      okResponse([makeApiAsset({ issuer: "GISSUER_B" })]),
+    );
+
+    expect(await api.getAssetsByIssuer(issuer)).toEqual([]);
   });
 
   it("returns null for a non-OK response", async () => {
     mockFetch.mockResolvedValue(errorResponse(500));
 
-    expect(await api.getAssetsByIssuer("GISSUER")).toBeNull();
+    expect(await api.getAssetsByIssuer(issuer)).toBeNull();
   });
 
   it("returns null when fetch throws", async () => {
     mockFetch.mockRejectedValue(new TypeError("Network error"));
 
-    expect(await api.getAssetsByIssuer("GISSUER")).toBeNull();
+    expect(await api.getAssetsByIssuer(issuer)).toBeNull();
   });
 
   it("returns null for a malformed JSON body", async () => {
     mockFetch.mockResolvedValue(malformedJsonResponse());
 
-    expect(await api.getAssetsByIssuer("GISSUER")).toBeNull();
+    expect(await api.getAssetsByIssuer(issuer)).toBeNull();
   });
 });
 
 // ==============================================================================
-// api.getHolders
+// GET /stats — snake_case fields
 // ==============================================================================
 
-describe("api.getHolders", () => {
+describe("GET /stats response shape (#532)", () => {
+  it("maps total_assets, tvl_cents and total_holders", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiStats()));
+
+    expect(await api.getStats()).toEqual({
+      totalAssets: 128,
+      tvl: "8750000000000",
+      totalHolders: 4213,
+    });
+  });
+
+  it("maps a stats body with no holders to null rather than undefined", async () => {
+    const stats = makeApiStats();
+    delete (stats as Record<string, unknown>).total_holders;
+    mockFetch.mockResolvedValue(okResponse(stats));
+
+    expect((await api.getStats())?.totalHolders).toBeNull();
+  });
+
+  it("returns null for a malformed stats payload instead of throwing", async () => {
+    // BigInt("abc") used to surface as NaN/undefined stats.
+    mockFetch.mockResolvedValue(
+      okResponse({ total_assets: 5, tvl_cents: "abc" }),
+    );
+
+    expect(await withSilencedWarnings(() => api.getStats())).toBeNull();
+  });
+
+  it("returns null when total_assets is missing", async () => {
+    mockFetch.mockResolvedValue(
+      okResponse({ tvl_cents: "1", total_holders: 0 }),
+    );
+
+    expect(await withSilencedWarnings(() => api.getStats())).toBeNull();
+  });
+});
+
+// ==============================================================================
+// GET /assets/:id/holders — keyed on the asset id
+// ==============================================================================
+
+describe("GET /assets/:id/holders (#532)", () => {
+  it("requests the numeric asset id, not the token contract", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+
+    await api.getHolders(12n);
+
+    // A contract address in this path segment is a 400 from the API.
+    const url = requestedUrl();
+    expect(url).toBe(
+      "https://api.example.com/v1/assets/12/holders?offset=0&limit=100",
+    );
+  });
+
   it("maps balance strings to bigints (preserving precision)", async () => {
     mockFetch.mockResolvedValue(
       okResponse([
-        { address: "GHOLDER1", balance: "9007199254740993" },
-        { address: "GHOLDER2", balance: "0" },
+        makeApiHolder({ address: "GHOLDER1", balance: "9007199254740993" }),
+        makeApiHolder({ address: "GHOLDER2", balance: "0" }),
       ]),
     );
 
-    const result = await api.getHolders("CTOKEN");
+    const result = await api.getHolders(1n);
 
-    expect(result?.map(({ balance }) => balance)).toEqual([
-      9007199254740993n,
-      0n,
-    ]);
+    expect(result?.map(({ balance }) => balance)).toEqual([9007199254740993n, 0n]);
   });
 
   it("returns null for a non-OK response", async () => {
     mockFetch.mockResolvedValue(errorResponse(404));
 
-    expect(await api.getHolders("CTOKEN")).toBeNull();
+    expect(await api.getHolders(1n)).toBeNull();
   });
 
   it("returns null when fetch throws", async () => {
     mockFetch.mockRejectedValue(new Error("Timeout"));
 
-    expect(await api.getHolders("CTOKEN")).toBeNull();
+    expect(await api.getHolders(1n)).toBeNull();
   });
 
   it("returns null for a malformed JSON body", async () => {
     mockFetch.mockResolvedValue(malformedJsonResponse());
 
-    expect(await api.getHolders("CTOKEN")).toBeNull();
+    expect(await api.getHolders(1n)).toBeNull();
+  });
+
+  it("returns null when a holder balance is not an integer", async () => {
+    mockFetch.mockResolvedValue(okResponse([makeApiHolder({ balance: "oops" })]));
+
+    expect(await withSilencedWarnings(() => api.getHolders(1n))).toBeNull();
+  });
+});
+
+// ==============================================================================
+// GET /events
+// ==============================================================================
+
+describe("api.getEvents", () => {
+  it("fetches indexed contract events from the events endpoint", async () => {
+    const events = [makeApiEvent()];
+    mockFetch.mockResolvedValue(okResponse(events));
+
+    expect(await api.getEvents()).toEqual(events);
+    // /v1 prefix is added automatically (#531)
+    expect(requestedUrl()).toBe("https://api.example.com/v1/events");
+  });
+
+  it("returns null when the events endpoint is unavailable", async () => {
+    mockFetch.mockResolvedValue(errorResponse(503));
+
+    expect(await api.getEvents()).toBeNull();
+  });
+
+  it("returns null when the body is not an array", async () => {
+    mockFetch.mockResolvedValue(okResponse({ events: [] }));
+
+    expect(await api.getEvents()).toBeNull();
+  });
+});
+
+// ==============================================================================
+// Mapping helpers
+// ==============================================================================
+
+describe("toAssetEntry", () => {
+  it("throws ApiShapeError on a non-integer valuation", () => {
+    expect(() =>
+      toAssetEntry(makeApiAsset({ valuation_cents: "12.5" }) as never),
+    ).toThrow(ApiShapeError);
+  });
+
+  it("throws ApiShapeError when token_contract is empty", () => {
+    expect(() =>
+      toAssetEntry(makeApiAsset({ token_contract: "" }) as never),
+    ).toThrow(ApiShapeError);
+  });
+
+  it("throws ApiShapeError when the payload is not an object", () => {
+    expect(() => toAssetEntry(null as never)).toThrow(ApiShapeError);
+  });
+
+  it("treats a non-boolean active as inactive rather than throwing", () => {
+    expect(toAssetEntry(makeApiAsset({ active: "yes" }) as never).active).toBe(
+      false,
+    );
   });
 });
 
@@ -431,29 +559,21 @@ describe("api.getHolders", () => {
 
 describe("apiUrl /v1 prefix (#531)", () => {
   it("api.getStats requests /v1/stats", async () => {
-    mockFetch.mockResolvedValue(
-      okResponse({ totalAssets: 1, tvl: "100", totalHolders: 1 }),
-    );
+    mockFetch.mockResolvedValue(okResponse(makeApiStats()));
     await api.getStats();
-    expect(getRequestedUrl()).toBe("https://api.example.com/v1/stats");
+    expect(requestedUrl()).toBe("https://api.example.com/v1/stats");
   });
 
   it("api.getAllAssets requests /v1/assets", async () => {
-    mockFetch.mockResolvedValue(okResponse(makePaginated([])));
+    mockFetch.mockResolvedValue(okResponse([]));
     await api.getAllAssets();
-    expect(getRequestedUrl()).toMatch(/^https:\/\/api\.example\.com\/v1\/assets/);
+    expect(requestedUrl()).toMatch(/^https:\/\/api\.example\.com\/v1\/assets/);
   });
 
   it("api.getAsset requests /v1/assets/:id", async () => {
-    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: "3" })));
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 3 })));
     await api.getAsset(3n);
-    expect(getRequestedUrl()).toBe("https://api.example.com/v1/assets/3");
-  });
-
-  it("api.getHolders requests /v1/assets/:contract/holders", async () => {
-    mockFetch.mockResolvedValue(okResponse([]));
-    await api.getHolders("CTOKEN");
-    expect(getRequestedUrl()).toBe("https://api.example.com/v1/assets/CTOKEN/holders");
+    expect(requestedUrl()).toBe("https://api.example.com/v1/assets/3");
   });
 
   it("does not double-append /v1 if the env var already ends with /v1", async () => {

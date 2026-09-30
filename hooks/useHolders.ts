@@ -41,18 +41,22 @@ export async function fetchOnChainHolders(
 /**
  * @param refreshKey Bump this (e.g. after a confirmed transfer) to force a
  * refetch even though `complianceId`/`tokenContract`/`network` didn't change.
+ * @param assetId The numeric registry asset id. `GET /assets/:id/holders` is
+ * keyed on the registry id (`Path<u64>`) — a contract address in that segment
+ * is a 400. When omitted the API path is skipped and we read on-chain.
  */
 export function useHolders(
   complianceId: string | null,
   tokenContract: string | null,
   refreshKey = 0,
+  assetId: bigint | null = null,
 ) {
   const { network } = useWallet();
   return useAsync<Holder[]>(
     async () => {
       if (!complianceId || !tokenContract) return [];
 
-      const fromApi = tokenContract ? await api.getHolders(tokenContract) : null;
+      const fromApi = assetId ? await api.getHolders(assetId) : null;
       if (fromApi) {
         return fromApi
           .filter((h) => h.balance > 0n)
@@ -62,7 +66,7 @@ export function useHolders(
       // Dedupe allowlist reads across concurrent hooks
       return fetchOnChainHolders(network, complianceId, tokenContract);
     },
-    [complianceId, tokenContract, network, refreshKey],
+    [complianceId, tokenContract, network, refreshKey, assetId?.toString() ?? null],
     Boolean(complianceId && tokenContract),
   );
 }

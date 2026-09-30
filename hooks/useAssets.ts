@@ -33,7 +33,7 @@ export function usePlatformStats() {
         return {
           totalAssets: fromApi.totalAssets,
           tvl: BigInt(fromApi.tvl),
-          totalHolders: fromApi.totalHolders,
+          totalHolders: fromApi.totalHolders ?? null,
           assets: null,
         };
       }

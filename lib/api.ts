@@ -1,8 +1,17 @@
-import type { AssetEntry, AssetMetadata, Network, KycRecord, Distribution } from "@/types";
+import type { AssetEntry, Network } from "@/types";
 
 const BASE = typeof process !== "undefined"
   ? process.env.NEXT_PUBLIC_API_URL
   : undefined;
+
+/**
+ * The indexing API caps `limit` at 100 on every paginated endpoint, so a
+ * "give me everything" read has to walk the pages itself.
+ */
+const MAX_LIMIT = 100;
+
+/** Guard against a server that keeps returning full pages forever. */
+const MAX_PAGES = 50;
 
 /**
  * Build a full API URL for `path`.
@@ -36,34 +45,54 @@ async function fetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-export interface ApiAssetEntry {
-  id: string;
-  tokenContract: string;
+// ─────────────────────────────────────────────────────────────────────────────
+// Wire types
+//
+// These mirror `docs/public/openapi.json` in `stellar-rwa-api-docs`: the
+// `Asset`, `Stats`, `Holder` and `Event` schemas. The API speaks snake_case and
+// returns bare JSON arrays rather than an envelope, so every field below is
+// named exactly as the server sends it — anything else here is a guess that
+// silently breaks against the real API.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** `GET /assets` element and `GET /assets/:id` body. */
+export interface ApiAsset {
+  id: number;
+  token_contract: string;
   issuer: string;
   name: string;
-  assetType: string;
-  valuation: string;
-  createdAt: number;
+  symbol: string;
+  asset_type: string;
+  description: string;
+  /** USD cents, as a decimal string to preserve 64-bit precision. */
+  valuation_cents: string;
+  valuation_usd: number;
+  decimals: number;
+  total_supply: string;
+  holders: number;
   active: boolean;
+  paused: boolean;
+  compliance_contract: string;
+  /** Ledger sequence at registration. */
+  created_at_ledger: number;
+  indexed_at_ledger: number;
+  index_error: string | null;
 }
 
-export interface ApiPaginatedResult<T> {
-  data: T[];
-  total: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
-}
-
+/** `GET /stats` body, in the app's camelCase shape. */
 export interface ApiStatsResult {
   totalAssets: number;
+  /** USD cents, as a decimal string to preserve 64-bit precision. */
   tvl: string;
-  totalHolders: number;
+  totalHolders: number | null;
 }
 
-export interface ApiHolderResult {
+/** `GET /assets/:id/holders` element. */
+export interface ApiHolder {
   address: string;
+  /** Raw token amount, as a decimal string to preserve 64-bit precision. */
   balance: string;
+  share_percent: number;
 }
 
 export interface ApiEvent {
@@ -75,55 +104,194 @@ export interface ApiEvent {
   data: Record<string, unknown>;
 }
 
-function toAssetEntry(a: ApiAssetEntry): AssetEntry {
+/** Raised when a payload does not match the OpenAPI schema. */
+export class ApiShapeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ApiShapeError";
+  }
+}
+
+/** Parse an integer-ish wire value into a bigint without precision loss. */
+function toBigInt(value: string | number | null | undefined, field: string): bigint {
+  if (typeof value === "number") {
+    if (!Number.isInteger(value)) {
+      throw new ApiShapeError(`${field} is not an integer: ${value}`);
+    }
+    return BigInt(value);
+  }
+  if (typeof value !== "string" || !/^-?\d+$/.test(value)) {
+    throw new ApiShapeError(`${field} is not an integer: ${String(value)}`);
+  }
+  return BigInt(value);
+}
+
+/**
+ * Map a wire `Asset` to the app's `AssetEntry`.
+ *
+ * Throws `ApiShapeError` when a required field is missing or malformed. That
+ * is caught and turned into "API unavailable" by `mapOrNull` below, so a shape
+ * mismatch degrades to RPC instead of surfacing as a hard load error.
+ */
+export function toAssetEntry(a: ApiAsset): AssetEntry {
+  if (!a || typeof a !== "object") {
+    throw new ApiShapeError("asset payload is not an object");
+  }
+  if (typeof a.token_contract !== "string" || !a.token_contract) {
+    throw new ApiShapeError("asset.token_contract is missing");
+  }
+  if (typeof a.issuer !== "string") {
+    throw new ApiShapeError("asset.issuer is missing");
+  }
+  if (typeof a.name !== "string") {
+    throw new ApiShapeError("asset.name is missing");
+  }
+  if (typeof a.asset_type !== "string") {
+    throw new ApiShapeError("asset.asset_type is missing");
+  }
   return {
-    id: BigInt(a.id),
-    tokenContract: a.tokenContract,
+    id: toBigInt(a.id, "asset.id"),
+    tokenContract: a.token_contract,
     issuer: a.issuer,
     name: a.name,
-    assetType: a.assetType,
-    valuation: BigInt(a.valuation),
-    createdAt: a.createdAt,
-    active: a.active,
+    assetType: a.asset_type,
+    valuation: toBigInt(a.valuation_cents, "asset.valuation_cents"),
+    createdAt: typeof a.created_at_ledger === "number" ? a.created_at_ledger : 0,
+    active: a.active === true,
   };
 }
 
+/** Map a wire `Stats` body to the camelCase shape the hooks consume. */
+export function toStatsResult(raw: {
+  total_assets?: unknown;
+  tvl_cents?: unknown;
+  total_holders?: unknown;
+}): ApiStatsResult {
+  if (!raw || typeof raw !== "object") {
+    throw new ApiShapeError("stats payload is not an object");
+  }
+  if (typeof raw.total_assets !== "number") {
+    throw new ApiShapeError("stats.total_assets is missing");
+  }
+  return {
+    totalAssets: raw.total_assets,
+    tvl: toBigInt(raw.tvl_cents as string, "stats.tvl_cents").toString(),
+    totalHolders:
+      typeof raw.total_holders === "number" ? raw.total_holders : null,
+  };
+}
+
+/**
+ * Run a mapping that can throw, degrading to "API unavailable" on a shape
+ * mismatch. `BigInt("abc")` in the middle of a list would otherwise throw out
+ * of the hook as a load error instead of falling back to RPC.
+ */
+function mapOrNull<T>(map: () => T, context: string): T | null {
+  try {
+    return map();
+  } catch (e) {
+    console.warn(
+      `[api] Ignoring unusable ${context} response from the indexing API:`,
+      e instanceof Error ? e.message : e,
+    );
+    return null;
+  }
+}
+
+/** Query params supported by `GET /assets`. */
+export interface GetAssetsParams {
+  assetType?: string;
+  active?: boolean;
+  offset?: number;
+  limit?: number;
+}
+
 export const api = {
-  getAssets(page = 1, pageSize = 20, type?: string, sort?: string): Promise<ApiPaginatedResult<ApiAssetEntry> | null> {
-    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-    if (type) params.set("type", type);
-    if (sort) params.set("sort", sort);
-    return fetchJson<ApiPaginatedResult<ApiAssetEntry>>(apiUrl(`/assets?${params}`));
+  /**
+   * One page of `GET /assets`. The endpoint returns a **bare array** with
+   * `offset`/`limit` paging (default 50, max 100) — it is not enveloped, and
+   * it has no `page`/`pageSize`/`sort` parameters.
+   */
+  async getAssetsPage(params: GetAssetsParams = {}): Promise<ApiAsset[] | null> {
+    const query = new URLSearchParams();
+    if (params.assetType) query.set("asset_type", params.assetType);
+    if (params.active !== undefined) query.set("active", String(params.active));
+    query.set("offset", String(params.offset ?? 0));
+    query.set("limit", String(Math.min(params.limit ?? MAX_LIMIT, MAX_LIMIT)));
+    const raw = await fetchJson<ApiAsset[]>(apiUrl(`/assets?${query}`));
+    return Array.isArray(raw) ? raw : null;
   },
 
+  /**
+   * Walk every page of `GET /assets` and return the mapped entries.
+   *
+   * The API caps `limit` at 100 and ignores the `pageSize=500` this client
+   * used to send, so a single request silently truncated the list at 50.
+   */
   async getAllAssets(): Promise<AssetEntry[] | null> {
-    const raw = await fetchJson<ApiPaginatedResult<ApiAssetEntry>>(apiUrl("/assets?pageSize=500"));
-    if (!raw) return null;
-    return raw.data.map(toAssetEntry);
+    const all: AssetEntry[] = [];
+    for (let page = 0; page < MAX_PAGES; page++) {
+      const batch = await api.getAssetsPage({ offset: page * MAX_LIMIT });
+      if (!batch) return null;
+      const mapped = mapOrNull(() => batch.map(toAssetEntry), "assets");
+      if (!mapped) return null;
+      all.push(...mapped);
+      // A short page means we have reached the end.
+      if (batch.length < MAX_LIMIT) break;
+    }
+    return all;
   },
 
+  /** `GET /assets/:id` — the path segment is the numeric registry asset id. */
   async getAsset(id: bigint): Promise<AssetEntry | null> {
-    const raw = await fetchJson<ApiAssetEntry>(apiUrl(`/assets/${id}`));
-    return raw ? toAssetEntry(raw) : null;
+    const raw = await fetchJson<ApiAsset>(apiUrl(`/assets/${id.toString()}`));
+    if (!raw) return null;
+    return mapOrNull(() => toAssetEntry(raw), "asset");
   },
 
+  /**
+   * Assets issued by `issuer`.
+   *
+   * The API has no `issuer` query filter — unknown params are silently
+   * ignored, so sending one used to return the *unfiltered* list. Filter
+   * client-side instead.
+   */
   async getAssetsByIssuer(issuer: string): Promise<AssetEntry[] | null> {
-    const raw = await fetchJson<ApiPaginatedResult<ApiAssetEntry>>(apiUrl(`/assets?issuer=${encodeURIComponent(issuer)}&pageSize=500`));
-    if (!raw) return null;
-    return raw.data.map(toAssetEntry);
+    const all = await api.getAllAssets();
+    if (!all) return null;
+    return all.filter((asset) => asset.issuer === issuer);
   },
 
   getStats(): Promise<ApiStatsResult | null> {
-    return fetchJson<ApiStatsResult>(apiUrl("/stats"));
+    return fetchJson<{ total_assets?: unknown; tvl_cents?: unknown; total_holders?: unknown }>(
+      apiUrl("/stats"),
+    ).then((raw) => (raw ? mapOrNull(() => toStatsResult(raw), "stats") : null));
   },
 
   getEvents(): Promise<ApiEvent[] | null> {
-    return fetchJson<ApiEvent[]>(apiUrl("/events"));
+    return fetchJson<ApiEvent[]>(apiUrl("/events")).then((raw) =>
+      Array.isArray(raw) ? raw : null,
+    );
   },
 
-  async getHolders(tokenContract: string): Promise<{ address: string; balance: bigint }[] | null> {
-    const raw = await fetchJson<ApiHolderResult[]>(apiUrl(`/assets/${encodeURIComponent(tokenContract)}/holders`));
-    if (!raw) return null;
-    return raw.map((h) => ({ address: h.address, balance: BigInt(h.balance) }));
+  /**
+   * Holders of an asset.
+   *
+   * `GET /assets/{id}/holders` takes the **numeric registry asset id**
+   * (`Path<u64>`) — a contract address in that segment is a 400.
+   */
+  async getHolders(assetId: bigint): Promise<{ address: string; balance: bigint }[] | null> {
+    const raw = await fetchJson<ApiHolder[]>(
+      apiUrl(`/assets/${assetId.toString()}/holders?offset=0&limit=${MAX_LIMIT}`),
+    );
+    if (!Array.isArray(raw)) return null;
+    return mapOrNull(
+      () =>
+        raw.map((h) => ({
+          address: h.address,
+          balance: toBigInt(h.balance, "holder.balance"),
+        })),
+      "holders",
+    );
   },
 };
