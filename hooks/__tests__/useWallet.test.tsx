@@ -127,3 +127,98 @@ describe("useWallet", () => {
     expect(localStorage.getItem(STORAGE_KEY)).toBe("1");
   });
 });
+
+/**
+ * #520 — blocked / unavailable localStorage.
+ *
+ * Some browsers and embeds make every `Storage.prototype` member throw a
+ * `SecurityError` (private browsing, site data blocked, sandboxed iframes).
+ * The wallet must keep working: the persisted flag is only a convenience used
+ * to probe for a prior session on mount.
+ */
+describe("useWallet with blocked localStorage (#520)", () => {
+  const STORAGE_KEY = "rwa.wallet.connected";
+  const SecurityError = () => new Error("SecurityError: storage is blocked");
+
+  let getSpy: jest.SpyInstance;
+  let setSpy: jest.SpyInstance;
+  let removeSpy: jest.SpyInstance;
+  const rejections: unknown[] = [];
+  let onUnhandled: (reason: unknown) => void;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    rejections.length = 0;
+    onUnhandled = (reason: unknown) => rejections.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+
+    getSpy = jest.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw SecurityError();
+    });
+    setSpy = jest.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw SecurityError();
+    });
+    removeSpy = jest
+      .spyOn(Storage.prototype, "removeItem")
+      .mockImplementation(() => {
+        throw SecurityError();
+      });
+  });
+
+  afterEach(() => {
+    process.off("unhandledRejection", onUnhandled);
+    getSpy.mockRestore();
+    setSpy.mockRestore();
+    removeSpy.mockRestore();
+  });
+
+  const wrapper = ({ children }: { children: React.ReactNode }) => (
+    <WalletProvider>{children}</WalletProvider>
+  );
+
+  it("connect() resolves, sets the address and leaves error null", async () => {
+    (isFreighterInstalled as jest.Mock).mockResolvedValue(true);
+    (fConnect as jest.Mock).mockResolvedValue("GNEWLYCONNECTED");
+    (getWalletNetwork as jest.Mock).mockResolvedValue("testnet");
+
+    const { result } = renderHook(() => useWallet(), { wrapper });
+
+    await act(async () => {
+      await expect(result.current.connect()).resolves.toBeUndefined();
+    });
+
+    expect(result.current.address).toBe("GNEWLYCONNECTED");
+    expect(result.current.error).toBeNull();
+    expect(result.current.connecting).toBe(false);
+  });
+
+  it("mounts without an unhandled rejection and without restoring a session", async () => {
+    (isFreighterInstalled as jest.Mock).mockResolvedValue(true);
+    (getConnectedAddress as jest.Mock).mockResolvedValue("GSTORED");
+
+    const { result } = renderHook(() => useWallet(), { wrapper });
+
+    await waitFor(() => expect(result.current.installed).toBe(true));
+    // Storage is unreadable, so we must not probe for or restore a session.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getConnectedAddress).not.toHaveBeenCalled();
+    expect(result.current.address).toBeNull();
+    expect(rejections).toEqual([]);
+  });
+
+  it("disconnect() clears state and never throws", async () => {
+    (isFreighterInstalled as jest.Mock).mockResolvedValue(false);
+
+    const { result } = renderHook(() => useWallet(), { wrapper });
+
+    act(() => {
+      expect(() => result.current.disconnect()).not.toThrow();
+    });
+
+    expect(result.current.address).toBeNull();
+    expect(result.current.walletNetwork).toBeNull();
+  });
+});

@@ -56,6 +56,42 @@ const WalletContext = createContext<WalletContextValue | null>(null);
 const STORAGE_KEY = "rwa.wallet.connected";
 
 /**
+ * `localStorage` access can throw a `SecurityError` rather than return null:
+ * private-browsing modes, browsers configured to block site data and sandboxed
+ * iframes all deny the access. Because the flag is only a convenience (it tells
+ * us whether to probe the wallet on mount), a blocked storage must never break
+ * connecting — it just means the session cannot be restored next time.
+ *
+ * Every read returns `null` on failure and every write is a no-op.
+ */
+const safeStorage = {
+  get(key: string): string | null {
+    try {
+      if (typeof window === "undefined") return null;
+      return window.localStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key: string, value: string): void {
+    try {
+      if (typeof window === "undefined") return;
+      window.localStorage.setItem(key, value);
+    } catch {
+      // Storage is unavailable or full — the flag is best-effort.
+    }
+  },
+  remove(key: string): void {
+    try {
+      if (typeof window === "undefined") return;
+      window.localStorage.removeItem(key);
+    } catch {
+      // Nothing to clear if we cannot write in the first place.
+    }
+  },
+};
+
+/**
  * Value used when the provider fails to initialise. Keeps the app usable in a
  * read-only, disconnected state instead of blanking the whole tree, and lets
  * the user retry the wallet connection.
@@ -147,7 +183,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       setInstalled(present);
       if (!present) return;
-      if (typeof window !== "undefined" && localStorage.getItem(STORAGE_KEY)) {
+      // A null flag means either "never connected" or "storage is blocked";
+      // both cases simply skip session restore.
+      if (safeStorage.get(STORAGE_KEY)) {
         const existing = await getConnectedAddress();
         if (cancelled) return;
         if (existing) {
@@ -156,10 +194,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         } else {
           // Access was revoked in the wallet since we last connected — drop
           // the stale flag so we stop silently probing on every load.
-          localStorage.removeItem(STORAGE_KEY);
+          safeStorage.remove(STORAGE_KEY);
         }
       }
-    })();
+    })().catch(() => {
+      // A blocked localStorage (or any other storage-level failure) must not
+      // escape as an unhandled rejection from this un-awaited IIFE.
+    });
     return () => {
       cancelled = true;
     };
@@ -221,7 +262,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const addr = await fConnect();
       setAddress(addr);
-      if (typeof window !== "undefined") localStorage.setItem(STORAGE_KEY, "1");
+      // Persisting the flag is best-effort: if storage is blocked the wallet is
+      // still connected, so a failure here must not surface as a connect error.
+      safeStorage.set(STORAGE_KEY, "1");
       await syncNetwork();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect wallet.");
@@ -234,7 +277,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const disconnect = useCallback(() => {
     setAddress(null);
     setWalletNetwork(null);
-    if (typeof window !== "undefined") localStorage.removeItem(STORAGE_KEY);
+    safeStorage.remove(STORAGE_KEY);
   }, []);
 
   const setNetwork = useCallback(
