@@ -15,6 +15,12 @@ import { ComplianceBadge } from "@/components/compliance/ComplianceBadge";
 interface TransferPanelProps {
   asset: AssetDetail;
   balance: bigint;
+  /**
+   * True while the balance for the *current* account is still in flight.
+   * `balance` must not be read as authoritative while this is set — during an
+   * account switch the value belongs to the previous address (#521).
+   */
+  balanceLoading?: boolean;
   onTransferred?: () => void;
 }
 
@@ -24,7 +30,12 @@ interface TransferPanelProps {
  * holders, and the recipient is validated up front. Every gating condition is
  * surfaced with an explicit message rather than a silently disabled button.
  */
-export function TransferPanel({ asset, balance, onTransferred }: TransferPanelProps) {
+export function TransferPanel({
+  asset,
+  balance,
+  balanceLoading = false,
+  onTransferred,
+}: TransferPanelProps) {
   const { address } = useWallet();
   const { metadata } = asset;
   const compliance = useCompliance(metadata.complianceContract, address);
@@ -56,16 +67,20 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
   const approved = compliance.data?.allowed ?? false;
   const status = compliance.data?.status ?? "None";
   const paused = metadata.paused;
-  // Do not evaluate transfer eligibility while compliance is still loading —
-  // treating an unresolved status as "not allowed" would flash "Transfer
-  // unavailable" copy before the check completes (issues #33 / #34).
-  const canTransfer = !complianceLoading && approved && !paused && balance > 0n;
+  // Do not evaluate transfer eligibility while compliance or the balance is
+  // still loading — treating an unresolved status as "not allowed" would flash
+  // "Transfer unavailable" copy before the check completes (issues #33 / #34),
+  // and an unresolved balance must not be read as zero (#521).
+  const canTransfer =
+    !complianceLoading && !balanceLoading && approved && !paused && balance > 0n;
   let amountValid = false;
-  try {
-    const rawAmount = parseTokenAmount(amount, metadata.decimals);
-    amountValid = rawAmount > 0n && rawAmount <= balance;
-  } catch {
-    amountValid = false;
+  if (!balanceLoading) {
+    try {
+      const rawAmount = parseTokenAmount(amount, metadata.decimals);
+      amountValid = rawAmount > 0n && rawAmount <= balance;
+    } catch {
+      amountValid = false;
+    }
   }
   const recipientInvalid =
     recipientFormatValid && !recipientCompliance.loading && !recipientCompliance.data?.allowed;
@@ -109,6 +124,12 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
       setFormError("Amount must be greater than zero.");
       return;
     }
+    // Never submit against an unresolved balance — it belongs to the previous
+    // account while a switch is in flight (#521).
+    if (balanceLoading) {
+      setFormError("Still loading your balance — try again in a moment.");
+      return;
+    }
     if (raw > balance) {
       setFormError("Amount exceeds your balance.");
       return;
@@ -129,9 +150,13 @@ export function TransferPanel({ asset, balance, onTransferred }: TransferPanelPr
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-base-100/55">Your balance</span>
-        <span className="font-semibold text-base-100">
-          {formatTokenAmount(balance, metadata.decimals)} {metadata.symbol}
-        </span>
+        {balanceLoading ? (
+          <span className="text-xs text-base-100/55">Loading…</span>
+        ) : (
+          <span className="font-semibold text-base-100">
+            {formatTokenAmount(balance, metadata.decimals)} {metadata.symbol}
+          </span>
+        )}
       </div>
       <div className="flex items-center justify-between">
         <span className="text-sm text-base-100/55">Your compliance status</span>
