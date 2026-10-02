@@ -194,6 +194,9 @@ export function AssetDetailView({ id }: { id: bigint }) {
             <TransferPanel
               asset={detail}
               balance={balance.data ?? 0n}
+              // #521: while an account switch is in flight the previous
+              // account's balance must not be rendered or validated against.
+              balanceLoading={balance.loading}
               onTransferred={() => {
                 balance.refetch();
                 dividends.refetch();

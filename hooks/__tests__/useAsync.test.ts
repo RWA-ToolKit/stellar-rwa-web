@@ -27,6 +27,17 @@ function makeRejectingLoader(message: string, delay = 0): () => Promise<never> {
     );
 }
 
+/** A promise we resolve or reject by hand, to observe mid-flight state. */
+function makeDeferred<T>() {
+  let resolve!: (v: T) => void;
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe("useAsync", () => {
@@ -214,6 +225,128 @@ describe("useAsync", () => {
 
     await waitFor(() => expect(result.current.data).toBe("v2"));
     expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  // ── stale data across a dependency change (#521) ─────────────────────────
+
+  describe("stale data across a dependency change (#521)", () => {
+    it("clears data and updatedAt while the new deps are loading", async () => {
+      const second = makeDeferred<string>();
+      const loader = jest
+        .fn<Promise<string>, []>()
+        .mockResolvedValueOnce("account-a")
+        .mockReturnValueOnce(second.promise);
+
+      let address = "A";
+      const { result, rerender } = renderHook(() => useAsync(loader, [address]));
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.data).toBe("account-a");
+      expect(result.current.updatedAt).toEqual(expect.any(Number));
+
+      // Account switches to B — B's read is still in flight.
+      address = "B";
+      rerender();
+
+      // A's balance must never be shown as B's.
+      expect(result.current.data).toBeNull();
+      expect(result.current.updatedAt).toBeNull();
+      expect(result.current.loading).toBe(true);
+
+      await act(async () => {
+        second.resolve("account-b");
+      });
+      expect(result.current.data).toBe("account-b");
+    });
+
+    it("leaves data null when the load for the new deps fails", async () => {
+      const loader = jest
+        .fn<Promise<string>, []>()
+        .mockResolvedValueOnce("account-a")
+        .mockRejectedValueOnce(new Error("rate limited"));
+
+      let address = "A";
+      const { result, rerender } = renderHook(() => useAsync(loader, [address]));
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.data).toBe("account-a");
+
+      address = "B";
+      rerender();
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      // The failure must not leave A's data on screen under B's address.
+      expect(result.current.error).toBe("rate limited");
+      expect(result.current.data).toBeNull();
+      expect(result.current.updatedAt).toBeNull();
+    });
+
+    it("clears data when a refetch of the same deps fails", async () => {
+      const loader = jest
+        .fn<Promise<string>, []>()
+        .mockResolvedValueOnce("value")
+        .mockRejectedValueOnce(new Error("offline"));
+
+      const { result } = renderHook(() => useAsync(loader, ["same"]));
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.data).toBe("value");
+
+      act(() => {
+        result.current.refetch();
+      });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(result.current.data).toBeNull();
+    });
+
+    it("keeps data while refetch() reloads the same deps", async () => {
+      const second = makeDeferred<string>();
+      const loader = jest
+        .fn<Promise<string>, []>()
+        .mockResolvedValueOnce("first")
+        .mockReturnValueOnce(second.promise);
+
+      const { result } = renderHook(() => useAsync(loader, ["stable"]));
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.data).toBe("first");
+
+      act(() => {
+        result.current.refetch();
+      });
+
+      // A manual refresh must not flash an empty state.
+      expect(result.current.loading).toBe(true);
+      expect(result.current.data).toBe("first");
+
+      await act(async () => {
+        second.resolve("second");
+      });
+      expect(result.current.data).toBe("second");
+    });
+
+    it("clears data when the hook becomes disabled", async () => {
+      const loader = jest.fn().mockResolvedValue("value");
+
+      let enabled = true;
+      const { result, rerender } = renderHook(() =>
+        useAsync(loader, ["dep"], enabled),
+      );
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.data).toBe("value");
+
+      enabled = false;
+      rerender();
+
+      // Data was produced for conditions that no longer hold (e.g. the wallet
+      // disconnected), so it must not stay on screen.
+      expect(result.current.data).toBeNull();
+      expect(result.current.updatedAt).toBeNull();
+      expect(result.current.loading).toBe(false);
+      expect(loader).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("does not re-run the loader when deps are the same value but different array identity", async () => {

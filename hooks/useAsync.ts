@@ -14,6 +14,17 @@ export interface AsyncState<T> {
  * Run an async loader whenever its dependencies change, tracking
  * loading/error state and guarding against out-of-order responses.
  * Pass `enabled: false` to defer until preconditions are met.
+ *
+ * `data` is scoped to the `(deps, enabled)` key it was loaded for. When that
+ * key changes — or when the load fails — `data` is reset to `null`, so the
+ * hook can never expose a value produced for previous dependencies. This
+ * matters for account-scoped reads such as `useBalance` (deps
+ * `[tokenContract, address, network]`) and `useDividends` (deps include
+ * `address`): during an account switch the previous account's balance must not
+ * be presented as the new account's.
+ *
+ * A plain `refetch()` keeps the current data while it reloads, so manual
+ * refreshes do not flash an empty state.
  */
 export function useAsync<T>(
   loader: () => Promise<T>,
@@ -29,13 +40,31 @@ export function useAsync<T>(
   // array identity/length — unstable references or a changing-length caller
   // deps array no longer break the useCallback dependency list below.
   const depsKey = JSON.stringify(deps);
+  // Identifies the dependency set the currently exposed `data` belongs to.
+  // `null` means nothing has been loaded yet.
+  const loadedKey = useRef<string | null>(null);
+  const runKey = `${enabled}|${depsKey}`;
 
   const run = useCallback(() => {
     if (!enabled) {
+      // The hook is disabled, so any data we hold was produced for conditions
+      // that no longer hold (e.g. a wallet that just disconnected).
+      if (loadedKey.current !== null) {
+        loadedKey.current = null;
+        setData(null);
+        setUpdatedAt(null);
+      }
       setLoading(false);
       return;
     }
     const id = ++reqId.current;
+    // Drop data from a different dependency set, but keep it for a refetch of
+    // the same one so a manual refresh doesn't blank the view.
+    if (loadedKey.current !== runKey) {
+      setData(null);
+      setUpdatedAt(null);
+    }
+    loadedKey.current = runKey;
     setLoading(true);
     setError(null);
     loader()
@@ -49,11 +78,14 @@ export function useAsync<T>(
       .catch((e) => {
         if (id === reqId.current) {
           setError(e instanceof Error ? e.message : "Something went wrong.");
+          // A failed load must not leave the previous key's value on screen.
+          setData(null);
+          setUpdatedAt(null);
           setLoading(false);
         }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, depsKey]);
+  }, [enabled, depsKey, runKey]);
 
   useEffect(() => {
     run();
