@@ -47,11 +47,15 @@ describe("useHolders", () => {
       { address: "HOLDER_ZERO", balance: 0n },
     ]);
 
-    const { result } = renderHook(() => useHolders("COMP_A", "TOKEN_A"));
+    const { result } = renderHook(() =>
+      useHolders("COMP_A", "TOKEN_A", 0, 42n),
+    );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(api.getHolders).toHaveBeenCalledWith("TOKEN_A");
+    // #532: the API holder endpoint is keyed on the numeric registry asset id,
+    // not the token contract address.
+    expect(api.getHolders).toHaveBeenCalledWith(42n);
     expect(result.current.data).toEqual([
       { address: "HOLDER_2", balance: 1000n },
       { address: "HOLDER_1", balance: 500n },
@@ -63,13 +67,30 @@ describe("useHolders", () => {
       { address: "SOLO_HOLDER", balance: 1000000n },
     ]);
 
-    const { result } = renderHook(() => useHolders("COMP_A", "TOKEN_A"));
+    const { result } = renderHook(() =>
+      useHolders("COMP_A", "TOKEN_A", 0, 42n),
+    );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.data).toEqual([
       { address: "SOLO_HOLDER", balance: 1000000n },
     ]);
+  });
+
+  it("skips the API and reads on-chain when no asset id is available (#532)", async () => {
+    // Without the registry id the holder endpoint cannot be addressed at all,
+    // so we must not call it and must fall back to the allowlist read.
+    (compliance.getAllowlist as jest.Mock).mockResolvedValue(["ADDR_1"]);
+    (assetToken.balance as jest.Mock).mockResolvedValue(200n);
+
+    const { result } = renderHook(() => useHolders("COMP_A", "TOKEN_A"));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(api.getHolders).not.toHaveBeenCalled();
+    expect(compliance.getAllowlist).toHaveBeenCalledWith("testnet", "COMP_A");
+    expect(result.current.data).toEqual([{ address: "ADDR_1", balance: 200n }]);
   });
 
   it("falls back to allowlist + contract balances when api.getHolders returns null", async () => {
@@ -86,7 +107,9 @@ describe("useHolders", () => {
       return Promise.resolve(0n);
     });
 
-    const { result } = renderHook(() => useHolders("COMP_A", "TOKEN_A"));
+    const { result } = renderHook(() =>
+      useHolders("COMP_A", "TOKEN_A", 0, 42n),
+    );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -120,7 +143,7 @@ describe("useHolders", () => {
 
     let refreshKey = 0;
     const { result, rerender } = renderHook(() =>
-      useHolders("COMP_A", "TOKEN_A", refreshKey),
+      useHolders("COMP_A", "TOKEN_A", refreshKey, 42n),
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));

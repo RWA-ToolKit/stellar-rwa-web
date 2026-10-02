@@ -29,6 +29,8 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
     metadata.complianceContract,
     asset.tokenContract,
     refreshKey,
+    // #532: the API's holder endpoint is keyed on the registry asset id.
+    asset.id,
   );
   const [displayCount, setDisplayCount] = useState(ROWS_PER_PAGE);
 
