@@ -9,12 +9,11 @@
  *   - non-OK HTTP response (404, 500)
  *   - network-level throw (fetch itself rejects)
  *   - malformed JSON body (res.json() rejects)
- *   - bare-array responses (no `{ data, total, ... }` envelope)
- *   - offset/limit pagination instead of the ignored `pageSize=500`
- *   - snake_case fields mapped to the app's camelCase AssetEntry
- *   - holder requests keyed on the numeric asset id, not a contract address
- *   - `issuer` filtered client-side (the API ignores the query param)
- *   - a malformed payload falls back to "API unavailable" instead of throwing
+ *   - missing API base URL (fetch is never called)
+ *   - request timeout: a fetch that never settles is aborted and reported as
+ *     "API unavailable" (null) so callers fall back to RPC (#524)
+ *   - pagination truncation: getAllAssets / getAssetsByIssuer use pageSize=500
+ *     and return only the first page regardless of totalPages
  *
  * We avoid the real `Response` constructor (not available in jsdom without
  * extra polyfills) and instead build minimal plain objects that satisfy the
@@ -25,13 +24,7 @@
 // is populated for all tests.
 process.env.NEXT_PUBLIC_API_URL = "https://api.example.com";
 
-import { api, ApiShapeError, toAssetEntry } from "../api";
-import {
-  makeApiAsset,
-  makeApiEvent,
-  makeApiHolder,
-  makeApiStats,
-} from "../testFixtures/recordedResponses";
+import { api, API_TIMEOUT_MS, type ApiPaginatedResult, type ApiAssetEntry } from "../api";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -78,7 +71,9 @@ function fullPage(count: number) {
 const mockFetch = jest.fn() as unknown as {
   mockResolvedValue(v: unknown): void;
   mockRejectedValue(v: unknown): void;
-  mockImplementation(fn: (url: string) => Promise<unknown>): void;
+  mockImplementation(
+    fn: (url: string, init?: RequestInit) => Promise<unknown>,
+  ): void;
   mockReset(): void;
   mock: { calls: unknown[][] };
 };
@@ -166,7 +161,12 @@ describe("GET /assets response shape (#532)", () => {
     // Guards the exact bug: the old client did raw.data.map on a bare array.
     mockFetch.mockResolvedValue(okResponse({ data: [makeApiAsset()], total: 1 }));
 
-    expect(await api.getAssetsPage()).toBeNull();
+    expect(await api.getEvents()).toEqual(events);
+    // /v1 prefix is added automatically (#531)
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://api.example.com/v1/events",
+      expect.objectContaining({ signal: expect.anything() }),
+    );
   });
 
   it("sends offset/limit and the asset_type filter, not page/pageSize/sort", async () => {
@@ -550,6 +550,99 @@ describe("toAssetEntry", () => {
     expect(toAssetEntry(makeApiAsset({ active: "yes" }) as never).active).toBe(
       false,
     );
+  });
+});
+
+// ==============================================================================
+// Issue #524 — request timeout
+// ==============================================================================
+
+describe("fetchJson timeout (#524)", () => {
+  it("passes an AbortSignal so a slow request can be cancelled", async () => {
+    mockFetch.mockResolvedValue(
+      okResponse({ totalAssets: 1, tvl: "100", totalHolders: 1 }),
+    );
+
+    await api.getStats();
+
+    const init = mockFetch.mock.calls[0]?.[1] as RequestInit | undefined;
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    // The signal must still be live right after a successful response.
+    expect(init?.signal?.aborted).toBe(false);
+  });
+
+  it("resolves to null when the request never responds, after the timeout", async () => {
+    jest.useFakeTimers();
+    try {
+      // A fetch that only settles if/when it is aborted — i.e. a black-holed
+      // or slow API, which is exactly the case this timeout exists for.
+      mockFetch.mockImplementation(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new Error("The operation was aborted.")),
+            );
+          }),
+      );
+
+      const pending = api.getStats();
+
+      // Nothing has resolved yet — the request is still in flight.
+      jest.advanceTimersByTime(API_TIMEOUT_MS - 1);
+      await Promise.resolve();
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      // Past the timeout the request is aborted and reported as unavailable,
+      // which is the signal callers use to fall back to RPC.
+      jest.advanceTimersByTime(2);
+      await expect(pending).resolves.toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("treats a timed-out request as unavailable for every endpoint", async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetch.mockImplementation(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () =>
+              reject(new Error("The operation was aborted.")),
+            );
+          }),
+      );
+
+      const pending = Promise.all([
+        api.getStats(),
+        api.getAllAssets(),
+        api.getEvents(),
+        api.getAsset(1n),
+      ]);
+      jest.advanceTimersByTime(API_TIMEOUT_MS + 1);
+
+      // All four resolve to null rather than hanging, so useAssets /
+      // usePlatformStats / useHolders / useActivity all fall back to RPC.
+      await expect(pending).resolves.toEqual([null, null, null, null]);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("clears the timeout once a response arrives so the timer does not leak", async () => {
+    jest.useFakeTimers();
+    try {
+      mockFetch.mockResolvedValue(
+        okResponse({ totalAssets: 1, tvl: "100", totalHolders: 1 }),
+      );
+
+      await expect(api.getStats()).resolves.not.toBeNull();
+
+      // No pending timer should remain to abort an already-settled request.
+      expect(jest.getTimerCount()).toBe(0);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });
 
