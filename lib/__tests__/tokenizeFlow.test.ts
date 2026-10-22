@@ -485,4 +485,39 @@ describe("tokenizeFlow", () => {
       expect(id).toBe(0n);
     });
   });
+
+  // Issue #608 — dependency array / stale closure audit
+  // Audit result: lib/tokenizeFlow.ts exports plain async functions. It has no
+  // hooks, no dependency arrays, and no module-level mutable state, so there is
+  // nothing that can close over stale props/state. These tests pin that down.
+  describe("stale closure audit (#608)", () => {
+    it("each call uses the arguments it was given, with no state carried between calls", async () => {
+      jest.mocked(assetToken.getMetadata).mockResolvedValue({
+        name: "A",
+        symbol: "A",
+      } as unknown as AssetMetadata);
+
+      await validateTokenContract("testnet", "CFIRST");
+      await validateTokenContract("public", "CSECOND");
+
+      expect(assetToken.getMetadata).toHaveBeenNthCalledWith(1, "testnet", "CFIRST");
+      expect(assetToken.getMetadata).toHaveBeenNthCalledWith(2, "public", "CSECOND");
+    });
+
+    it("registerAsset reads issuer from the ctx passed on each call", async () => {
+      jest.mocked(registry.registerAsset).mockResolvedValue({ hash: "h", returnValue: 1n });
+      const data: TokenizeFormData = {
+        tokenContract: "CTOKEN",
+        name: "Asset",
+        assetType: "RWA",
+        valuation: 1n,
+      };
+
+      await registerAsset({ network: "testnet", source: "GONE", sign: jest.fn() }, data);
+      await registerAsset({ network: "testnet", source: "GTWO", sign: jest.fn() }, data);
+
+      const issuers = jest.mocked(registry.registerAsset).mock.calls.map((c) => c[1].issuer);
+      expect(issuers).toEqual(["GONE", "GTWO"]);
+    });
+  });
 });
