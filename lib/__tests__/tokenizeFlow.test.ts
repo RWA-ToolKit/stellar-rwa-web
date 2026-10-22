@@ -444,4 +444,45 @@ describe("tokenizeFlow", () => {
       expect(message).toBe("boom");
     });
   });
+
+  // Issue #607 — empty / zero / null input is deliberate
+  describe("empty and zero input (#607)", () => {
+    const ctx: WriteCtx = { network: "testnet", source: "GISSUER", sign: jest.fn() };
+
+    it("validateTokenContract with an empty address surfaces the readable error when the read fails", async () => {
+      jest.mocked(assetToken.getMetadata).mockRejectedValue(new Error("invalid address"));
+      await expect(validateTokenContract("testnet", "")).rejects.toThrow(
+        "Could not read the token contract",
+      );
+    });
+
+    it("validateTokenContract rejects when metadata is null-ish fields", async () => {
+      jest.mocked(assetToken.getMetadata).mockResolvedValue({
+        name: null,
+        symbol: null,
+      } as unknown as AssetMetadata);
+      await expect(validateTokenContract("testnet", "CTOKEN")).rejects.toThrow(
+        "missing name or symbol",
+      );
+    });
+
+    it("registerAsset passes a zero valuation and empty strings through unchanged (validation lives in the form/contract)", async () => {
+      jest.mocked(registry.registerAsset).mockResolvedValue({ hash: "h", returnValue: 0n });
+      const data: TokenizeFormData = {
+        tokenContract: "",
+        name: "",
+        assetType: "",
+        valuation: 0n,
+      };
+
+      const id = await registerAsset(ctx, data);
+
+      expect(registry.registerAsset).toHaveBeenCalledWith(ctx, {
+        issuer: ctx.source,
+        ...data,
+      });
+      // A returned id of 0 is a real id, not "missing" -> 0n, not null.
+      expect(id).toBe(0n);
+    });
+  });
 });
