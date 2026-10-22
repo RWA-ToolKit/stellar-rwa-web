@@ -227,4 +227,26 @@ describe("useAsset", () => {
     expect(result.current.data).toBeNull();
     expect(result.current.notFound).toBe(false);
   });
+
+  // ── empty / zero input (#627) ────────────────────────────────────────────
+
+  it("treats id 0n as a real id (only null disables the hook)", async () => {
+    const entry = makeEntry({ id: BigInt(0) });
+    const metadata = makeMetadata();
+    (registry.getAsset as jest.Mock).mockResolvedValue(entry);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(metadata);
+
+    const { result } = renderHook(() => useAsset(BigInt(0)));
+
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(registry.getAsset).toHaveBeenCalledWith("testnet", BigInt(0));
+    expect(result.current.data).toEqual({ ...entry, metadata });
+  });
+
+  it("never reports notFound for a null id", () => {
+    const { result } = renderHook(() => useAsset(null));
+    expect(result.current.notFound).toBe(false);
+  });
 });
