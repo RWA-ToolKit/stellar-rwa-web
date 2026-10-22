@@ -14,7 +14,11 @@ import type { AssetEntry } from "@/types";
  */
 export function useHolderTotals(assets: AssetEntry[] | null) {
   const { network } = useWallet();
-  const key = assets ? assets.map((a) => a.id.toString()).join(",") : "";
+  // The loader reads tokenContract, so it must be part of the key; keying on
+  // id alone would leave a stale closure if a contract address changed.
+  const key = assets
+    ? assets.map((a) => `${a.id.toString()}:${a.tokenContract}`).join(",")
+    : "";
   return useAsync<number>(
     async () => {
       if (!assets || assets.length === 0) return 0;

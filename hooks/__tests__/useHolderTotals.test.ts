@@ -154,4 +154,24 @@ describe("useHolderTotals", () => {
     expect(result.current.data).toBe(0);
     expect(result.current.error).toBeNull();
   });
+
+  it("re-runs the loader when an asset keeps its id but changes tokenContract", async () => {
+    (api.getStats as jest.Mock).mockResolvedValue(null);
+    (assetToken.getMetadata as jest.Mock).mockImplementation(async (_net, tokenContract) => ({
+      complianceContract: `C-${tokenContract}`,
+    }));
+    (compliance.getAllowlist as jest.Mock).mockImplementation(async (_net, c) =>
+      c === "C-T1" ? ["a"] : ["a", "b"],
+    );
+
+    const { result, rerender } = renderHook(
+      ({ assets }) => useHolderTotals(assets),
+      { initialProps: { assets: [makeAsset({ id: 1n, tokenContract: "T1" })] } },
+    );
+    await waitFor(() => expect(result.current.data).toBe(1));
+
+    rerender({ assets: [makeAsset({ id: 1n, tokenContract: "T2" })] });
+    await waitFor(() => expect(result.current.data).toBe(2));
+    expect(assetToken.getMetadata).toHaveBeenLastCalledWith("testnet", "T2");
+  });
 });
