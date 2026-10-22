@@ -4,8 +4,14 @@ import type { AssetDetail } from "@/types";
 import { DistributionPanel } from "./DistributionPanel";
 
 // Mock the wallet so the panel renders without a funded account.
+// `network` is a mutable binding so individual tests can switch it mid-session.
+const walletState: { address: string | null; network: string } = {
+  address: null,
+  network: "testnet",
+};
+
 vi.mock("@/hooks/useWallet", () => ({
-  useWallet: () => ({ address: null, network: "testnet" }),
+  useWallet: () => ({ address: walletState.address, network: walletState.network }),
 }));
 
 // Mock the transaction hook so no RPC is touched.
@@ -201,5 +207,65 @@ describe("DistributionPanel unmount during in-flight async call", () => {
 
     expect(allCalls).not.toMatch(/unmounted component/i);
     expect(allCalls).not.toMatch(/Can't perform a React state update/i);
+  });
+});
+
+describe("DistributionPanel network switch mid-session", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    walletState.address = null;
+    walletState.network = "testnet";
+  });
+
+  afterEach(() => {
+    walletState.network = "testnet";
+  });
+
+  it("does not leak stale-network data into the UI when the network switches while a lookup is in flight", async () => {
+    const contracts = await import("@/lib/contracts");
+
+    const balanceSpy = contracts.assetToken.balance as unknown as ReturnType<typeof vi.fn>;
+    const allowanceSpy = contracts.assetToken.allowance as unknown as ReturnType<typeof vi.fn>;
+    const decimalsSpy = contracts.assetToken.decimals as unknown as ReturnType<typeof vi.fn>;
+
+    // First (testnet) lookup hangs so we can switch networks while it is in
+    // flight; the second (mainnet) lookup resolves immediately.
+    let resolveTestnetBalance: (value: bigint) => void = () => {};
+    let callCount = 0;
+    balanceSpy.mockImplementation(() => {
+      callCount += 1;
+      if (callCount === 1) {
+        return new Promise<bigint>((resolve) => { resolveTestnetBalance = resolve; });
+      }
+      return Promise.resolve(0n);
+    });
+    allowanceSpy.mockImplementation(async () => 0n);
+    decimalsSpy.mockImplementation(async () => 7);
+
+    const { rerender } = render(<DistributionPanel asset={makeAsset()} />);
+
+    // The testnet lookup has been kicked off but not resolved yet.
+    expect(balanceSpy).toHaveBeenCalled();
+
+    // Switch the selected network mid-session (testnet -> mainnet).
+    walletState.network = "mainnet";
+    rerender(<DistributionPanel asset={makeAsset()} />);
+
+    // Now resolve the stale testnet lookup after the switch. A panel that
+    // does not guard against cross-network responses would apply this value
+    // to the mainnet view.
+    resolveTestnetBalance(123456789n);
+
+    // Flush pending microtasks so any post-switch state updates run.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The stale testnet balance must not be rendered after the switch.
+    expect(screen.queryByText(/123456789/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/1,234,567\.89/)).not.toBeInTheDocument();
+
+    // The panel still renders its required-role notice and no error alert.
+    expect(screen.getByText(/Required role:/i)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
