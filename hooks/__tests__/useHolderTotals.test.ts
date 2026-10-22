@@ -35,13 +35,15 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
+let mockNetwork = "testnet";
 jest.mock("@/hooks/useWallet", () => ({
-  useWallet: () => ({ network: "testnet" }),
+  useWallet: () => ({ network: mockNetwork }),
 }));
 
 describe("useHolderTotals", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNetwork = "testnet";
   });
 
   it("returns null when assets is null, and 0 for an empty array", async () => {
@@ -125,5 +127,31 @@ describe("useHolderTotals", () => {
 
     expect(result.current.error).toBe("Failed to read metadata");
     expect(result.current.data).toBeNull();
+  });
+
+  it("returns 0 without any network call for an empty asset list", async () => {
+    const { result } = renderHook(() => useHolderTotals([]));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Deliberate: no assets means no holders, so we skip the API and RPC reads.
+    expect(result.current.data).toBe(0);
+    expect(result.current.error).toBeNull();
+    expect(api.getStats).not.toHaveBeenCalled();
+    expect(assetToken.getMetadata).not.toHaveBeenCalled();
+    expect(compliance.getAllowlist).not.toHaveBeenCalled();
+  });
+
+  it("returns 0 when the allowlists are empty", async () => {
+    (api.getStats as jest.Mock).mockResolvedValue(null);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue({ complianceContract: "C1" });
+    (compliance.getAllowlist as jest.Mock).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useHolderTotals([makeAsset()]));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.data).toBe(0);
+    expect(result.current.error).toBeNull();
   });
 });
