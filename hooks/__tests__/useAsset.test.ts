@@ -281,4 +281,28 @@ describe("useAsset", () => {
 
     expect(registry.getAsset).toHaveBeenCalledTimes(1);
   });
+
+  // ── unmount during in-flight call (#629) ─────────────────────────────────
+
+  it("unmounting mid-flight produces no console error or warning", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    let resolveEntry!: (e: AssetEntry) => void;
+    (registry.getAsset as jest.Mock).mockReturnValue(
+      new Promise<AssetEntry>((r) => {
+        resolveEntry = r;
+      }),
+    );
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata());
+
+    const { unmount } = renderHook(() => useAsset(BigInt(1)));
+    unmount();
+    resolveEntry(makeEntry());
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
 });
