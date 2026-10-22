@@ -12,6 +12,23 @@ const event: TransferActivity = {
 };
 
 describe("ActivityPanel", () => {
+  it("shows the empty state when no activity is available", () => {
+    render(
+      <ActivityPanel
+        events={null}
+        loading={false}
+        error={null}
+        decimals={7}
+        onRetry={jest.fn()}
+      />,
+    );
+
+    expect(screen.getByText("No recent transfers")).toBeInTheDocument();
+    expect(
+      screen.getByText(/recent indexed transfers for this asset will appear here/i),
+    ).toBeInTheDocument();
+  });
+
   it("renders transfer amount, addresses, and ledger when no timestamp is available", () => {
     render(
       <ActivityPanel

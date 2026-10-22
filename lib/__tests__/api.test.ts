@@ -529,6 +529,16 @@ describe("api.getEvents", () => {
 
     expect(await api.getEvents()).toBeNull();
   });
+
+  it("requests the requested offset and caps the page size", async () => {
+    mockFetch.mockResolvedValue(okResponse([makeApiEvent()]));
+
+    await api.getEvents({ offset: 100, limit: 500 });
+
+    expect(requestedUrl()).toBe(
+      "https://api.example.com/v1/events?offset=100&limit=100",
+    );
+  });
 });
 
 // ==============================================================================

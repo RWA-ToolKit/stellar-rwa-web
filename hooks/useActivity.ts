@@ -1,6 +1,6 @@
 "use client";
 
-import { api, type ApiEvent } from "@/lib/api";
+import { api, API_MAX_PAGES, API_PAGE_SIZE, type ApiEvent } from "@/lib/api";
 import { useAsync } from "@/hooks/useAsync";
 
 export interface TransferActivity {
@@ -37,13 +37,21 @@ function toTransferActivity(event: ApiEvent): TransferActivity | null {
 export function useActivity(tokenContract: string | null, refreshKey = 0) {
   return useAsync<TransferActivity[]>(
     async () => {
-      if (!tokenContract) return [];
+      if (!tokenContract || !api.isConfigured()) return [];
 
-      const events = await api.getEvents();
-      if (!events) {
-        throw new Error(
-          "Transfer history is unavailable. Configure the indexing API or try again later.",
-        );
+      const events: ApiEvent[] = [];
+      for (let page = 0; page < API_MAX_PAGES; page++) {
+        const batch = await api.getEvents({
+          offset: page * API_PAGE_SIZE,
+          limit: API_PAGE_SIZE,
+        });
+        if (!batch) {
+          throw new Error(
+            "Transfer history is unavailable. The indexing API could not load the events feed.",
+          );
+        }
+        events.push(...batch);
+        if (batch.length < API_PAGE_SIZE) break;
       }
 
       return events
@@ -55,6 +63,6 @@ export function useActivity(tokenContract: string | null, refreshKey = 0) {
         .filter((event): event is TransferActivity => event !== null);
     },
     [tokenContract, refreshKey],
-    Boolean(tokenContract),
+    Boolean(tokenContract && api.isConfigured()),
   );
 }
