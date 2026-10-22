@@ -52,6 +52,9 @@ npm run test
 npm run typecheck
 ```
 
+For request deduplication timing and cache staleness behavior, see
+[Request cache behavior](docs/request-cache.md).
+
 ### Coverage floor and bundle budget
 
 CI fails when unit-test coverage drops below the floor in `jest.config.js`
