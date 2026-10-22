@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { AssetDetail } from "@/types";
 import { DistributionPanel } from "./DistributionPanel";
@@ -135,5 +135,71 @@ describe("DistributionPanel dependency arrays / stale closures", () => {
     await screen.findByText(/Required role:/i);
 
     expect(balanceSpy.mock.calls.length).toBe(initialBalanceCalls);
+  });
+});
+
+describe("DistributionPanel unmount during in-flight async call", () => {
+  let errorSpy: ReturnType<typeof vi.spyOn>;
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+
+  it("does not warn about state updates on an unmounted component when unmounted mid-flight", async () => {
+    const contracts = await import("@/lib/contracts");
+
+    // Make the async lookups hang until we resolve them manually, so the
+    // component is guaranteed to be unmounted while the calls are in flight.
+    let resolveBalance: (value: bigint) => void = () => {};
+    let resolveAllowance: (value: bigint) => void = () => {};
+    let resolveDecimals: (value: number) => void = () => {};
+
+    const balanceSpy = contracts.assetToken.balance as unknown as ReturnType<typeof vi.fn>;
+    const allowanceSpy = contracts.assetToken.allowance as unknown as ReturnType<typeof vi.fn>;
+    const decimalsSpy = contracts.assetToken.decimals as unknown as ReturnType<typeof vi.fn>;
+
+    balanceSpy.mockImplementation(
+      () => new Promise<bigint>((resolve) => { resolveBalance = resolve; }),
+    );
+    allowanceSpy.mockImplementation(
+      () => new Promise<bigint>((resolve) => { resolveAllowance = resolve; }),
+    );
+    decimalsSpy.mockImplementation(
+      () => new Promise<number>((resolve) => { resolveDecimals = resolve; }),
+    );
+
+    const { unmount } = render(<DistributionPanel asset={makeAsset()} />);
+
+    // The lookups have been kicked off but not resolved yet.
+    expect(balanceSpy).toHaveBeenCalled();
+
+    // Unmount while the async calls are still pending.
+    unmount();
+
+    // Now resolve the in-flight promises after unmount. A component that
+    // updates state without an unmount guard would trigger React's
+    // "state update on an unmounted component" warning here.
+    resolveBalance(0n);
+    resolveAllowance(0n);
+    resolveDecimals(7);
+
+    // Flush pending microtasks so any post-unmount state updates run.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const allCalls = [...errorSpy.mock.calls, ...warnSpy.mock.calls]
+      .map((args) => args.map((a) => String(a)).join(" "))
+      .join("\n");
+
+    expect(allCalls).not.toMatch(/unmounted component/i);
+    expect(allCalls).not.toMatch(/Can't perform a React state update/i);
   });
 });
