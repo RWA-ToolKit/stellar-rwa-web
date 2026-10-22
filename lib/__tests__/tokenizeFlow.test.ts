@@ -520,4 +520,32 @@ describe("tokenizeFlow", () => {
       expect(issuers).toEqual(["GONE", "GTWO"]);
     });
   });
+
+  // Issue #609 — unmount during an in-flight async call
+  // tokenizeFlow has no React state, so a late resolution cannot trigger a
+  // "state update on unmounted component" warning from within the module.
+  describe("in-flight call outliving its caller (#609)", () => {
+    it("resolves late without emitting any React/console warnings", async () => {
+      const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+      let resolve!: (m: AssetMetadata) => void;
+      jest.mocked(assetToken.getMetadata).mockReturnValue(
+        new Promise<AssetMetadata>((r) => {
+          resolve = r;
+        }),
+      );
+
+      // Start the call, then "unmount" by simply dropping interest in it.
+      const pending = validateTokenContract("testnet", "CTOKEN");
+      resolve({ name: "A", symbol: "A" } as unknown as AssetMetadata);
+
+      await expect(pending).resolves.toMatchObject({ tokenContract: "CTOKEN" });
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+  });
 });
