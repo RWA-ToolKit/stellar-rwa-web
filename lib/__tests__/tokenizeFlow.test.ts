@@ -413,4 +413,35 @@ describe("tokenizeFlow", () => {
       await expect(registerAsset(ctx, data)).rejects.toThrow("Authorization");
     });
   });
+
+  // Issue #606 — error path surfaces as readable state, not a crash
+  describe("error path (#606)", () => {
+    it("validateTokenContract rejects with a readable Error, never a raw RPC error", async () => {
+      jest.mocked(assetToken.getMetadata).mockRejectedValue("raw string failure");
+
+      const err = await validateTokenContract("testnet", "CBAD").catch((e) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect(err.message).toMatch(/Could not read the token contract/);
+      expect(err.message).not.toMatch(/raw string failure/);
+    });
+
+    it("registerAsset rejection is catchable so a component can render it as state", async () => {
+      jest.mocked(registry.registerAsset).mockRejectedValue(new Error("boom"));
+      const ctx: WriteCtx = { network: "testnet", source: "GISSUER", sign: jest.fn() };
+      const data: TokenizeFormData = {
+        tokenContract: "CTOKEN",
+        name: "Asset",
+        assetType: "RWA",
+        valuation: 1n,
+      };
+
+      let message = "";
+      try {
+        await registerAsset(ctx, data);
+      } catch (e) {
+        message = e instanceof Error ? e.message : String(e);
+      }
+      expect(message).toBe("boom");
+    });
+  });
 });
