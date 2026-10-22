@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useHolderTotals } from "../useHolderTotals";
 import { assetToken, compliance } from "@/lib/contracts";
 import { api } from "@/lib/api";
@@ -173,5 +173,26 @@ describe("useHolderTotals", () => {
     rerender({ assets: [makeAsset({ id: 1n, tokenContract: "T2" })] });
     await waitFor(() => expect(result.current.data).toBe(2));
     expect(assetToken.getMetadata).toHaveBeenLastCalledWith("testnet", "T2");
+  });
+
+  it("does not warn or throw when unmounted during an in-flight call", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    let resolveStats: (v: unknown) => void = () => {};
+    (api.getStats as jest.Mock).mockReturnValue(
+      new Promise((resolve) => {
+        resolveStats = resolve;
+      }),
+    );
+
+    const { result, unmount } = renderHook(() => useHolderTotals([makeAsset()]));
+    expect(result.current.loading).toBe(true);
+
+    unmount();
+    await act(async () => {
+      resolveStats({ totalHolders: 7 });
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });
