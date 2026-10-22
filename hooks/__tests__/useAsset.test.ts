@@ -16,8 +16,9 @@ jest.mock("@/lib/contracts", () => ({
   },
 }));
 
+let mockNetwork = "testnet";
 jest.mock("@/hooks/useWallet", () => ({
-  useWallet: () => ({ network: "testnet" }),
+  useWallet: () => ({ network: mockNetwork }),
 }));
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
@@ -57,6 +58,7 @@ function makeMetadata(overrides: Partial<AssetMetadata> = {}): AssetMetadata {
 describe("useAsset", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNetwork = "testnet";
     cacheAssetEntries("testnet", []);
   });
 
@@ -210,5 +212,19 @@ describe("useAsset", () => {
     );
     expect(registry.getAsset).toHaveBeenCalledTimes(2);
     expect(registry.getAsset).toHaveBeenLastCalledWith("testnet", BigInt(2));
+  });
+
+  // ── error path (#626) ────────────────────────────────────────────────────
+
+  it("turns a non-Error rejection into readable state instead of throwing", async () => {
+    (registry.getAsset as jest.Mock).mockRejectedValue("boom");
+
+    const { result } = renderHook(() => useAsset(BigInt(1)));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toBe("Something went wrong.");
+    expect(result.current.data).toBeNull();
+    expect(result.current.notFound).toBe(false);
   });
 });
