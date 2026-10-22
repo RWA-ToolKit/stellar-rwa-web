@@ -249,4 +249,36 @@ describe("useAsset", () => {
     const { result } = renderHook(() => useAsset(null));
     expect(result.current.notFound).toBe(false);
   });
+
+  // ── dependency array / stale closures (#628) ─────────────────────────────
+
+  it("re-fetches with the new network when the wallet network changes", async () => {
+    const entry = makeEntry();
+    (registry.getAsset as jest.Mock).mockResolvedValue(entry);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata());
+
+    const { result, rerender } = renderHook(() => useAsset(BigInt(1)));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(registry.getAsset).toHaveBeenLastCalledWith("testnet", BigInt(1));
+
+    mockNetwork = "mainnet";
+    rerender();
+
+    await waitFor(() =>
+      expect(registry.getAsset).toHaveBeenLastCalledWith("mainnet", BigInt(1)),
+    );
+    expect(registry.getAsset).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-fetch when rerendered with an equal bigint id", async () => {
+    (registry.getAsset as jest.Mock).mockResolvedValue(makeEntry());
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata());
+
+    const { result, rerender } = renderHook(() => useAsset(BigInt(1)));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    rerender();
+
+    expect(registry.getAsset).toHaveBeenCalledTimes(1);
+  });
 });
