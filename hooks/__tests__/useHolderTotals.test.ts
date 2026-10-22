@@ -195,4 +195,50 @@ describe("useHolderTotals", () => {
     expect(errorSpy).not.toHaveBeenCalled();
     errorSpy.mockRestore();
   });
+
+  it("does not expose previous-network data after switching networks", async () => {
+    (api.getStats as jest.Mock).mockResolvedValue(null);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue({ complianceContract: "C1" });
+    (compliance.getAllowlist as jest.Mock).mockImplementation(async (net) =>
+      net === "testnet" ? ["a", "b"] : ["a", "b", "c", "d", "e"],
+    );
+    const assets = [makeAsset()];
+
+    const { result, rerender } = renderHook(() => useHolderTotals(assets));
+    await waitFor(() => expect(result.current.data).toBe(2));
+
+    mockNetwork = "mainnet";
+    rerender();
+
+    // Testnet data must be dropped immediately, never shown for mainnet.
+    expect(result.current.data).not.toBe(2);
+    await waitFor(() => expect(result.current.data).toBe(5));
+    expect(compliance.getAllowlist).toHaveBeenLastCalledWith("mainnet", "C1");
+  });
+
+  it("ignores an in-flight testnet response that resolves after switching to mainnet", async () => {
+    (api.getStats as jest.Mock).mockResolvedValue(null);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue({ complianceContract: "C1" });
+    let resolveTestnet: (v: string[]) => void = () => {};
+    (compliance.getAllowlist as jest.Mock).mockImplementation((net) =>
+      net === "testnet"
+        ? new Promise<string[]>((resolve) => {
+            resolveTestnet = resolve;
+          })
+        : Promise.resolve(["x", "y", "z"]),
+    );
+    const assets = [makeAsset()];
+
+    const { result, rerender } = renderHook(() => useHolderTotals(assets));
+    await waitFor(() => expect(compliance.getAllowlist).toHaveBeenCalledWith("testnet", "C1"));
+
+    mockNetwork = "mainnet";
+    rerender();
+    await waitFor(() => expect(result.current.data).toBe(3));
+
+    await act(async () => {
+      resolveTestnet(["a"]);
+    });
+    expect(result.current.data).toBe(3);
+  });
 });
