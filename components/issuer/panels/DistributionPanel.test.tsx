@@ -82,3 +82,58 @@ describe("DistributionPanel empty/zero input", () => {
     expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
   });
 });
+
+describe("DistributionPanel dependency arrays / stale closures", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("re-runs the async balance/allowance/decimals lookups when the asset prop changes", async () => {
+    const contracts = await import("@/lib/contracts");
+    const balanceSpy = contracts.assetToken.balance as unknown as ReturnType<typeof vi.fn>;
+    const allowanceSpy = contracts.assetToken.allowance as unknown as ReturnType<typeof vi.fn>;
+    const decimalsSpy = contracts.assetToken.decimals as unknown as ReturnType<typeof vi.fn>;
+
+    const { rerender } = render(<DistributionPanel asset={makeAsset()} />);
+
+    // Let the initial effect settle.
+    await screen.findByText(/Required role:/i);
+    const initialBalanceCalls = balanceSpy.mock.calls.length;
+    const initialAllowanceCalls = allowanceSpy.mock.calls.length;
+    const initialDecimalsCalls = decimalsSpy.mock.calls.length;
+
+    // Swap in a different asset (new token contract). If the effect's
+    // dependency array is missing `asset`, the lookups would not re-run and
+    // the panel would keep showing stale balances for the previous asset.
+    rerender(
+      <DistributionPanel
+        asset={makeAsset({
+          tokenContract: "CTOKENCONTRACT11111111111111111111111111111111111111111111",
+        })}
+      />,
+    );
+
+    await screen.findByText(/Required role:/i);
+
+    expect(balanceSpy.mock.calls.length).toBeGreaterThan(initialBalanceCalls);
+    expect(allowanceSpy.mock.calls.length).toBeGreaterThan(initialAllowanceCalls);
+    expect(decimalsSpy.mock.calls.length).toBeGreaterThan(initialDecimalsCalls);
+  });
+
+  it("does not re-run the lookups when re-rendered with an equivalent asset", async () => {
+    const contracts = await import("@/lib/contracts");
+    const balanceSpy = contracts.assetToken.balance as unknown as ReturnType<typeof vi.fn>;
+
+    const { rerender } = render(<DistributionPanel asset={makeAsset()} />);
+
+    await screen.findByText(/Required role:/i);
+    const initialBalanceCalls = balanceSpy.mock.calls.length;
+
+    // Same token contract: the effect should not thrash on unrelated renders.
+    rerender(<DistributionPanel asset={makeAsset()} />);
+
+    await screen.findByText(/Required role:/i);
+
+    expect(balanceSpy.mock.calls.length).toBe(initialBalanceCalls);
+  });
+});
