@@ -44,4 +44,27 @@ describe('useActivity', () => {
 
     expect(result.current.loading).toBe(false);
   });
+
+  // Empty/zero/null input: the hook must not fetch and must settle into a
+  // deliberate empty state (no data, no error, not loading) rather than
+  // firing a request for a missing account.
+  it.each([
+    ['empty string', ''],
+    ['null', null],
+    ['undefined', undefined],
+  ])('does not fetch and returns an empty state for %s input', async (_label, input) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+    const { result } = renderHook(() =>
+      useActivity(input as unknown as string),
+    );
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(result.current.error).toBeFalsy();
+    expect(result.current.data ?? []).toEqual([]);
+  });
 });
