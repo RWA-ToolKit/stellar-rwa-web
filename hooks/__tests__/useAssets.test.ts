@@ -179,6 +179,28 @@ describe("useAssets empty input", () => {
   });
 });
 
+describe("useAssets dependency array", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("reloads when includeInactive changes (no stale closure)", async () => {
+    const active = makeAsset({ id: BigInt(1), active: true });
+    const inactive = makeAsset({ id: BigInt(2), active: false });
+    (api.getAllAssets as jest.Mock).mockResolvedValue([active, inactive]);
+
+    const { result, rerender } = renderHook(
+      ({ includeInactive }) => useAssets({ includeInactive }),
+      { initialProps: { includeInactive: false } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.assets).toEqual([active]);
+
+    rerender({ includeInactive: true });
+
+    await waitFor(() => expect(result.current.assets).toEqual([active, inactive]));
+  });
+});
+
 // ─── usePlatformStats ─────────────────────────────────────────────────────────
 
 describe("usePlatformStats", () => {
