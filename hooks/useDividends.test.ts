@@ -50,4 +50,48 @@ describe('useDividends', () => {
     expect(result.current.total).toBe(0);
     expect(fetchSpy).toHaveBeenCalled();
   });
+
+  it('does not warn about state updates when unmounted during an in-flight call', async () => {
+    // Hold the fetch open so we can unmount while the async call is still
+    // pending, then resolve it after unmount to exercise the guard.
+    let resolveFetch: (value: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockReturnValue(pending);
+
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    const { unmount } = renderHook(() => useDividends());
+
+    // The in-flight request should have been kicked off before unmounting.
+    expect(fetchSpy).toHaveBeenCalled();
+
+    unmount();
+
+    // Resolve the in-flight call after the component has unmounted.
+    resolveFetch({
+      ok: true,
+      json: async () => [],
+    } as unknown as Response);
+
+    // Flush any pending microtasks so a late state update would surface.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const warnedAboutUnmounted = consoleErrorSpy.mock.calls.some((args) =>
+      args.some(
+        (arg) =>
+          typeof arg === 'string' &&
+          /unmounted component|state update on an unmounted/i.test(arg),
+      ),
+    );
+
+    expect(warnedAboutUnmounted).toBe(false);
+  });
 });
