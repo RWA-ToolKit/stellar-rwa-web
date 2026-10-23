@@ -8,10 +8,12 @@ const BASE = typeof process !== "undefined"
  * The indexing API caps `limit` at 100 on every paginated endpoint, so a
  * "give me everything" read has to walk the pages itself.
  */
-const MAX_LIMIT = 100;
+export const API_PAGE_SIZE = 100;
 
 /** Guard against a server that keeps returning full pages forever. */
-const MAX_PAGES = 50;
+export const API_MAX_PAGES = 50;
+
+const MAX_LIMIT = API_PAGE_SIZE;
 
 /**
  * Build a full API URL for `path`.
@@ -249,7 +251,7 @@ export const api = {
    */
   async getAllAssets(): Promise<AssetEntry[] | null> {
     const all: AssetEntry[] = [];
-    for (let page = 0; page < MAX_PAGES; page++) {
+    for (let page = 0; page < API_MAX_PAGES; page++) {
       const batch = await api.getAssetsPage({ offset: page * MAX_LIMIT });
       if (!batch) return null;
       const mapped = mapOrNull(() => batch.map(toAssetEntry), "assets");
@@ -287,10 +289,21 @@ export const api = {
     ).then((raw) => (raw ? mapOrNull(() => toStatsResult(raw), "stats") : null));
   },
 
-  getEvents(): Promise<ApiEvent[] | null> {
-    return fetchJson<ApiEvent[]>(apiUrl("/events")).then((raw) =>
+  getEvents(params: { offset?: number; limit?: number } = {}): Promise<ApiEvent[] | null> {
+    const query = new URLSearchParams();
+    if (params.offset !== undefined) query.set("offset", String(params.offset));
+    if (params.limit !== undefined) {
+      query.set("limit", String(Math.min(params.limit, MAX_LIMIT)));
+    }
+    const search = query.toString();
+    const path = search ? `/events?${search}` : "/events";
+    return fetchJson<ApiEvent[]>(apiUrl(path)).then((raw) =>
       Array.isArray(raw) ? raw : null,
     );
+  },
+
+  isConfigured(): boolean {
+    return Boolean(BASE);
   },
 
   /**
