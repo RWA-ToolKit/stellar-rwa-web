@@ -127,4 +127,47 @@ describe('useActivity', () => {
       expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
   });
+
+  // Unmount during an in-flight async call: the hook must not attempt to set
+  // state after the component has unmounted, which would trigger React's
+  // "state update on an unmounted component" warning.
+  it('does not warn when unmounted while a fetch is in flight', async () => {
+    let resolveFetch: (value: Response) => void = () => {};
+    const pending = new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    });
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockReturnValue(pending);
+
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+
+    const { unmount } = renderHook(() => useActivity('GABC123'));
+
+    // The request is in flight; unmount before it settles.
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    unmount();
+
+    // Now let the in-flight request resolve after unmount.
+    resolveFetch({
+      ok: true,
+      status: 200,
+      json: async () => [],
+    } as Response);
+
+    // Flush pending microtasks so any post-unmount state update would surface.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const unmountedWarning = consoleErrorSpy.mock.calls.find((call) =>
+      String(call[0]).includes('unmounted component'),
+    );
+    expect(unmountedWarning).toBeUndefined();
+  });
 });
