@@ -708,3 +708,31 @@ describe("api client error path (#611)", () => {
     });
   });
 });
+
+describe("api client empty/zero input (#612)", () => {
+  it("treats an empty array as a valid empty result, not as unavailable", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await expect(api.getAllAssets()).resolves.toEqual([]);
+    await expect(api.getEvents()).resolves.toEqual([]);
+    await expect(api.getHolders(1n)).resolves.toEqual([]);
+  });
+
+  it("treats null / non-array bodies as unavailable", async () => {
+    mockFetch.mockResolvedValue(okResponse(null));
+    await expect(api.getEvents()).resolves.toBeNull();
+    mockFetch.mockResolvedValue(okResponse({}));
+    await expect(api.getAssetsPage()).resolves.toBeNull();
+  });
+
+  it("accepts asset id 0 and builds the /assets/0 path", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 0 })));
+    const asset = await api.getAsset(0n);
+    expect(asset?.id).toBe(0n);
+    expect(requestedUrl()).toBe("https://api.example.com/v1/assets/0");
+  });
+
+  it("returns an empty list for an issuer with no assets", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await expect(api.getAssetsByIssuer("")).resolves.toEqual([]);
+  });
+});
