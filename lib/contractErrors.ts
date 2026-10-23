@@ -11,6 +11,13 @@
  * - Add the code-to-message mapping below with documentation
  * - Update the contracts repo error enum
  * - Add test coverage in lib/__tests__/contractErrors.test.ts
+ *
+ * Note on stale closures / dependency arrays: this module is a pure utility
+ * with no React hooks, props, or state. Its exported functions are
+ * deterministic and depend only on their arguments (plus the module-level
+ * constant `CONTRACT_ERROR_CODES`), so there are no dependency arrays to
+ * audit and no stale-closure risk. Keep it that way: do not introduce
+ * component state or hooks here.
  */
 
 /**
@@ -36,6 +43,9 @@ const AUTH_ERROR_CODE = 3;
 /**
  * Whether a raw Soroban error string is an authorisation failure, so callers
  * can present it differently from other contract errors.
+ *
+ * Empty/zero input is deliberate: an empty string (or any string without a
+ * `Error(Contract, #N)` match) is not an auth error, so this returns `false`.
  */
 export function isAuthError(raw: string): boolean {
   const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
@@ -45,6 +55,10 @@ export function isAuthError(raw: string): boolean {
 /**
  * Parse a Soroban error string and return a user-friendly message.
  * Contract errors surface as `Error(Contract, #N)`; unknown codes produce a sane fallback.
+ *
+ * Empty/zero input is deliberate: an empty string (or `"0"`) contains no
+ * contract error code and no known heuristic, so it falls through to the
+ * generic fallback message rather than throwing.
  *
  * @param raw The raw error string from Soroban RPC
  * @returns A user-friendly error message
