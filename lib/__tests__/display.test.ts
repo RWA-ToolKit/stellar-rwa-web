@@ -250,3 +250,21 @@ describe("getDisplayText", () => {
     expect(getDisplayText(text)).toBe(text);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #618 — no hidden state / stale closures (display is pure, no hooks)
+// ---------------------------------------------------------------------------
+
+describe("display purity (#618)", () => {
+  it("has no React dependency arrays: repeated calls with different args never reuse earlier input", () => {
+    expect(getDisplayText("first")).toBe("first");
+    expect(getDisplayText("second")).toBe("second");
+    expect(getDisplayText(null, "fallback")).toBe("fallback");
+    expect(getDisplayText("first")).toBe("first");
+  });
+
+  it("does not leak options between calls", () => {
+    expect(sanitizeDisplayText("abcdefghij", { maxLength: 3 })).toBe("abc…");
+    expect(sanitizeDisplayText("abcdefghij")).toBe("abcdefghij");
+  });
+});
