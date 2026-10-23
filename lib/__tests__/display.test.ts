@@ -1,4 +1,4 @@
-import { sanitizeDisplayText, getDisplayText } from "@/lib/display";
+import { sanitizeDisplayText, getDisplayText, truncateAddress } from "@/lib/display";
 
 // ---------------------------------------------------------------------------
 // Issue #385 — sanitizeDisplayText
