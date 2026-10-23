@@ -24,6 +24,8 @@
 // is populated for all tests.
 process.env.NEXT_PUBLIC_API_URL = "https://api.example.com";
 
+import { renderHook, act, waitFor } from "@testing-library/react";
+import { useEffect, useState } from "react";
 import { api, API_TIMEOUT_MS, toAssetEntry, ApiShapeError } from "../api";
 import {
   makeApiAsset,
@@ -682,3 +684,63 @@ describe("apiUrl /v1 prefix (#531)", () => {
     expect(doubleVersioned).toBe(true); // regex fires → no second /v1 appended
   });
 });
+
+// ==============================================================================
+// Unmount during an in-flight call (#614)
+// ==============================================================================
+
+/** Minimal consumer: loads stats via the api client and stores them in state. */
+function useStats(key = "default") {
+  const [stats, setStats] = useState<unknown>(null);
+  useEffect(() => {
+    let live = true;
+    api.getStats().then((r) => {
+      if (live) setStats(r);
+    });
+    return () => {
+      live = false;
+    };
+  }, [key]);
+  return stats;
+}
+
+describe("unmount during an in-flight call (#614)", () => {
+  it("resolving after unmount does not log a React warning", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    let resolveFetch: (v: unknown) => void = () => {};
+    mockFetch.mockImplementation(
+      () => new Promise((resolve) => { resolveFetch = resolve; }),
+    );
+
+    const { unmount } = renderHook(() => useStats());
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    unmount();
+
+    await act(async () => {
+      resolveFetch(okResponse(makeApiStats()));
+      await Promise.resolve();
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("rejecting after unmount resolves to null without throwing", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    let rejectFetch: (e: unknown) => void = () => {};
+    mockFetch.mockImplementation(
+      () => new Promise((_, reject) => { rejectFetch = reject; }),
+    );
+
+    const { unmount } = renderHook(() => useStats());
+    unmount();
+    await act(async () => {
+      rejectFetch(new Error("network down"));
+      await Promise.resolve();
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+});
+
