@@ -268,3 +268,22 @@ describe("display purity (#618)", () => {
     expect(sanitizeDisplayText("abcdefghij")).toBe("abcdefghij");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #619 — unmount during in-flight async call
+// ---------------------------------------------------------------------------
+
+describe("display synchrony (#619)", () => {
+  it("is fully synchronous, so nothing can resolve after unmount", () => {
+    expect(getDisplayText("x")).not.toBeInstanceOf(Promise);
+    expect(sanitizeDisplayText("x")).not.toBeInstanceOf(Promise);
+  });
+
+  it("produces no React warnings or console errors", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    getDisplayText("hello");
+    sanitizeDisplayText("<b>hi</b>");
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
