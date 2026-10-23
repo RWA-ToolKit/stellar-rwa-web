@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useAssets, usePlatformStats, useIssuerAssets } from "../useAssets";
 import { registry } from "@/lib/contracts";
 import { api } from "@/lib/api";
@@ -198,6 +198,46 @@ describe("useAssets dependency array", () => {
     rerender({ includeInactive: true });
 
     await waitFor(() => expect(result.current.assets).toEqual([active, inactive]));
+  });
+});
+
+describe("useAssets unmount during in-flight load", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("does not warn or update state when unmounted before the load resolves", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    let resolve!: (v: AssetEntry[]) => void;
+    (api.getAllAssets as jest.Mock).mockReturnValue(
+      new Promise<AssetEntry[]>((r) => { resolve = r; }),
+    );
+
+    const { result, unmount } = renderHook(() => useAssets());
+    expect(result.current.loading).toBe(true);
+
+    unmount();
+    await act(async () => {
+      resolve([makeAsset()]);
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not warn when unmounted before a failing load rejects", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    let reject!: (e: Error) => void;
+    (api.getAllAssets as jest.Mock).mockReturnValue(
+      new Promise<AssetEntry[]>((_, r) => { reject = r; }),
+    );
+
+    const { unmount } = renderHook(() => useAssets());
+    unmount();
+    await act(async () => {
+      reject(new Error("late failure"));
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 });
 
