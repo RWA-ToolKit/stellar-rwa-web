@@ -10,9 +10,10 @@ import type { AssetEntry, Network } from "@/types";
 
 export function useAssets(opts?: { includeInactive?: boolean }) {
   const { network } = useWallet();
+  const includeInactive = opts?.includeInactive ?? false;
   const state = useAsync<AssetEntry[]>(
-    () => loadAssetEntries(network, opts?.includeInactive),
-    [network],
+    () => loadAssetEntries(network, includeInactive),
+    [network, includeInactive],
   );
   return { ...state, assets: state.data ?? [] };
 }

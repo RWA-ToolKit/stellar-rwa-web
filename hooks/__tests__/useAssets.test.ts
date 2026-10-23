@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useAssets, usePlatformStats, useIssuerAssets } from "../useAssets";
 import { registry } from "@/lib/contracts";
 import { api } from "@/lib/api";
@@ -23,8 +23,9 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
+let mockNetwork: "testnet" | "mainnet" = "testnet";
 jest.mock("@/hooks/useWallet", () => ({
-  useWallet: () => ({ network: "testnet" }),
+  useWallet: () => ({ network: mockNetwork }),
 }));
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -46,7 +47,10 @@ function makeAsset(overrides: Partial<AssetEntry> = {}): AssetEntry {
 // ─── useAssets ────────────────────────────────────────────────────────────────
 
 describe("useAssets", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNetwork = "testnet";
+  });
 
   it("starts in loading state", () => {
     // Mock that never resolves so we can observe the initial state
@@ -135,6 +139,158 @@ describe("useAssets", () => {
 
     expect(result.current.error).toBe("RPC error");
     expect(result.current.loading).toBe(false);
+  });
+});
+
+describe("useAssets empty input", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("returns an empty list without error when the api returns []", async () => {
+    // An empty array is a valid response (not null), so no contract fallback.
+    (api.getAllAssets as jest.Mock).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useAssets());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.assets).toEqual([]);
+    expect(result.current.error).toBeNull();
+    expect(registry.getAllAssets).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty list when the registry fallback has no assets", async () => {
+    (api.getAllAssets as jest.Mock).mockResolvedValue(null);
+    (registry.getAllAssets as jest.Mock).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useAssets());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.assets).toEqual([]);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("returns an empty list when every asset is inactive", async () => {
+    (api.getAllAssets as jest.Mock).mockResolvedValue([
+      makeAsset({ id: BigInt(1), active: false }),
+    ]);
+
+    const { result } = renderHook(() => useAssets());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.assets).toEqual([]);
+  });
+});
+
+describe("useAssets dependency array", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("reloads when includeInactive changes (no stale closure)", async () => {
+    const active = makeAsset({ id: BigInt(1), active: true });
+    const inactive = makeAsset({ id: BigInt(2), active: false });
+    (api.getAllAssets as jest.Mock).mockResolvedValue([active, inactive]);
+
+    const { result, rerender } = renderHook(
+      ({ includeInactive }) => useAssets({ includeInactive }),
+      { initialProps: { includeInactive: false } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.assets).toEqual([active]);
+
+    rerender({ includeInactive: true });
+
+    await waitFor(() => expect(result.current.assets).toEqual([active, inactive]));
+  });
+});
+
+describe("useAssets unmount during in-flight load", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("does not warn or update state when unmounted before the load resolves", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    let resolve!: (v: AssetEntry[]) => void;
+    (api.getAllAssets as jest.Mock).mockReturnValue(
+      new Promise<AssetEntry[]>((r) => { resolve = r; }),
+    );
+
+    const { result, unmount } = renderHook(() => useAssets());
+    expect(result.current.loading).toBe(true);
+
+    unmount();
+    await act(async () => {
+      resolve([makeAsset()]);
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not warn when unmounted before a failing load rejects", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    let reject!: (e: Error) => void;
+    (api.getAllAssets as jest.Mock).mockReturnValue(
+      new Promise<AssetEntry[]>((_, r) => { reject = r; }),
+    );
+
+    const { unmount } = renderHook(() => useAssets());
+    unmount();
+    await act(async () => {
+      reject(new Error("late failure"));
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+});
+
+describe("useAssets network switch", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNetwork = "testnet";
+  });
+  afterEach(() => {
+    mockNetwork = "testnet";
+  });
+
+  it("drops testnet data and loads mainnet data after a switch", async () => {
+    const testnetAsset = makeAsset({ id: BigInt(1), name: "Testnet Asset" });
+    const mainnetAsset = makeAsset({ id: BigInt(2), name: "Mainnet Asset" });
+    (api.getAllAssets as jest.Mock).mockResolvedValueOnce([testnetAsset]);
+
+    const { result, rerender } = renderHook(() => useAssets());
+    await waitFor(() => expect(result.current.assets).toEqual([testnetAsset]));
+
+    // Switch networks; the next load never resolves so we can observe the gap.
+    (api.getAllAssets as jest.Mock).mockReturnValueOnce(new Promise(() => {}));
+    mockNetwork = "mainnet";
+    rerender();
+
+    await waitFor(() => expect(result.current.loading).toBe(true));
+    expect(result.current.assets).toEqual([]);
+  });
+
+  it("ignores a late testnet response that resolves after switching to mainnet", async () => {
+    const testnetAsset = makeAsset({ id: BigInt(1), name: "Testnet Asset" });
+    const mainnetAsset = makeAsset({ id: BigInt(2), name: "Mainnet Asset" });
+    let resolveTestnet!: (v: AssetEntry[]) => void;
+    (api.getAllAssets as jest.Mock)
+      .mockReturnValueOnce(new Promise<AssetEntry[]>((r) => { resolveTestnet = r; }))
+      .mockResolvedValueOnce([mainnetAsset]);
+
+    const { result, rerender } = renderHook(() => useAssets());
+
+    mockNetwork = "mainnet";
+    rerender();
+    await waitFor(() => expect(result.current.assets).toEqual([mainnetAsset]));
+
+    await act(async () => {
+      resolveTestnet([testnetAsset]);
+    });
+
+    expect(result.current.assets).toEqual([mainnetAsset]);
+    expect(getCachedAsset("mainnet", mainnetAsset.id)).toEqual(mainnetAsset);
   });
 });
 
