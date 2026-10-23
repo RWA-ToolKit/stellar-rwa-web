@@ -682,3 +682,29 @@ describe("apiUrl /v1 prefix (#531)", () => {
     expect(doubleVersioned).toBe(true); // regex fires → no second /v1 appended
   });
 });
+
+describe("api client error path (#611)", () => {
+  it("resolves null instead of throwing when fetch rejects", async () => {
+    mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    await expect(api.getStats()).resolves.toBeNull();
+    await expect(api.getEvents()).resolves.toBeNull();
+    await expect(api.getAsset(1n)).resolves.toBeNull();
+    await expect(api.getHolders(1n)).resolves.toBeNull();
+    await expect(api.getAllAssets()).resolves.toBeNull();
+    await expect(api.getAssetsByIssuer("GISSUER")).resolves.toBeNull();
+  });
+
+  it("resolves null on a 500 for every endpoint", async () => {
+    mockFetch.mockResolvedValue(errorResponse(500));
+    await expect(api.getStats()).resolves.toBeNull();
+    await expect(api.getEvents()).resolves.toBeNull();
+    await expect(api.getAssetsPage()).resolves.toBeNull();
+  });
+
+  it("resolves null (not a throw) when the payload shape is unusable", async () => {
+    mockFetch.mockResolvedValue(okResponse({ total_assets: "nope" }));
+    await withSilencedWarnings(async () => {
+      await expect(api.getStats()).resolves.toBeNull();
+    });
+  });
+});
