@@ -36,6 +36,9 @@ const AUTH_ERROR_CODE = 3;
 /**
  * Whether a raw Soroban error string is an authorisation failure, so callers
  * can present it differently from other contract errors.
+ *
+ * Empty/zero input is deliberate: an empty string (or any string without a
+ * `Error(Contract, #N)` match) is not an auth error, so this returns `false`.
  */
 export function isAuthError(raw: string): boolean {
   const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
@@ -45,6 +48,10 @@ export function isAuthError(raw: string): boolean {
 /**
  * Parse a Soroban error string and return a user-friendly message.
  * Contract errors surface as `Error(Contract, #N)`; unknown codes produce a sane fallback.
+ *
+ * Empty/zero input is deliberate: an empty string (or `"0"`) contains no
+ * contract error code and no known heuristic, so it falls through to the
+ * generic fallback message rather than throwing.
  *
  * @param raw The raw error string from Soroban RPC
  * @returns A user-friendly error message
