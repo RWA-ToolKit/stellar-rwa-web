@@ -23,6 +23,11 @@ export interface DistributionWithClaim extends Distribution {
  *
  * Failures (e.g. a rejected RPC call) are surfaced through the returned
  * `error` state by `useAsync` rather than thrown into the component.
+ *
+ * Empty/zero input: when `assetTokenId` is `null` or an empty string the hook
+ * is disabled (`useAsync`'s `enabled` flag is false) and resolves to an empty
+ * list without touching the network. This is deliberate — callers can render
+ * the hook unconditionally before an asset is selected.
  */
 export function useDividends(assetTokenId: string | null) {
   const { network, address } = useWallet();

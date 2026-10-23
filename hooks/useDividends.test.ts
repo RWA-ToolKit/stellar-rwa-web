@@ -28,4 +28,26 @@ describe('useDividends', () => {
     expect(result.current.loading).toBe(false);
     expect(fetchSpy).toHaveBeenCalled();
   });
+
+  it('returns an empty, zeroed result for empty/zero/null input without erroring', async () => {
+    // Empty input is deliberate: no distributions to fetch, so the hook should
+    // resolve to an empty list with zero totals and no error rather than throw.
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue({
+        ok: true,
+        json: async () => [],
+      } as unknown as Response);
+
+    const { result } = renderHook(() => useDividends());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBeFalsy();
+    expect(result.current.dividends).toEqual([]);
+    expect(result.current.total).toBe(0);
+    expect(fetchSpy).toHaveBeenCalled();
+  });
 });
