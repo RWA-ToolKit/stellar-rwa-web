@@ -736,3 +736,25 @@ describe("api client empty/zero input (#612)", () => {
     await expect(api.getAssetsByIssuer("")).resolves.toEqual([]);
   });
 });
+
+describe("api client has no stale closures (#613)", () => {
+  // lib/api.ts has no React hooks, so there are no dependency arrays to audit.
+  // Its only module-level captured value is BASE (read once at import, by
+  // design). Every request must be built from its own arguments.
+  it("builds each request from the arguments of that call", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await api.getHolders(1n);
+    await api.getHolders(2n);
+    expect(requestedUrl(0)).toContain("/assets/1/holders");
+    expect(requestedUrl(1)).toContain("/assets/2/holders");
+  });
+
+  it("does not leak results between consecutive calls", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 1 })));
+    const a = await api.getAsset(1n);
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 2 })));
+    const b = await api.getAsset(2n);
+    expect(a?.id).toBe(1n);
+    expect(b?.id).toBe(2n);
+  });
+});
