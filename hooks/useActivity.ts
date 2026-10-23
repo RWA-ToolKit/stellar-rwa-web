@@ -1,6 +1,8 @@
 "use client";
 
-import { api, API_MAX_PAGES, API_PAGE_SIZE, type ApiEvent } from "@/lib/api";
+import { useCallback } from "react";
+
+import { api, type ApiEvent } from "@/lib/api";
 import { useAsync } from "@/hooks/useAsync";
 
 export interface TransferActivity {
@@ -35,34 +37,31 @@ function toTransferActivity(event: ApiEvent): TransferActivity | null {
 
 /** Recent indexed transfer events for one asset token. */
 export function useActivity(tokenContract: string | null, refreshKey = 0) {
+  // Memoize the fetcher so it closes over the current tokenContract instead of
+  // a stale value captured on an earlier render. useAsync re-runs when this
+  // identity changes, so tokenContract must be in the dependency array.
+  const fetchActivity = useCallback(async (): Promise<TransferActivity[]> => {
+    if (!tokenContract) return [];
+
+    const events = await api.getEvents();
+    if (!events) {
+      throw new Error(
+        "Transfer history is unavailable. Configure the indexing API or try again later.",
+      );
+    }
+
+    return events
+      .filter(
+        (event) =>
+          event.contract === tokenContract && event.event_type === "Transfer",
+      )
+      .map(toTransferActivity)
+      .filter((event): event is TransferActivity => event !== null);
+  }, [tokenContract]);
+
   return useAsync<TransferActivity[]>(
-    async () => {
-      if (!tokenContract || !api.isConfigured()) return [];
-
-      const events: ApiEvent[] = [];
-      for (let page = 0; page < API_MAX_PAGES; page++) {
-        const batch = await api.getEvents({
-          offset: page * API_PAGE_SIZE,
-          limit: API_PAGE_SIZE,
-        });
-        if (!batch) {
-          throw new Error(
-            "Transfer history is unavailable. The indexing API could not load the events feed.",
-          );
-        }
-        events.push(...batch);
-        if (batch.length < API_PAGE_SIZE) break;
-      }
-
-      return events
-        .filter(
-          (event) =>
-            event.contract === tokenContract && event.event_type === "Transfer",
-        )
-        .map(toTransferActivity)
-        .filter((event): event is TransferActivity => event !== null);
-    },
-    [tokenContract, refreshKey],
-    Boolean(tokenContract && api.isConfigured()),
+    fetchActivity,
+    [fetchActivity, refreshKey],
+    Boolean(tokenContract),
   );
 }
