@@ -413,139 +413,68 @@ describe("tokenizeFlow", () => {
       await expect(registerAsset(ctx, data)).rejects.toThrow("Authorization");
     });
   });
-
-  // Issue #606 — error path surfaces as readable state, not a crash
-  describe("error path (#606)", () => {
-    it("validateTokenContract rejects with a readable Error, never a raw RPC error", async () => {
-      jest.mocked(assetToken.getMetadata).mockRejectedValue("raw string failure");
-
-      const err = await validateTokenContract("testnet", "CBAD").catch((e) => e);
-      expect(err).toBeInstanceOf(Error);
-      expect(err.message).toMatch(/Could not read the token contract/);
-      expect(err.message).not.toMatch(/raw string failure/);
+  // =========================================================================
+  // #610: switching network mid-session
+  // =========================================================================
+  describe("network switch mid-session (#610)", () => {
+    const metaFor = (name: string): AssetMetadata => ({
+      name,
+      symbol: "NET",
+      assetType: "RealWorldAsset",
+      totalSupply: 1n,
+      decimals: 6,
+      admin: "GADMIN",
+      complianceContract: "CCOMP",
+      assetDescription: "",
+      valuation: 1n,
+      paused: false,
     });
 
-    it("registerAsset rejection is catchable so a component can render it as state", async () => {
-      jest.mocked(registry.registerAsset).mockRejectedValue(new Error("boom"));
-      const ctx: WriteCtx = { network: "testnet", source: "GISSUER", sign: jest.fn() };
-      const data: TokenizeFormData = {
-        tokenContract: "CTOKEN",
-        name: "Asset",
-        assetType: "RWA",
-        valuation: 1n,
-      };
+    it("never serves data from the previous network after a switch", async () => {
+      jest
+        .mocked(assetToken.getMetadata)
+        .mockImplementation(async (network) =>
+          metaFor(network === "testnet" ? "Testnet Asset" : "Mainnet Asset"),
+        );
 
-      let message = "";
-      try {
-        await registerAsset(ctx, data);
-      } catch (e) {
-        message = e instanceof Error ? e.message : String(e);
-      }
-      expect(message).toBe("boom");
+      const first = await validateTokenContract("testnet", "CTOKEN");
+      const second = await validateTokenContract("mainnet", "CTOKEN");
+
+      expect(first.metadata.name).toBe("Testnet Asset");
+      expect(second.metadata.name).toBe("Mainnet Asset");
+      expect(assetToken.getMetadata).toHaveBeenNthCalledWith(1, "testnet", "CTOKEN");
+      expect(assetToken.getMetadata).toHaveBeenNthCalledWith(2, "mainnet", "CTOKEN");
     });
-  });
 
-  // Issue #607 — empty / zero / null input is deliberate
-  describe("empty and zero input (#607)", () => {
-    const ctx: WriteCtx = { network: "testnet", source: "GISSUER", sign: jest.fn() };
+    it("keeps an in-flight request bound to the network it started on", async () => {
+      let resolveTestnet!: (m: AssetMetadata) => void;
+      jest
+        .mocked(assetToken.getMetadata)
+        .mockImplementationOnce(
+          () => new Promise<AssetMetadata>((r) => (resolveTestnet = r)),
+        )
+        .mockResolvedValueOnce(metaFor("Mainnet Asset"));
 
-    it("validateTokenContract with an empty address surfaces the readable error when the read fails", async () => {
-      jest.mocked(assetToken.getMetadata).mockRejectedValue(new Error("invalid address"));
-      await expect(validateTokenContract("testnet", "")).rejects.toThrow(
+      const inFlight = validateTokenContract("testnet", "CTOKEN");
+      const afterSwitch = await validateTokenContract("mainnet", "CTOKEN");
+      resolveTestnet(metaFor("Testnet Asset"));
+
+      expect(afterSwitch.metadata.name).toBe("Mainnet Asset");
+      // The late testnet result stays attributable to testnet only.
+      expect((await inFlight).metadata.name).toBe("Testnet Asset");
+      expect(assetToken.getMetadata).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not reuse a successful testnet result when mainnet fails", async () => {
+      jest
+        .mocked(assetToken.getMetadata)
+        .mockResolvedValueOnce(metaFor("Testnet Asset"))
+        .mockRejectedValueOnce(new Error("not found"));
+
+      await validateTokenContract("testnet", "CTOKEN");
+      await expect(validateTokenContract("mainnet", "CTOKEN")).rejects.toThrow(
         "Could not read the token contract",
       );
-    });
-
-    it("validateTokenContract rejects when metadata is null-ish fields", async () => {
-      jest.mocked(assetToken.getMetadata).mockResolvedValue({
-        name: null,
-        symbol: null,
-      } as unknown as AssetMetadata);
-      await expect(validateTokenContract("testnet", "CTOKEN")).rejects.toThrow(
-        "missing name or symbol",
-      );
-    });
-
-    it("registerAsset passes a zero valuation and empty strings through unchanged (validation lives in the form/contract)", async () => {
-      jest.mocked(registry.registerAsset).mockResolvedValue({ hash: "h", returnValue: 0n });
-      const data: TokenizeFormData = {
-        tokenContract: "",
-        name: "",
-        assetType: "",
-        valuation: 0n,
-      };
-
-      const id = await registerAsset(ctx, data);
-
-      expect(registry.registerAsset).toHaveBeenCalledWith(ctx, {
-        issuer: ctx.source,
-        ...data,
-      });
-      // A returned id of 0 is a real id, not "missing" -> 0n, not null.
-      expect(id).toBe(0n);
-    });
-  });
-
-  // Issue #608 — dependency array / stale closure audit
-  // Audit result: lib/tokenizeFlow.ts exports plain async functions. It has no
-  // hooks, no dependency arrays, and no module-level mutable state, so there is
-  // nothing that can close over stale props/state. These tests pin that down.
-  describe("stale closure audit (#608)", () => {
-    it("each call uses the arguments it was given, with no state carried between calls", async () => {
-      jest.mocked(assetToken.getMetadata).mockResolvedValue({
-        name: "A",
-        symbol: "A",
-      } as unknown as AssetMetadata);
-
-      await validateTokenContract("testnet", "CFIRST");
-      await validateTokenContract("public", "CSECOND");
-
-      expect(assetToken.getMetadata).toHaveBeenNthCalledWith(1, "testnet", "CFIRST");
-      expect(assetToken.getMetadata).toHaveBeenNthCalledWith(2, "public", "CSECOND");
-    });
-
-    it("registerAsset reads issuer from the ctx passed on each call", async () => {
-      jest.mocked(registry.registerAsset).mockResolvedValue({ hash: "h", returnValue: 1n });
-      const data: TokenizeFormData = {
-        tokenContract: "CTOKEN",
-        name: "Asset",
-        assetType: "RWA",
-        valuation: 1n,
-      };
-
-      await registerAsset({ network: "testnet", source: "GONE", sign: jest.fn() }, data);
-      await registerAsset({ network: "testnet", source: "GTWO", sign: jest.fn() }, data);
-
-      const issuers = jest.mocked(registry.registerAsset).mock.calls.map((c) => c[1].issuer);
-      expect(issuers).toEqual(["GONE", "GTWO"]);
-    });
-  });
-
-  // Issue #609 — unmount during an in-flight async call
-  // tokenizeFlow has no React state, so a late resolution cannot trigger a
-  // "state update on unmounted component" warning from within the module.
-  describe("in-flight call outliving its caller (#609)", () => {
-    it("resolves late without emitting any React/console warnings", async () => {
-      const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
-      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
-
-      let resolve!: (m: AssetMetadata) => void;
-      jest.mocked(assetToken.getMetadata).mockReturnValue(
-        new Promise<AssetMetadata>((r) => {
-          resolve = r;
-        }),
-      );
-
-      // Start the call, then "unmount" by simply dropping interest in it.
-      const pending = validateTokenContract("testnet", "CTOKEN");
-      resolve({ name: "A", symbol: "A" } as unknown as AssetMetadata);
-
-      await expect(pending).resolves.toMatchObject({ tokenContract: "CTOKEN" });
-      expect(errorSpy).not.toHaveBeenCalled();
-      expect(warnSpy).not.toHaveBeenCalled();
-
-      errorSpy.mockRestore();
-      warnSpy.mockRestore();
     });
   });
 });

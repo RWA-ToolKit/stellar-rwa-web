@@ -1,4 +1,8 @@
-import { CONTRACT_ERROR_CODES, parseContractError } from "@/lib/contractErrors";
+import {
+  CONTRACT_ERROR_CODES,
+  isAuthError,
+  parseContractError,
+} from "@/lib/contractErrors";
 
 describe("CONTRACT_ERROR_CODES", () => {
   it("should contain all documented error codes", () => {
@@ -105,5 +109,30 @@ describe("parseContractError", () => {
         "The contract call could not be completed."
       );
     });
+  });
+});
+
+describe("isAuthError", () => {
+  it("has an explicit auth classification for every contract error code", () => {
+    const expectedAuthBehavior: Record<number, boolean> = {
+      1: false,
+      2: false,
+      3: true,
+      4: false,
+      5: false,
+      6: false,
+      7: false,
+      8: false,
+      9: false,
+    };
+    const contractCodes = Object.keys(CONTRACT_ERROR_CODES).map(Number).sort();
+    const classifiedCodes = Object.keys(expectedAuthBehavior).map(Number).sort();
+
+    expect(classifiedCodes).toEqual(contractCodes);
+    for (const code of contractCodes) {
+      const raw = `Error(Contract, #${code})`;
+      expect(parseContractError(raw)).toBe(CONTRACT_ERROR_CODES[code]);
+      expect(isAuthError(raw)).toBe(expectedAuthBehavior[code]);
+    }
   });
 });

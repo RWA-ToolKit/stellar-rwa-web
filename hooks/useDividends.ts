@@ -20,6 +20,14 @@ export interface DistributionWithClaim extends Distribution {
  * Callers should invoke the returned `refetch` after a successful claim
  * (see ClaimButton's `onClaimed`) so a distribution's row flips to
  * "claimed" without requiring a manual page refresh.
+ *
+ * Failures (e.g. a rejected RPC call) are surfaced through the returned
+ * `error` state by `useAsync` rather than thrown into the component.
+ *
+ * Empty/zero input: when `assetTokenId` is `null` or an empty string the hook
+ * is disabled (`useAsync`'s `enabled` flag is false) and resolves to an empty
+ * list without touching the network. This is deliberate — callers can render
+ * the hook unconditionally before an asset is selected.
  */
 export function useDividends(assetTokenId: string | null) {
   const { network, address } = useWallet();
@@ -42,7 +50,11 @@ export function useDividends(assetTokenId: string | null) {
       );
       return annotated;
     },
-    [assetTokenId, address, network],
+    // Every value the async callback closes over is listed here so the hook
+    // never reads a stale assetTokenId/address/network. `assetTokenId` is
+    // normalized to `null` for empty strings so a `""` -> `null` transition
+    // doesn't trigger a redundant refetch (both are disabled states).
+    [assetTokenId || null, address, network],
     Boolean(assetTokenId),
   );
 }

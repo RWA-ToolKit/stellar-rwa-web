@@ -529,6 +529,16 @@ describe("api.getEvents", () => {
 
     expect(await api.getEvents()).toBeNull();
   });
+
+  it("requests the requested offset and caps the page size", async () => {
+    mockFetch.mockResolvedValue(okResponse([makeApiEvent()]));
+
+    await api.getEvents({ offset: 100, limit: 500 });
+
+    expect(requestedUrl()).toBe(
+      "https://api.example.com/v1/events?offset=100&limit=100",
+    );
+  });
 });
 
 // ==============================================================================
@@ -680,5 +690,81 @@ describe("apiUrl /v1 prefix (#531)", () => {
     const baseWithVersion = "https://rwa-api.example.com/v1";
     const doubleVersioned = /\/v\d+$/.test(baseWithVersion.replace(/\/+$/, ""));
     expect(doubleVersioned).toBe(true); // regex fires → no second /v1 appended
+  });
+});
+
+describe("api client error path (#611)", () => {
+  it("resolves null instead of throwing when fetch rejects", async () => {
+    mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    await expect(api.getStats()).resolves.toBeNull();
+    await expect(api.getEvents()).resolves.toBeNull();
+    await expect(api.getAsset(1n)).resolves.toBeNull();
+    await expect(api.getHolders(1n)).resolves.toBeNull();
+    await expect(api.getAllAssets()).resolves.toBeNull();
+    await expect(api.getAssetsByIssuer("GISSUER")).resolves.toBeNull();
+  });
+
+  it("resolves null on a 500 for every endpoint", async () => {
+    mockFetch.mockResolvedValue(errorResponse(500));
+    await expect(api.getStats()).resolves.toBeNull();
+    await expect(api.getEvents()).resolves.toBeNull();
+    await expect(api.getAssetsPage()).resolves.toBeNull();
+  });
+
+  it("resolves null (not a throw) when the payload shape is unusable", async () => {
+    mockFetch.mockResolvedValue(okResponse({ total_assets: "nope" }));
+    await withSilencedWarnings(async () => {
+      await expect(api.getStats()).resolves.toBeNull();
+    });
+  });
+});
+
+describe("api client empty/zero input (#612)", () => {
+  it("treats an empty array as a valid empty result, not as unavailable", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await expect(api.getAllAssets()).resolves.toEqual([]);
+    await expect(api.getEvents()).resolves.toEqual([]);
+    await expect(api.getHolders(1n)).resolves.toEqual([]);
+  });
+
+  it("treats null / non-array bodies as unavailable", async () => {
+    mockFetch.mockResolvedValue(okResponse(null));
+    await expect(api.getEvents()).resolves.toBeNull();
+    mockFetch.mockResolvedValue(okResponse({}));
+    await expect(api.getAssetsPage()).resolves.toBeNull();
+  });
+
+  it("accepts asset id 0 and builds the /assets/0 path", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 0 })));
+    const asset = await api.getAsset(0n);
+    expect(asset?.id).toBe(0n);
+    expect(requestedUrl()).toBe("https://api.example.com/v1/assets/0");
+  });
+
+  it("returns an empty list for an issuer with no assets", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await expect(api.getAssetsByIssuer("")).resolves.toEqual([]);
+  });
+});
+
+describe("api client has no stale closures (#613)", () => {
+  // lib/api.ts has no React hooks, so there are no dependency arrays to audit.
+  // Its only module-level captured value is BASE (read once at import, by
+  // design). Every request must be built from its own arguments.
+  it("builds each request from the arguments of that call", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await api.getHolders(1n);
+    await api.getHolders(2n);
+    expect(requestedUrl(0)).toContain("/assets/1/holders");
+    expect(requestedUrl(1)).toContain("/assets/2/holders");
+  });
+
+  it("does not leak results between consecutive calls", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 1 })));
+    const a = await api.getAsset(1n);
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 2 })));
+    const b = await api.getAsset(2n);
+    expect(a?.id).toBe(1n);
+    expect(b?.id).toBe(2n);
   });
 });
