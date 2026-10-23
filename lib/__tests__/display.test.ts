@@ -1,4 +1,4 @@
-import { sanitizeDisplayText, getDisplayText } from "@/lib/display";
+import { sanitizeDisplayText, getDisplayText, truncateAddress } from "@/lib/display";
 
 // ---------------------------------------------------------------------------
 // Issue #385 — sanitizeDisplayText
@@ -248,5 +248,56 @@ describe("getDisplayText", () => {
   it("does not truncate a value at exactly 220 characters", () => {
     const text = "y".repeat(220);
     expect(getDisplayText(text)).toBe(text);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #618 — no hidden state / stale closures (display is pure, no hooks)
+// ---------------------------------------------------------------------------
+
+describe("display purity (#618)", () => {
+  it("has no React dependency arrays: repeated calls with different args never reuse earlier input", () => {
+    expect(getDisplayText("first")).toBe("first");
+    expect(getDisplayText("second")).toBe("second");
+    expect(getDisplayText(null, "fallback")).toBe("fallback");
+    expect(getDisplayText("first")).toBe("first");
+  });
+
+  it("does not leak options between calls", () => {
+    expect(sanitizeDisplayText("abcdefghij", { maxLength: 3 })).toBe("abc…");
+    expect(sanitizeDisplayText("abcdefghij")).toBe("abcdefghij");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #619 — unmount during in-flight async call
+// ---------------------------------------------------------------------------
+
+describe("display synchrony (#619)", () => {
+  it("is fully synchronous, so nothing can resolve after unmount", () => {
+    expect(getDisplayText("x")).not.toBeInstanceOf(Promise);
+    expect(sanitizeDisplayText("x")).not.toBeInstanceOf(Promise);
+  });
+
+  it("produces no React warnings or console errors", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    getDisplayText("hello");
+    sanitizeDisplayText("<b>hi</b>");
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #620 — network switch mid-session
+// ---------------------------------------------------------------------------
+
+describe("display network independence (#620)", () => {
+  it("holds no cache, so output depends only on input and cannot leak across networks", () => {
+    const testnetLabel = "Testnet Asset";
+    const mainnetLabel = "Mainnet Asset";
+    expect(getDisplayText(testnetLabel)).toBe(testnetLabel);
+    expect(getDisplayText(mainnetLabel)).toBe(mainnetLabel);
+    expect(getDisplayText(testnetLabel)).toBe(testnetLabel);
   });
 });

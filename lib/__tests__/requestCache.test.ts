@@ -36,14 +36,16 @@ describe("dedupeRequest", () => {
   it("calls the factory once for concurrent callers sharing the same key", async () => {
     const factory = jest.fn().mockResolvedValue("result");
 
-    const p1 = dedupeRequest("key-a", factory);
-    const p2 = dedupeRequest("key-a", factory);
+    const requests = Array.from({ length: 5 }, () =>
+      dedupeRequest("key-a", factory),
+    );
 
     expect(factory).toHaveBeenCalledTimes(1);
-    expect(p1).toBe(p2);
+    requests.forEach((request) => expect(request).toBe(requests[0]));
 
-    await expect(p1).resolves.toBe("result");
-    await expect(p2).resolves.toBe("result");
+    await expect(Promise.all(requests)).resolves.toEqual(
+      Array(5).fill("result"),
+    );
   });
 
   it("calls the factory separately for different keys", async () => {

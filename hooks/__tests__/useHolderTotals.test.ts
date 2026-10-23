@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useHolderTotals } from "../useHolderTotals";
 import { assetToken, compliance } from "@/lib/contracts";
 import { api } from "@/lib/api";
@@ -35,13 +35,15 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
+let mockNetwork = "testnet";
 jest.mock("@/hooks/useWallet", () => ({
-  useWallet: () => ({ network: "testnet" }),
+  useWallet: () => ({ network: mockNetwork }),
 }));
 
 describe("useHolderTotals", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNetwork = "testnet";
   });
 
   it("returns null when assets is null, and 0 for an empty array", async () => {
@@ -125,5 +127,118 @@ describe("useHolderTotals", () => {
 
     expect(result.current.error).toBe("Failed to read metadata");
     expect(result.current.data).toBeNull();
+  });
+
+  it("returns 0 without any network call for an empty asset list", async () => {
+    const { result } = renderHook(() => useHolderTotals([]));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Deliberate: no assets means no holders, so we skip the API and RPC reads.
+    expect(result.current.data).toBe(0);
+    expect(result.current.error).toBeNull();
+    expect(api.getStats).not.toHaveBeenCalled();
+    expect(assetToken.getMetadata).not.toHaveBeenCalled();
+    expect(compliance.getAllowlist).not.toHaveBeenCalled();
+  });
+
+  it("returns 0 when the allowlists are empty", async () => {
+    (api.getStats as jest.Mock).mockResolvedValue(null);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue({ complianceContract: "C1" });
+    (compliance.getAllowlist as jest.Mock).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useHolderTotals([makeAsset()]));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.data).toBe(0);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("re-runs the loader when an asset keeps its id but changes tokenContract", async () => {
+    (api.getStats as jest.Mock).mockResolvedValue(null);
+    (assetToken.getMetadata as jest.Mock).mockImplementation(async (_net, tokenContract) => ({
+      complianceContract: `C-${tokenContract}`,
+    }));
+    (compliance.getAllowlist as jest.Mock).mockImplementation(async (_net, c) =>
+      c === "C-T1" ? ["a"] : ["a", "b"],
+    );
+
+    const { result, rerender } = renderHook(
+      ({ assets }) => useHolderTotals(assets),
+      { initialProps: { assets: [makeAsset({ id: 1n, tokenContract: "T1" })] } },
+    );
+    await waitFor(() => expect(result.current.data).toBe(1));
+
+    rerender({ assets: [makeAsset({ id: 1n, tokenContract: "T2" })] });
+    await waitFor(() => expect(result.current.data).toBe(2));
+    expect(assetToken.getMetadata).toHaveBeenLastCalledWith("testnet", "T2");
+  });
+
+  it("does not warn or throw when unmounted during an in-flight call", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    let resolveStats: (v: unknown) => void = () => {};
+    (api.getStats as jest.Mock).mockReturnValue(
+      new Promise((resolve) => {
+        resolveStats = resolve;
+      }),
+    );
+
+    const { result, unmount } = renderHook(() => useHolderTotals([makeAsset()]));
+    expect(result.current.loading).toBe(true);
+
+    unmount();
+    await act(async () => {
+      resolveStats({ totalHolders: 7 });
+    });
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it("does not expose previous-network data after switching networks", async () => {
+    (api.getStats as jest.Mock).mockResolvedValue(null);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue({ complianceContract: "C1" });
+    (compliance.getAllowlist as jest.Mock).mockImplementation(async (net) =>
+      net === "testnet" ? ["a", "b"] : ["a", "b", "c", "d", "e"],
+    );
+    const assets = [makeAsset()];
+
+    const { result, rerender } = renderHook(() => useHolderTotals(assets));
+    await waitFor(() => expect(result.current.data).toBe(2));
+
+    mockNetwork = "mainnet";
+    rerender();
+
+    // Testnet data must be dropped immediately, never shown for mainnet.
+    expect(result.current.data).not.toBe(2);
+    await waitFor(() => expect(result.current.data).toBe(5));
+    expect(compliance.getAllowlist).toHaveBeenLastCalledWith("mainnet", "C1");
+  });
+
+  it("ignores an in-flight testnet response that resolves after switching to mainnet", async () => {
+    (api.getStats as jest.Mock).mockResolvedValue(null);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue({ complianceContract: "C1" });
+    let resolveTestnet: (v: string[]) => void = () => {};
+    (compliance.getAllowlist as jest.Mock).mockImplementation((net) =>
+      net === "testnet"
+        ? new Promise<string[]>((resolve) => {
+            resolveTestnet = resolve;
+          })
+        : Promise.resolve(["x", "y", "z"]),
+    );
+    const assets = [makeAsset()];
+
+    const { result, rerender } = renderHook(() => useHolderTotals(assets));
+    await waitFor(() => expect(compliance.getAllowlist).toHaveBeenCalledWith("testnet", "C1"));
+
+    mockNetwork = "mainnet";
+    rerender();
+    await waitFor(() => expect(result.current.data).toBe(3));
+
+    await act(async () => {
+      resolveTestnet(["a"]);
+    });
+    expect(result.current.data).toBe(3);
   });
 });
