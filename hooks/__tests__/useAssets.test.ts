@@ -140,6 +140,34 @@ describe("useAssets", () => {
     expect(result.current.error).toBe("RPC error");
     expect(result.current.loading).toBe(false);
   });
+
+  it("shows a readable fallback message for non-Error rejections without throwing", async () => {
+    (api.getAllAssets as jest.Mock).mockRejectedValue("boom");
+
+    const { result } = renderHook(() => useAssets());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toBe("Something went wrong.");
+    expect(result.current.assets).toEqual([]);
+  });
+
+  it("recovers from an error on refetch", async () => {
+    const asset = makeAsset();
+    (api.getAllAssets as jest.Mock)
+      .mockRejectedValueOnce(new Error("Temporary"))
+      .mockResolvedValueOnce([asset]);
+
+    const { result } = renderHook(() => useAssets());
+    await waitFor(() => expect(result.current.error).toBe("Temporary"));
+
+    await act(async () => {
+      await result.current.refetch();
+    });
+
+    await waitFor(() => expect(result.current.assets).toEqual([asset]));
+    expect(result.current.error).toBeNull();
+  });
 });
 
 describe("useAssets empty input", () => {
