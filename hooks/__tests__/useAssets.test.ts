@@ -138,6 +138,47 @@ describe("useAssets", () => {
   });
 });
 
+describe("useAssets empty input", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("returns an empty list without error when the api returns []", async () => {
+    // An empty array is a valid response (not null), so no contract fallback.
+    (api.getAllAssets as jest.Mock).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useAssets());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.assets).toEqual([]);
+    expect(result.current.error).toBeNull();
+    expect(registry.getAllAssets).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty list when the registry fallback has no assets", async () => {
+    (api.getAllAssets as jest.Mock).mockResolvedValue(null);
+    (registry.getAllAssets as jest.Mock).mockResolvedValue([]);
+
+    const { result } = renderHook(() => useAssets());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.assets).toEqual([]);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("returns an empty list when every asset is inactive", async () => {
+    (api.getAllAssets as jest.Mock).mockResolvedValue([
+      makeAsset({ id: BigInt(1), active: false }),
+    ]);
+
+    const { result } = renderHook(() => useAssets());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.assets).toEqual([]);
+  });
+});
+
 // ─── usePlatformStats ─────────────────────────────────────────────────────────
 
 describe("usePlatformStats", () => {
