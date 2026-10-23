@@ -413,4 +413,68 @@ describe("tokenizeFlow", () => {
       await expect(registerAsset(ctx, data)).rejects.toThrow("Authorization");
     });
   });
+  // =========================================================================
+  // #610: switching network mid-session
+  // =========================================================================
+  describe("network switch mid-session (#610)", () => {
+    const metaFor = (name: string): AssetMetadata => ({
+      name,
+      symbol: "NET",
+      assetType: "RealWorldAsset",
+      totalSupply: 1n,
+      decimals: 6,
+      admin: "GADMIN",
+      complianceContract: "CCOMP",
+      assetDescription: "",
+      valuation: 1n,
+      paused: false,
+    });
+
+    it("never serves data from the previous network after a switch", async () => {
+      jest
+        .mocked(assetToken.getMetadata)
+        .mockImplementation(async (network) =>
+          metaFor(network === "testnet" ? "Testnet Asset" : "Mainnet Asset"),
+        );
+
+      const first = await validateTokenContract("testnet", "CTOKEN");
+      const second = await validateTokenContract("mainnet", "CTOKEN");
+
+      expect(first.metadata.name).toBe("Testnet Asset");
+      expect(second.metadata.name).toBe("Mainnet Asset");
+      expect(assetToken.getMetadata).toHaveBeenNthCalledWith(1, "testnet", "CTOKEN");
+      expect(assetToken.getMetadata).toHaveBeenNthCalledWith(2, "mainnet", "CTOKEN");
+    });
+
+    it("keeps an in-flight request bound to the network it started on", async () => {
+      let resolveTestnet!: (m: AssetMetadata) => void;
+      jest
+        .mocked(assetToken.getMetadata)
+        .mockImplementationOnce(
+          () => new Promise<AssetMetadata>((r) => (resolveTestnet = r)),
+        )
+        .mockResolvedValueOnce(metaFor("Mainnet Asset"));
+
+      const inFlight = validateTokenContract("testnet", "CTOKEN");
+      const afterSwitch = await validateTokenContract("mainnet", "CTOKEN");
+      resolveTestnet(metaFor("Testnet Asset"));
+
+      expect(afterSwitch.metadata.name).toBe("Mainnet Asset");
+      // The late testnet result stays attributable to testnet only.
+      expect((await inFlight).metadata.name).toBe("Testnet Asset");
+      expect(assetToken.getMetadata).toHaveBeenCalledTimes(2);
+    });
+
+    it("does not reuse a successful testnet result when mainnet fails", async () => {
+      jest
+        .mocked(assetToken.getMetadata)
+        .mockResolvedValueOnce(metaFor("Testnet Asset"))
+        .mockRejectedValueOnce(new Error("not found"));
+
+      await validateTokenContract("testnet", "CTOKEN");
+      await expect(validateTokenContract("mainnet", "CTOKEN")).rejects.toThrow(
+        "Could not read the token contract",
+      );
+    });
+  });
 });
