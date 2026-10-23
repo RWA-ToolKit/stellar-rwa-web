@@ -50,7 +50,11 @@ export function useDividends(assetTokenId: string | null) {
       );
       return annotated;
     },
-    [assetTokenId, address, network],
+    // Every value the async callback closes over is listed here so the hook
+    // never reads a stale assetTokenId/address/network. `assetTokenId` is
+    // normalized to `null` for empty strings so a `""` -> `null` transition
+    // doesn't trigger a redundant refetch (both are disabled states).
+    [assetTokenId || null, address, network],
     Boolean(assetTokenId),
   );
 }
