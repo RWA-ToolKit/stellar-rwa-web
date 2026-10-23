@@ -23,8 +23,9 @@ jest.mock("@/lib/api", () => ({
   },
 }));
 
+let mockNetwork: "testnet" | "mainnet" = "testnet";
 jest.mock("@/hooks/useWallet", () => ({
-  useWallet: () => ({ network: "testnet" }),
+  useWallet: () => ({ network: mockNetwork }),
 }));
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -46,7 +47,10 @@ function makeAsset(overrides: Partial<AssetEntry> = {}): AssetEntry {
 // ─── useAssets ────────────────────────────────────────────────────────────────
 
 describe("useAssets", () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNetwork = "testnet";
+  });
 
   it("starts in loading state", () => {
     // Mock that never resolves so we can observe the initial state
@@ -238,6 +242,55 @@ describe("useAssets unmount during in-flight load", () => {
 
     expect(errorSpy).not.toHaveBeenCalled();
     errorSpy.mockRestore();
+  });
+});
+
+describe("useAssets network switch", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockNetwork = "testnet";
+  });
+  afterEach(() => {
+    mockNetwork = "testnet";
+  });
+
+  it("drops testnet data and loads mainnet data after a switch", async () => {
+    const testnetAsset = makeAsset({ id: BigInt(1), name: "Testnet Asset" });
+    const mainnetAsset = makeAsset({ id: BigInt(2), name: "Mainnet Asset" });
+    (api.getAllAssets as jest.Mock).mockResolvedValueOnce([testnetAsset]);
+
+    const { result, rerender } = renderHook(() => useAssets());
+    await waitFor(() => expect(result.current.assets).toEqual([testnetAsset]));
+
+    // Switch networks; the next load never resolves so we can observe the gap.
+    (api.getAllAssets as jest.Mock).mockReturnValueOnce(new Promise(() => {}));
+    mockNetwork = "mainnet";
+    rerender();
+
+    await waitFor(() => expect(result.current.loading).toBe(true));
+    expect(result.current.assets).toEqual([]);
+  });
+
+  it("ignores a late testnet response that resolves after switching to mainnet", async () => {
+    const testnetAsset = makeAsset({ id: BigInt(1), name: "Testnet Asset" });
+    const mainnetAsset = makeAsset({ id: BigInt(2), name: "Mainnet Asset" });
+    let resolveTestnet!: (v: AssetEntry[]) => void;
+    (api.getAllAssets as jest.Mock)
+      .mockReturnValueOnce(new Promise<AssetEntry[]>((r) => { resolveTestnet = r; }))
+      .mockResolvedValueOnce([mainnetAsset]);
+
+    const { result, rerender } = renderHook(() => useAssets());
+
+    mockNetwork = "mainnet";
+    rerender();
+    await waitFor(() => expect(result.current.assets).toEqual([mainnetAsset]));
+
+    await act(async () => {
+      resolveTestnet([testnetAsset]);
+    });
+
+    expect(result.current.assets).toEqual([mainnetAsset]);
+    expect(getCachedAsset("mainnet", mainnetAsset.id)).toEqual(mainnetAsset);
   });
 });
 
