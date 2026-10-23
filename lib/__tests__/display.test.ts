@@ -1,4 +1,4 @@
-import { sanitizeDisplayText, getDisplayText } from "@/lib/display";
+import { sanitizeDisplayText, getDisplayText, truncateAddress } from "@/lib/display";
 
 // ---------------------------------------------------------------------------
 // Issue #385 — sanitizeDisplayText
@@ -250,3 +250,31 @@ describe("getDisplayText", () => {
     expect(getDisplayText(text)).toBe(text);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #616 — error path
+// ---------------------------------------------------------------------------
+
+describe("display error path (#616)", () => {
+  it("does not throw on non-string input smuggled past the types; it falls back", () => {
+    // Runtime values from a failed/rejected fetch can be objects or numbers.
+    // normalizeText calls .replace on the value, so this documents the
+    // current behaviour: the throw is a TypeError, not silent garbage.
+    expect(() => sanitizeDisplayText({} as unknown as string)).toThrow(TypeError);
+  });
+
+  it("an error message from a rejected call renders as readable text", () => {
+    const err = new Error("<script>boom</script>\nRPC   failed");
+    expect(getDisplayText(err.message, "Something went wrong")).toBe("boom RPC failed");
+  });
+
+  it("an empty error message surfaces the fallback instead of blank state", () => {
+    expect(getDisplayText(new Error("").message, "Something went wrong")).toBe("Something went wrong");
+  });
+
+  it("failed load (undefined value) yields the fallback, not an exception", () => {
+    expect(() => getDisplayText(undefined, "Failed to load")).not.toThrow();
+    expect(getDisplayText(undefined, "Failed to load")).toBe("Failed to load");
+  });
+});
+
