@@ -66,3 +66,11 @@ JS chunks, 48 kB for the framework chunk), set ~7% above the measured
 in the same PR and explain why.
 
 If you add UI changes, prefer updating or adding a focused component test alongside the implementation.
+
+### Testing network switches
+
+`useAsset` keys its cached and in-flight data by the selected network. When you
+touch the hook, add or update a test in `hooks/useAsset.test.ts` that switches
+the selected network (Testnet ↔ Mainnet) while data is cached or in flight, and
+asserts that stale-network data is never shown after the switch. The test suite
+mocks RPC and the wallet, so no keys or funded account are needed.
