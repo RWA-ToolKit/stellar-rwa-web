@@ -67,4 +67,64 @@ describe('useActivity', () => {
     expect(result.current.error).toBeFalsy();
     expect(result.current.data ?? []).toEqual([]);
   });
+
+  // Stale closure / dependency array coverage: when the account argument
+  // changes, the hook must re-run its effect against the *new* value rather
+  // than reusing a closure captured on the first render.
+  it('refetches with the new account when the argument changes', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => [],
+      } as Response);
+
+    const { rerender } = renderHook(
+      ({ account }: { account: string }) => useActivity(account),
+      { initialProps: { account: 'GABC123' } },
+    );
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({ account: 'GDEF456' });
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    // The second request must target the updated account, proving the effect
+    // is not closing over the stale initial value.
+    const secondCallUrl = String(fetchSpy.mock.calls[1][0]);
+    expect(secondCallUrl).toContain('GDEF456');
+    expect(secondCallUrl).not.toContain('GABC123');
+  });
+
+  it('does not refetch when the account argument is unchanged across rerenders', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => [],
+      } as Response);
+
+    const { rerender } = renderHook(
+      ({ account }: { account: string }) => useActivity(account),
+      { initialProps: { account: 'GABC123' } },
+    );
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({ account: 'GABC123' });
+
+    // Give any stray effect a chance to fire before asserting stability.
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });
