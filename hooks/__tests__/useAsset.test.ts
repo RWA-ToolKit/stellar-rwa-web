@@ -16,8 +16,9 @@ jest.mock("@/lib/contracts", () => ({
   },
 }));
 
+let mockNetwork = "testnet";
 jest.mock("@/hooks/useWallet", () => ({
-  useWallet: () => ({ network: "testnet" }),
+  useWallet: () => ({ network: mockNetwork }),
 }));
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
@@ -57,6 +58,7 @@ function makeMetadata(overrides: Partial<AssetMetadata> = {}): AssetMetadata {
 describe("useAsset", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNetwork = "testnet";
     cacheAssetEntries("testnet", []);
   });
 
@@ -210,5 +212,97 @@ describe("useAsset", () => {
     );
     expect(registry.getAsset).toHaveBeenCalledTimes(2);
     expect(registry.getAsset).toHaveBeenLastCalledWith("testnet", BigInt(2));
+  });
+
+  // ── error path (#626) ────────────────────────────────────────────────────
+
+  it("turns a non-Error rejection into readable state instead of throwing", async () => {
+    (registry.getAsset as jest.Mock).mockRejectedValue("boom");
+
+    const { result } = renderHook(() => useAsset(BigInt(1)));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toBe("Something went wrong.");
+    expect(result.current.data).toBeNull();
+    expect(result.current.notFound).toBe(false);
+  });
+
+  // ── empty / zero input (#627) ────────────────────────────────────────────
+
+  it("treats id 0n as a real id (only null disables the hook)", async () => {
+    const entry = makeEntry({ id: BigInt(0) });
+    const metadata = makeMetadata();
+    (registry.getAsset as jest.Mock).mockResolvedValue(entry);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(metadata);
+
+    const { result } = renderHook(() => useAsset(BigInt(0)));
+
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(registry.getAsset).toHaveBeenCalledWith("testnet", BigInt(0));
+    expect(result.current.data).toEqual({ ...entry, metadata });
+  });
+
+  it("never reports notFound for a null id", () => {
+    const { result } = renderHook(() => useAsset(null));
+    expect(result.current.notFound).toBe(false);
+  });
+
+  // ── dependency array / stale closures (#628) ─────────────────────────────
+
+  it("re-fetches with the new network when the wallet network changes", async () => {
+    const entry = makeEntry();
+    (registry.getAsset as jest.Mock).mockResolvedValue(entry);
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata());
+
+    const { result, rerender } = renderHook(() => useAsset(BigInt(1)));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(registry.getAsset).toHaveBeenLastCalledWith("testnet", BigInt(1));
+
+    mockNetwork = "mainnet";
+    rerender();
+
+    await waitFor(() =>
+      expect(registry.getAsset).toHaveBeenLastCalledWith("mainnet", BigInt(1)),
+    );
+    expect(registry.getAsset).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not re-fetch when rerendered with an equal bigint id", async () => {
+    (registry.getAsset as jest.Mock).mockResolvedValue(makeEntry());
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata());
+
+    const { result, rerender } = renderHook(() => useAsset(BigInt(1)));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    rerender();
+
+    expect(registry.getAsset).toHaveBeenCalledTimes(1);
+  });
+
+  // ── unmount during in-flight call (#629) ─────────────────────────────────
+
+  it("unmounting mid-flight produces no console error or warning", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    let resolveEntry!: (e: AssetEntry) => void;
+    (registry.getAsset as jest.Mock).mockReturnValue(
+      new Promise<AssetEntry>((r) => {
+        resolveEntry = r;
+      }),
+    );
+    (assetToken.getMetadata as jest.Mock).mockResolvedValue(makeMetadata());
+
+    const { unmount } = renderHook(() => useAsset(BigInt(1)));
+    unmount();
+    resolveEntry(makeEntry());
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
   });
 });

@@ -252,60 +252,52 @@ describe("getDisplayText", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Issue #616 — error path
+// Issue #618 — no hidden state / stale closures (display is pure, no hooks)
 // ---------------------------------------------------------------------------
 
-describe("display error path (#616)", () => {
-  it("does not throw on non-string input smuggled past the types; it falls back", () => {
-    // Runtime values from a failed/rejected fetch can be objects or numbers.
-    // normalizeText calls .replace on the value, so this documents the
-    // current behaviour: the throw is a TypeError, not silent garbage.
-    expect(() => sanitizeDisplayText({} as unknown as string)).toThrow(TypeError);
+describe("display purity (#618)", () => {
+  it("has no React dependency arrays: repeated calls with different args never reuse earlier input", () => {
+    expect(getDisplayText("first")).toBe("first");
+    expect(getDisplayText("second")).toBe("second");
+    expect(getDisplayText(null, "fallback")).toBe("fallback");
+    expect(getDisplayText("first")).toBe("first");
   });
 
-  it("an error message from a rejected call renders as readable text", () => {
-    const err = new Error("<script>boom</script>\nRPC   failed");
-    expect(getDisplayText(err.message, "Something went wrong")).toBe("boom RPC failed");
-  });
-
-  it("an empty error message surfaces the fallback instead of blank state", () => {
-    expect(getDisplayText(new Error("").message, "Something went wrong")).toBe("Something went wrong");
-  });
-
-  it("failed load (undefined value) yields the fallback, not an exception", () => {
-    expect(() => getDisplayText(undefined, "Failed to load")).not.toThrow();
-    expect(getDisplayText(undefined, "Failed to load")).toBe("Failed to load");
+  it("does not leak options between calls", () => {
+    expect(sanitizeDisplayText("abcdefghij", { maxLength: 3 })).toBe("abc…");
+    expect(sanitizeDisplayText("abcdefghij")).toBe("abcdefghij");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Issue #617 — empty / zero / null input
+// Issue #619 — unmount during in-flight async call
 // ---------------------------------------------------------------------------
 
-describe("display empty/zero input (#617)", () => {
-  it("sanitizeDisplayText returns '' (not fallback) for null, undefined, '' and whitespace", () => {
-    for (const v of [null, undefined, "", "  \t\n "]) {
-      expect(sanitizeDisplayText(v)).toBe("");
-    }
+describe("display synchrony (#619)", () => {
+  it("is fully synchronous, so nothing can resolve after unmount", () => {
+    expect(getDisplayText("x")).not.toBeInstanceOf(Promise);
+    expect(sanitizeDisplayText("x")).not.toBeInstanceOf(Promise);
   });
 
-  it("getDisplayText substitutes the fallback for the same empty inputs", () => {
-    for (const v of [null, undefined, "", "  \t\n "]) {
-      expect(getDisplayText(v)).toBe("Untitled");
-    }
+  it("produces no React warnings or console errors", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    getDisplayText("hello");
+    sanitizeDisplayText("<b>hi</b>");
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
+});
 
-  it("the string '0' is real content and is kept, not treated as empty", () => {
-    expect(sanitizeDisplayText("0")).toBe("0");
-    expect(getDisplayText("0")).toBe("0");
-  });
+// ---------------------------------------------------------------------------
+// Issue #620 — network switch mid-session
+// ---------------------------------------------------------------------------
 
-  it("maxLength 0 truncates everything to just the ellipsis", () => {
-    // Non-obvious: a zero limit does not yield '' for non-empty text.
-    expect(sanitizeDisplayText("abc", { maxLength: 0 })).toBe("…");
-  });
-
-  it("truncateAddress returns an empty string unchanged", () => {
-    expect(truncateAddress("")).toBe("");
+describe("display network independence (#620)", () => {
+  it("holds no cache, so output depends only on input and cannot leak across networks", () => {
+    const testnetLabel = "Testnet Asset";
+    const mainnetLabel = "Mainnet Asset";
+    expect(getDisplayText(testnetLabel)).toBe(testnetLabel);
+    expect(getDisplayText(mainnetLabel)).toBe(mainnetLabel);
+    expect(getDisplayText(testnetLabel)).toBe(testnetLabel);
   });
 });

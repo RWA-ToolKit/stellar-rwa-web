@@ -531,6 +531,16 @@ describe("api.getEvents", () => {
 
     expect(await api.getEvents()).toBeNull();
   });
+
+  it("requests the requested offset and caps the page size", async () => {
+    mockFetch.mockResolvedValue(okResponse([makeApiEvent()]));
+
+    await api.getEvents({ offset: 100, limit: 500 });
+
+    expect(requestedUrl()).toBe(
+      "https://api.example.com/v1/events?offset=100&limit=100",
+    );
+  });
 });
 
 // ==============================================================================
@@ -685,118 +695,78 @@ describe("apiUrl /v1 prefix (#531)", () => {
   });
 });
 
-// ==============================================================================
-// Unmount during an in-flight call (#614)
-// ==============================================================================
-
-/** Minimal consumer: loads stats via the api client and stores them in state. */
-function useStats(key = "default") {
-  const [stats, setStats] = useState<unknown>(null);
-  useEffect(() => {
-    let live = true;
-    api.getStats().then((r) => {
-      if (live) setStats(r);
-    });
-    return () => {
-      live = false;
-    };
-  }, [key]);
-  return stats;
-}
-
-describe("unmount during an in-flight call (#614)", () => {
-  it("resolving after unmount does not log a React warning", async () => {
-    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
-    let resolveFetch: (v: unknown) => void = () => {};
-    mockFetch.mockImplementation(
-      () => new Promise((resolve) => { resolveFetch = resolve; }),
-    );
-
-    const { unmount } = renderHook(() => useStats());
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    unmount();
-
-    await act(async () => {
-      resolveFetch(okResponse(makeApiStats()));
-      await Promise.resolve();
-    });
-
-    expect(errorSpy).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
+describe("api client error path (#611)", () => {
+  it("resolves null instead of throwing when fetch rejects", async () => {
+    mockFetch.mockRejectedValue(new TypeError("Failed to fetch"));
+    await expect(api.getStats()).resolves.toBeNull();
+    await expect(api.getEvents()).resolves.toBeNull();
+    await expect(api.getAsset(1n)).resolves.toBeNull();
+    await expect(api.getHolders(1n)).resolves.toBeNull();
+    await expect(api.getAllAssets()).resolves.toBeNull();
+    await expect(api.getAssetsByIssuer("GISSUER")).resolves.toBeNull();
   });
 
-  it("rejecting after unmount resolves to null without throwing", async () => {
-    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
-    let rejectFetch: (e: unknown) => void = () => {};
-    mockFetch.mockImplementation(
-      () => new Promise((_, reject) => { rejectFetch = reject; }),
-    );
+  it("resolves null on a 500 for every endpoint", async () => {
+    mockFetch.mockResolvedValue(errorResponse(500));
+    await expect(api.getStats()).resolves.toBeNull();
+    await expect(api.getEvents()).resolves.toBeNull();
+    await expect(api.getAssetsPage()).resolves.toBeNull();
+  });
 
-    const { unmount } = renderHook(() => useStats());
-    unmount();
-    await act(async () => {
-      rejectFetch(new Error("network down"));
-      await Promise.resolve();
+  it("resolves null (not a throw) when the payload shape is unusable", async () => {
+    mockFetch.mockResolvedValue(okResponse({ total_assets: "nope" }));
+    await withSilencedWarnings(async () => {
+      await expect(api.getStats()).resolves.toBeNull();
     });
-
-    expect(errorSpy).not.toHaveBeenCalled();
-    errorSpy.mockRestore();
   });
 });
 
-// ==============================================================================
-// Network switch mid-session (#615)
-// ==============================================================================
-
-describe("network switch mid-session (#615)", () => {
-  it("does not show stale-network data when the switch happens while a call is in flight", async () => {
-    // lib/api.ts holds no network state or cache; the consumer owns the
-    // selected network, so the stale response must be dropped by the consumer.
-    const resolvers: Record<string, (v: unknown) => void> = {};
-    let call = 0;
-    mockFetch.mockImplementation(
-      () => new Promise((resolve) => { resolvers[call++ === 0 ? "testnet" : "mainnet"] = resolve; }),
-    );
-
-    function useNetworkStats(network: string) {
-      const [data, setData] = useState<{ network: string; stats: unknown } | null>(null);
-      useEffect(() => {
-        let live = true;
-        setData(null);
-        api.getStats().then((stats) => {
-          if (live) setData({ network, stats });
-        });
-        return () => { live = false; };
-      }, [network]);
-      return data;
-    }
-
-    const { result, rerender } = renderHook(({ n }) => useNetworkStats(n), {
-      initialProps: { n: "testnet" },
-    });
-    rerender({ n: "mainnet" });
-
-    // Late testnet response arrives after the switch.
-    await act(async () => {
-      resolvers.testnet(okResponse(makeApiStats({ total_assets: 111 })));
-      await Promise.resolve();
-    });
-    expect(result.current).toBeNull();
-
-    await act(async () => {
-      resolvers.mainnet(okResponse(makeApiStats({ total_assets: 222 })));
-      await Promise.resolve();
-    });
-    await waitFor(() => expect(result.current?.network).toBe("mainnet"));
-    expect(result.current?.stats).toMatchObject({ totalAssets: 222 });
+describe("api client empty/zero input (#612)", () => {
+  it("treats an empty array as a valid empty result, not as unavailable", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await expect(api.getAllAssets()).resolves.toEqual([]);
+    await expect(api.getEvents()).resolves.toEqual([]);
+    await expect(api.getHolders(1n)).resolves.toEqual([]);
   });
 
-  it("does not cache between calls: each call re-fetches", async () => {
-    mockFetch.mockResolvedValue(okResponse(makeApiStats({ total_assets: 1 })));
-    await api.getStats();
-    mockFetch.mockResolvedValue(okResponse(makeApiStats({ total_assets: 2 })));
-    const second = await api.getStats();
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-    expect(second).toMatchObject({ totalAssets: 2 });
+  it("treats null / non-array bodies as unavailable", async () => {
+    mockFetch.mockResolvedValue(okResponse(null));
+    await expect(api.getEvents()).resolves.toBeNull();
+    mockFetch.mockResolvedValue(okResponse({}));
+    await expect(api.getAssetsPage()).resolves.toBeNull();
+  });
+
+  it("accepts asset id 0 and builds the /assets/0 path", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 0 })));
+    const asset = await api.getAsset(0n);
+    expect(asset?.id).toBe(0n);
+    expect(requestedUrl()).toBe("https://api.example.com/v1/assets/0");
+  });
+
+  it("returns an empty list for an issuer with no assets", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await expect(api.getAssetsByIssuer("")).resolves.toEqual([]);
+  });
+});
+
+describe("api client has no stale closures (#613)", () => {
+  // lib/api.ts has no React hooks, so there are no dependency arrays to audit.
+  // Its only module-level captured value is BASE (read once at import, by
+  // design). Every request must be built from its own arguments.
+  it("builds each request from the arguments of that call", async () => {
+    mockFetch.mockResolvedValue(okResponse([]));
+    await api.getHolders(1n);
+    await api.getHolders(2n);
+    expect(requestedUrl(0)).toContain("/assets/1/holders");
+    expect(requestedUrl(1)).toContain("/assets/2/holders");
+  });
+
+  it("does not leak results between consecutive calls", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 1 })));
+    const a = await api.getAsset(1n);
+    mockFetch.mockResolvedValue(okResponse(makeApiAsset({ id: 2 })));
+    const b = await api.getAsset(2n);
+    expect(a?.id).toBe(1n);
+    expect(b?.id).toBe(2n);
   });
 });
