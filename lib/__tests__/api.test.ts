@@ -744,3 +744,59 @@ describe("unmount during an in-flight call (#614)", () => {
   });
 });
 
+// ==============================================================================
+// Network switch mid-session (#615)
+// ==============================================================================
+
+describe("network switch mid-session (#615)", () => {
+  it("does not show stale-network data when the switch happens while a call is in flight", async () => {
+    // lib/api.ts holds no network state or cache; the consumer owns the
+    // selected network, so the stale response must be dropped by the consumer.
+    const resolvers: Record<string, (v: unknown) => void> = {};
+    let call = 0;
+    mockFetch.mockImplementation(
+      () => new Promise((resolve) => { resolvers[call++ === 0 ? "testnet" : "mainnet"] = resolve; }),
+    );
+
+    function useNetworkStats(network: string) {
+      const [data, setData] = useState<{ network: string; stats: unknown } | null>(null);
+      useEffect(() => {
+        let live = true;
+        setData(null);
+        api.getStats().then((stats) => {
+          if (live) setData({ network, stats });
+        });
+        return () => { live = false; };
+      }, [network]);
+      return data;
+    }
+
+    const { result, rerender } = renderHook(({ n }) => useNetworkStats(n), {
+      initialProps: { n: "testnet" },
+    });
+    rerender({ n: "mainnet" });
+
+    // Late testnet response arrives after the switch.
+    await act(async () => {
+      resolvers.testnet(okResponse(makeApiStats({ total_assets: 111 })));
+      await Promise.resolve();
+    });
+    expect(result.current).toBeNull();
+
+    await act(async () => {
+      resolvers.mainnet(okResponse(makeApiStats({ total_assets: 222 })));
+      await Promise.resolve();
+    });
+    await waitFor(() => expect(result.current?.network).toBe("mainnet"));
+    expect(result.current?.stats).toMatchObject({ totalAssets: 222 });
+  });
+
+  it("does not cache between calls: each call re-fetches", async () => {
+    mockFetch.mockResolvedValue(okResponse(makeApiStats({ total_assets: 1 })));
+    await api.getStats();
+    mockFetch.mockResolvedValue(okResponse(makeApiStats({ total_assets: 2 })));
+    const second = await api.getStats();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(second).toMatchObject({ totalAssets: 2 });
+  });
+});
