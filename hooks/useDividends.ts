@@ -20,6 +20,9 @@ export interface DistributionWithClaim extends Distribution {
  * Callers should invoke the returned `refetch` after a successful claim
  * (see ClaimButton's `onClaimed`) so a distribution's row flips to
  * "claimed" without requiring a manual page refresh.
+ *
+ * Failures (e.g. a rejected RPC call) are surfaced through the returned
+ * `error` state by `useAsync` rather than thrown into the component.
  */
 export function useDividends(assetTokenId: string | null) {
   const { network, address } = useWallet();

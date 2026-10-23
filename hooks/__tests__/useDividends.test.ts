@@ -106,4 +106,30 @@ describe("useDividends", () => {
     expect(dividend.claimable).not.toHaveBeenCalled();
     expect(dividend.hasClaimed).not.toHaveBeenCalled();
   });
+
+  it("surfaces a readable error state instead of throwing when fetching distributions rejects", async () => {
+    const error = new Error("RPC unavailable");
+    (dividend.getDistributionsForAsset as jest.Mock).mockRejectedValue(error);
+
+    const { result } = renderHook(() => useDividends("TOKEN_A"));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toBe(error);
+    expect(result.current.data).toBeNull();
+  });
+
+  it("surfaces a readable error state instead of throwing when claimable lookup rejects", async () => {
+    const dist = makeDistribution({ id: BigInt(1) });
+    (dividend.getDistributionsForAsset as jest.Mock).mockResolvedValue([dist]);
+    (dividend.claimable as jest.Mock).mockRejectedValue(new Error("claimable failed"));
+    (dividend.hasClaimed as jest.Mock).mockResolvedValue(false);
+
+    const { result } = renderHook(() => useDividends("TOKEN_A"));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.error).toBeInstanceOf(Error);
+    expect(result.current.data).toBeNull();
+  });
 });
