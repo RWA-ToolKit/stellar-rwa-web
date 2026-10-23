@@ -278,3 +278,34 @@ describe("display error path (#616)", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// Issue #617 — empty / zero / null input
+// ---------------------------------------------------------------------------
+
+describe("display empty/zero input (#617)", () => {
+  it("sanitizeDisplayText returns '' (not fallback) for null, undefined, '' and whitespace", () => {
+    for (const v of [null, undefined, "", "  \t\n "]) {
+      expect(sanitizeDisplayText(v)).toBe("");
+    }
+  });
+
+  it("getDisplayText substitutes the fallback for the same empty inputs", () => {
+    for (const v of [null, undefined, "", "  \t\n "]) {
+      expect(getDisplayText(v)).toBe("Untitled");
+    }
+  });
+
+  it("the string '0' is real content and is kept, not treated as empty", () => {
+    expect(sanitizeDisplayText("0")).toBe("0");
+    expect(getDisplayText("0")).toBe("0");
+  });
+
+  it("maxLength 0 truncates everything to just the ellipsis", () => {
+    // Non-obvious: a zero limit does not yield '' for non-empty text.
+    expect(sanitizeDisplayText("abc", { maxLength: 0 })).toBe("…");
+  });
+
+  it("truncateAddress returns an empty string unchanged", () => {
+    expect(truncateAddress("")).toBe("");
+  });
+});
