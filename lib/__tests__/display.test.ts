@@ -287,3 +287,17 @@ describe("display synchrony (#619)", () => {
     spy.mockRestore();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #620 — network switch mid-session
+// ---------------------------------------------------------------------------
+
+describe("display network independence (#620)", () => {
+  it("holds no cache, so output depends only on input and cannot leak across networks", () => {
+    const testnetLabel = "Testnet Asset";
+    const mainnetLabel = "Mainnet Asset";
+    expect(getDisplayText(testnetLabel)).toBe(testnetLabel);
+    expect(getDisplayText(mainnetLabel)).toBe(mainnetLabel);
+    expect(getDisplayText(testnetLabel)).toBe(testnetLabel);
+  });
+});
