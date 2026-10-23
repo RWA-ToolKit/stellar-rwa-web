@@ -11,6 +11,13 @@
  * - Add the code-to-message mapping below with documentation
  * - Update the contracts repo error enum
  * - Add test coverage in lib/__tests__/contractErrors.test.ts
+ *
+ * Note on stale closures / dependency arrays: this module is a pure utility
+ * with no React hooks, props, or state. Its exported functions are
+ * deterministic and depend only on their arguments (plus the module-level
+ * constant `CONTRACT_ERROR_CODES`), so there are no dependency arrays to
+ * audit and no stale-closure risk. Keep it that way: do not introduce
+ * component state or hooks here.
  */
 
 /**
