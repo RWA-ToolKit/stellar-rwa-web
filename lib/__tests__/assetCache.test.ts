@@ -21,24 +21,50 @@
  *   - Returns null after the TTL has expired
  */
 
+import { act, renderHook, waitFor } from "@testing-library/react";
 import {
   cacheAssetEntries,
+  clearAssetCache,
   getCachedAsset,
+  getCachedAssetEntries,
+  loadAssetEntries,
   prefetchAssetMetadata,
   takePrefetchedAssetMetadata,
 } from "../assetCache";
-import { assetToken } from "@/lib/contracts";
-import type { AssetEntry, AssetMetadata } from "@/types";
+import { assetToken, registry } from "@/lib/contracts";
+import { api } from "@/lib/api";
+import { useAssets } from "@/hooks/useAssets";
+import { useAsset } from "@/hooks/useAsset";
+import type { AssetEntry, AssetMetadata, Network } from "@/types";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
+
+let mockNetwork: Network = "testnet";
 
 jest.mock("@/lib/contracts", () => ({
   assetToken: {
     getMetadata: jest.fn(),
   },
+  registry: {
+    getAllAssets: jest.fn(),
+    getAsset: jest.fn(),
+  },
+}));
+
+jest.mock("@/lib/api", () => ({
+  api: {
+    getAllAssets: jest.fn(() => Promise.resolve(null)),
+  },
+}));
+
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: () => ({ network: mockNetwork }),
 }));
 
 const mockGetMetadata = assetToken.getMetadata as jest.Mock;
+const mockGetAllAssets = registry.getAllAssets as jest.Mock;
+const mockGetAsset = registry.getAsset as jest.Mock;
+const mockApiGetAllAssets = api.getAllAssets as jest.Mock;
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -278,5 +304,141 @@ describe("takePrefetchedAssetMetadata", () => {
 
     const taken = takePrefetchedAssetMetadata("testnet", TOKEN);
     expect(taken).toBeNull();
+  });
+});
+
+describe("network switch mid-session (#585)", () => {
+  beforeEach(() => {
+    mockNetwork = "testnet";
+    clearAssetCache();
+    mockGetMetadata.mockReset();
+    mockGetAllAssets.mockReset();
+    mockGetAsset.mockReset();
+    mockApiGetAllAssets.mockResolvedValue(null);
+  });
+
+  afterEach(() => {
+    clearAssetCache();
+  });
+
+  it("isolates cached entries and in-flight metadata prefetches across testnet and mainnet", async () => {
+    const testnetAsset = makeEntry({
+      id: 1n,
+      tokenContract: "CTOKEN_SHARED",
+      name: "Testnet Bond",
+    });
+    const mainnetAsset = makeEntry({
+      id: 1n,
+      tokenContract: "CTOKEN_SHARED",
+      name: "Mainnet Bond",
+    });
+
+    cacheAssetEntries("testnet", [testnetAsset]);
+    let resolveTestnetMeta!: (meta: AssetMetadata) => void;
+    mockGetMetadata.mockImplementation((net: Network) => {
+      if (net === "testnet") {
+        return new Promise<AssetMetadata>((res) => {
+          resolveTestnetMeta = res;
+        });
+      }
+      return Promise.resolve(makeMetadata({ name: "Mainnet Meta" }));
+    });
+
+    const testnetPrefetch = prefetchAssetMetadata("testnet", "CTOKEN_SHARED");
+
+    // Switch to mainnet while testnet metadata prefetch is still in flight
+    expect(getCachedAsset("mainnet", 1n)).toBeNull();
+    expect(getCachedAssetEntries("mainnet")).toBeNull();
+    expect(takePrefetchedAssetMetadata("mainnet", "CTOKEN_SHARED")).toBeNull();
+
+    cacheAssetEntries("mainnet", [mainnetAsset]);
+    const mainnetPrefetch = prefetchAssetMetadata("mainnet", "CTOKEN_SHARED");
+    expect(mainnetPrefetch).not.toBe(testnetPrefetch);
+
+    await expect(mainnetPrefetch).resolves.toMatchObject({ name: "Mainnet Meta" });
+    expect(getCachedAsset("mainnet", 1n)?.name).toBe("Mainnet Bond");
+
+    // Late testnet resolution does not pollute mainnet cache
+    resolveTestnetMeta(makeMetadata({ name: "Testnet Meta" }));
+    await expect(testnetPrefetch).resolves.toMatchObject({ name: "Testnet Meta" });
+    expect(getCachedAsset("mainnet", 1n)?.name).toBe("Mainnet Bond");
+  });
+
+  it("does not leak stale testnet assets into useAssets when switching to mainnet mid-flight or after load", async () => {
+    let resolveSlowTestnet!: (entries: AssetEntry[]) => void;
+    mockGetAllAssets.mockImplementation((net: Network) => {
+      if (net === "testnet") {
+        return new Promise<AssetEntry[]>((res) => {
+          resolveSlowTestnet = res;
+        });
+      }
+      return Promise.resolve([
+        makeEntry({ id: 2n, name: "Mainnet Treasury" }),
+      ]);
+    });
+
+    const { result, rerender } = renderHook(() => useAssets());
+    expect(result.current.loading).toBe(true);
+    expect(result.current.assets).toEqual([]);
+
+    // Switch network to mainnet before testnet finishes
+    mockNetwork = "mainnet";
+    rerender();
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.assets.map((a) => a.name)).toEqual(["Mainnet Treasury"]);
+
+    // Resolve slow testnet request — UI state must remain on mainnet data
+    await act(async () => {
+      resolveSlowTestnet([makeEntry({ id: 1n, name: "Stale Testnet Asset" })]);
+    });
+
+    expect(result.current.assets.map((a) => a.name)).toEqual(["Mainnet Treasury"]);
+  });
+
+  it("clears testnet asset detail immediately on switch to mainnet and loads mainnet asset without cross-network leakage", async () => {
+    const testnetEntry = makeEntry({
+      id: 1n,
+      tokenContract: "CTOKEN_1",
+      name: "Testnet Real Estate",
+    });
+    const mainnetEntry = makeEntry({
+      id: 1n,
+      tokenContract: "CTOKEN_1",
+      name: "Mainnet Real Estate",
+    });
+
+    cacheAssetEntries("testnet", [testnetEntry]);
+    cacheAssetEntries("mainnet", [mainnetEntry]);
+
+    let resolveMainnetMeta!: (meta: AssetMetadata) => void;
+    mockGetMetadata.mockImplementation((net: Network) => {
+      if (net === "testnet") {
+        return Promise.resolve(makeMetadata({ name: "Testnet Real Estate", symbol: "TRE" }));
+      }
+      return new Promise<AssetMetadata>((res) => {
+        resolveMainnetMeta = res;
+      });
+    });
+
+    const { result, rerender } = renderHook(() => useAsset(1n));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data?.metadata.name).toBe("Testnet Real Estate");
+
+    // Switch to mainnet — testnet asset detail must clear immediately while mainnet metadata loads
+    mockNetwork = "mainnet";
+    rerender();
+
+    expect(result.current.data).toBeNull();
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      resolveMainnetMeta(makeMetadata({ name: "Mainnet Real Estate", symbol: "MRE" }));
+    });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data?.name).toBe("Mainnet Real Estate");
+    expect(result.current.data?.metadata.symbol).toBe("MRE");
   });
 });

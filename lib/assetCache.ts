@@ -71,3 +71,22 @@ export function takePrefetchedAssetMetadata(
   metadataPrefetches.delete(key);
   return cached.expiresAt > Date.now() ? cached.promise : null;
 }
+
+/**
+ * Clear cached asset entries and prefetched metadata for a specific network,
+ * or across all networks when `network` is omitted (#585).
+ */
+export function clearAssetCache(network?: Network): void {
+  if (!network) {
+    assetsByNetwork.clear();
+    metadataPrefetches.clear();
+    return;
+  }
+  assetsByNetwork.delete(network);
+  const prefix = `${network}:`;
+  for (const key of Array.from(metadataPrefetches.keys())) {
+    if (key.startsWith(prefix)) {
+      metadataPrefetches.delete(key);
+    }
+  }
+}
