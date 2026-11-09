@@ -25,6 +25,16 @@ export function getCachedAssetEntries(network: Network): AssetEntry[] | null {
   return assets ? Array.from(assets.values()) : null;
 }
 
+/**
+ * Load asset entries for `network`, optionally including inactive entries.
+ *
+ * Closure / dependency audit (#583):
+ * - All inputs (`network`, `includeInactive`) are passed explicitly rather than
+ *   captured from module-level state.
+ * - Hooks calling `loadAssetEntries` (`useAssets`) list `[network, includeInactive]`
+ *   in their `useAsync` dependency array, and `useAsync` invokes the latest
+ *   `loaderRef.current()` so `refetch()` never reads a stale closure.
+ */
 export async function loadAssetEntries(
   network: Network,
   includeInactive = false,
@@ -53,6 +63,9 @@ export function prefetchAssetMetadata(
   const promise = assetToken.getMetadata(network, tokenContract);
   const prefetch = { promise, expiresAt: now + PREFETCH_TTL_MS };
   metadataPrefetches.set(key, prefetch);
+  // Stale-closure guard (#583): compare identity (`=== prefetch`) before
+  // deleting so a late rejection from a superseded prefetch never evicts a
+  // newer entry stored under the same `(network, tokenContract)` key.
   promise.catch(() => {
     if (metadataPrefetches.get(key) === prefetch) {
       metadataPrefetches.delete(key);

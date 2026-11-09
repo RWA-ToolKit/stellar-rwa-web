@@ -36,6 +36,8 @@ export function useAsync<T>(
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const reqId = useRef(0);
+  const loaderRef = useRef(loader);
+  loaderRef.current = loader;
   // Serialize deps to a stable string key so memoization is by value, not by
   // array identity/length — unstable references or a changing-length caller
   // deps array no longer break the useCallback dependency list below.
@@ -67,7 +69,7 @@ export function useAsync<T>(
     loadedKey.current = runKey;
     setLoading(true);
     setError(null);
-    loader()
+    loaderRef.current()
       .then((res) => {
         if (id === reqId.current) {
           setData(res);
@@ -84,7 +86,9 @@ export function useAsync<T>(
           setLoading(false);
         }
       });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // `loader` is intentionally omitted from the dependency array because callers
+    // pass inline arrow functions on every render; reading `loaderRef.current()`
+    // guarantees `run` and `refetch` never read a stale closure (#583).
   }, [enabled, depsKey, runKey]);
 
   useEffect(() => {

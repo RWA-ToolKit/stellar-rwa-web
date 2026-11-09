@@ -21,24 +21,48 @@
  *   - Returns null after the TTL has expired
  */
 
+import { act, renderHook, waitFor } from "@testing-library/react";
 import {
   cacheAssetEntries,
   getCachedAsset,
   prefetchAssetMetadata,
   takePrefetchedAssetMetadata,
 } from "../assetCache";
-import { assetToken } from "@/lib/contracts";
-import type { AssetEntry, AssetMetadata } from "@/types";
+import { api } from "@/lib/api";
+import { assetToken, registry } from "@/lib/contracts";
+import { useAssets } from "@/hooks/useAssets";
+import { useAsset } from "@/hooks/useAsset";
+import { useWallet } from "@/hooks/useWallet";
+import type { AssetEntry, AssetMetadata, Network } from "@/types";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
+
+jest.mock("@/lib/api", () => ({
+  api: {
+    getAllAssets: jest.fn(),
+    getAsset: jest.fn(),
+  },
+}));
 
 jest.mock("@/lib/contracts", () => ({
   assetToken: {
     getMetadata: jest.fn(),
   },
+  registry: {
+    getAllAssets: jest.fn(),
+    getAsset: jest.fn(),
+  },
+}));
+
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: jest.fn(),
 }));
 
 const mockGetMetadata = assetToken.getMetadata as jest.Mock;
+const mockApiGetAllAssets = api.getAllAssets as jest.Mock;
+const mockRegistryGetAllAssets = registry.getAllAssets as jest.Mock;
+const mockRegistryGetAsset = registry.getAsset as jest.Mock;
+const mockUseWallet = useWallet as jest.Mock;
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -278,5 +302,117 @@ describe("takePrefetchedAssetMetadata", () => {
 
     const taken = takePrefetchedAssetMetadata("testnet", TOKEN);
     expect(taken).toBeNull();
+  });
+});
+
+describe("stale closure / dependency array (#583)", () => {
+  beforeEach(() => {
+    mockGetMetadata.mockReset();
+    mockApiGetAllAssets.mockReset();
+    mockRegistryGetAllAssets.mockReset();
+    mockRegistryGetAsset.mockReset();
+    mockUseWallet.mockReset();
+    mockUseWallet.mockReturnValue({ network: "testnet" });
+    cacheAssetEntries("testnet", []);
+    cacheAssetEntries("mainnet", []);
+    takePrefetchedAssetMetadata("testnet", "CTOKEN_1");
+    takePrefetchedAssetMetadata("testnet", "CTOKEN_2");
+  });
+
+  it("re-runs useAssets with updated includeInactive and network without reading a stale closure", async () => {
+    const activeAsset = makeEntry({ id: BigInt(1), name: "Active Asset", active: true });
+    const inactiveAsset = makeEntry({ id: BigInt(2), name: "Inactive Asset", active: false });
+    mockApiGetAllAssets.mockResolvedValue([activeAsset, inactiveAsset]);
+
+    const { result, rerender } = renderHook(
+      ({ includeInactive }: { includeInactive: boolean }) =>
+        useAssets({ includeInactive }),
+      { initialProps: { includeInactive: false } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.assets).toEqual([activeAsset]);
+    expect(getCachedAsset("testnet", BigInt(2))).toBeNull();
+
+    // Flip includeInactive -> true and verify the hook does not read a stale closure
+    rerender({ includeInactive: true });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.assets).toEqual([activeAsset, inactiveAsset]);
+    expect(getCachedAsset("testnet", BigInt(2))).toEqual(inactiveAsset);
+  });
+
+  it("re-runs useAsset when id or network changes and never reads a stale id closure on refetch", async () => {
+    const entry1 = makeEntry({ id: BigInt(1), tokenContract: "CTOKEN_1", name: "Asset One" });
+    const entry2 = makeEntry({ id: BigInt(2), tokenContract: "CTOKEN_2", name: "Asset Two" });
+    cacheAssetEntries("testnet", [entry1, entry2]);
+
+    const meta1 = makeMetadata({ name: "Asset One", symbol: "ONE" });
+    const meta2 = makeMetadata({ name: "Asset Two", symbol: "TWO" });
+    const meta2Refreshed = makeMetadata({ name: "Asset Two v2", symbol: "TWO" });
+
+    mockGetMetadata.mockImplementation(async (_net: Network, contract: string) => {
+      if (contract === "CTOKEN_1") return meta1;
+      return meta2;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ id }: { id: bigint | null }) => useAsset(id),
+      { initialProps: { id: BigInt(1) } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data?.id).toBe(BigInt(1));
+    expect(result.current.data?.metadata.symbol).toBe("ONE");
+
+    // Change id to 2n — must not read stale id=1n
+    rerender({ id: BigInt(2) });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data?.id).toBe(BigInt(2));
+    expect(result.current.data?.metadata.symbol).toBe("TWO");
+
+    // Manual refetch must also invoke the latest loader closure (id=2n)
+    mockGetMetadata.mockResolvedValueOnce(meta2Refreshed);
+    act(() => {
+      result.current.refetch();
+    });
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data?.metadata.name).toBe("Asset Two v2");
+  });
+
+  it("does not evict a newer prefetch entry when a stale in-flight prefetch rejects after TTL expiry", async () => {
+    jest.useFakeTimers();
+    try {
+      let rejectFirst!: (reason?: unknown) => void;
+      mockGetMetadata.mockImplementationOnce(
+        () =>
+          new Promise<AssetMetadata>((_, reject) => {
+            rejectFirst = reject;
+          }),
+      );
+
+      const firstPromise = prefetchAssetMetadata("testnet", "CTOKEN_1");
+
+      // Advance past TTL so a second prefetch replaces the map entry
+      jest.advanceTimersByTime(15_001);
+
+      const freshMeta = makeMetadata({ name: "Fresh Metadata" });
+      mockGetMetadata.mockResolvedValueOnce(freshMeta);
+      const secondPromise = prefetchAssetMetadata("testnet", "CTOKEN_1");
+      expect(secondPromise).not.toBe(firstPromise);
+
+      // Now reject the stale first promise; its .catch closure must not delete secondPromise
+      rejectFirst(new Error("Stale RPC failure"));
+      await expect(firstPromise).rejects.toThrow("Stale RPC failure");
+      await Promise.resolve();
+
+      const taken = takePrefetchedAssetMetadata("testnet", "CTOKEN_1");
+      expect(taken).toBe(secondPromise);
+      await expect(taken).resolves.toEqual(freshMeta);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

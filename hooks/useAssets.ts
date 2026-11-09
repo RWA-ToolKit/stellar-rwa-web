@@ -11,6 +11,9 @@ import type { AssetEntry, Network } from "@/types";
 export function useAssets(opts?: { includeInactive?: boolean }) {
   const { network } = useWallet();
   const includeInactive = opts?.includeInactive ?? false;
+  // Dependency audit (#583): `loadAssetEntries` closes over `network` and
+  // `includeInactive`, both of which are listed in the `useAsync` dependency
+  // array so changing either option or network always triggers a fresh load.
   const state = useAsync<AssetEntry[]>(
     () => loadAssetEntries(network, includeInactive),
     [network, includeInactive],

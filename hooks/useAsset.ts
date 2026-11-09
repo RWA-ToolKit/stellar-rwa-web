@@ -37,6 +37,9 @@ export function useAsset(id: bigint | null): AssetState {
       ) ?? assetToken.getMetadata(network, entry.tokenContract));
       return { ...entry, metadata };
     },
+    // Dependency audit (#583): the loader closes over `id` and `network`.
+    // `id?.toString()` serializes the BigInt for `JSON.stringify(deps)` inside
+    // `useAsync`, ensuring any change to `id` or `network` runs a fresh load.
     [id?.toString(), network],
     id !== null,
   );
