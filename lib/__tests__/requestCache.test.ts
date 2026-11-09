@@ -179,3 +179,75 @@ describe("clearRequestCache", () => {
     await expect(p1).resolves.toBe("after-clear");
   });
 });
+
+// ─── empty / zero / null input handling (#587) ───────────────────────────────
+
+describe("empty, zero, and null inputs (#587)", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    clearRequestCache();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    clearRequestCache();
+  });
+
+  it("bypasses deduplication for empty, whitespace-only, or nullish keys so unrelated callers do not collide", async () => {
+    const factoryA = jest.fn().mockResolvedValue("from-a");
+    const factoryB = jest.fn().mockResolvedValue("from-b");
+    const factoryNull = jest.fn().mockResolvedValue("from-null");
+
+    const pEmptyA = dedupeRequest("", factoryA);
+    const pEmptyB = dedupeRequest("   ", factoryB);
+    const pNull = dedupeRequest(null as unknown as string, factoryNull);
+
+    expect(pEmptyA).not.toBe(pEmptyB);
+    expect(factoryA).toHaveBeenCalledTimes(1);
+    expect(factoryB).toHaveBeenCalledTimes(1);
+    expect(factoryNull).toHaveBeenCalledTimes(1);
+
+    await expect(pEmptyA).resolves.toBe("from-a");
+    await expect(pEmptyB).resolves.toBe("from-b");
+    await expect(pNull).resolves.toBe("from-null");
+  });
+
+  it("deduplicates concurrent requests that resolve to 0, 0n, empty string, empty array, or null", async () => {
+    const zeroFactory = jest.fn().mockResolvedValue(0);
+    const bigZeroFactory = jest.fn().mockResolvedValue(0n);
+    const emptyArrFactory = jest.fn().mockResolvedValue([]);
+    const nullFactory = jest.fn().mockResolvedValue(null);
+
+    const [z1, z2] = [
+      dedupeRequest("key:zero", zeroFactory),
+      dedupeRequest("key:zero", zeroFactory),
+    ];
+    const [bz1, bz2] = [
+      dedupeRequest("key:bigzero", bigZeroFactory),
+      dedupeRequest("key:bigzero", bigZeroFactory),
+    ];
+    const [arr1, arr2] = [
+      dedupeRequest("key:empty-arr", emptyArrFactory),
+      dedupeRequest("key:empty-arr", emptyArrFactory),
+    ];
+    const [n1, n2] = [
+      dedupeRequest("key:null", nullFactory),
+      dedupeRequest("key:null", nullFactory),
+    ];
+
+    expect(z1).toBe(z2);
+    expect(bz1).toBe(bz2);
+    expect(arr1).toBe(arr2);
+    expect(n1).toBe(n2);
+
+    expect(zeroFactory).toHaveBeenCalledTimes(1);
+    expect(bigZeroFactory).toHaveBeenCalledTimes(1);
+    expect(emptyArrFactory).toHaveBeenCalledTimes(1);
+    expect(nullFactory).toHaveBeenCalledTimes(1);
+
+    await expect(z1).resolves.toBe(0);
+    await expect(bz1).resolves.toBe(0n);
+    await expect(arr1).resolves.toEqual([]);
+    await expect(n1).resolves.toBeNull();
+  });
+});

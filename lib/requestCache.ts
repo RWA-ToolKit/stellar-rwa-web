@@ -23,12 +23,25 @@ const CACHE_DURATION_MS = 5000;
  * the same key within the 5-second deduplication window. Settlement schedules
  * the entry for removal on the next timer turn. This does not cache response
  * data or guarantee that a response is fresh for 5 seconds.
+ *
+ * Empty/zero/null input behaviour (#587):
+ * - If `key` is empty (`""`), whitespace-only, or nullish at runtime,
+ *   deduplication is bypassed and `factory()` executes directly so unrelated
+ *   callers with missing keys never collide on a shared `""` bucket.
+ * - Valid keys whose `factory` resolves to falsy/empty values (`0`, `0n`,
+ *   `""`, `[]`, `null`, `false`) are deduplicated normally because the map
+ *   stores the `Promise<T>` instance rather than inspecting the resolved value.
  */
 export function dedupeRequest<T>(
   key: CacheKey,
   factory: () => Promise<T>
 ): Promise<T> {
-  const cached = inFlightRequests.get(key);
+  const normalizedKey = typeof key === "string" ? key.trim() : "";
+  if (!normalizedKey) {
+    return factory();
+  }
+
+  const cached = inFlightRequests.get(normalizedKey);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION_MS) {
     // The map stores Promise<unknown> since it's shared across callers with
     // different T; callers are responsible for using a key whose cached
@@ -39,13 +52,13 @@ export function dedupeRequest<T>(
   const promise = factory().finally(() => {
     // Clean up after a short delay to allow concurrent consumers to receive the result
     setTimeout(() => {
-      if (inFlightRequests.get(key)?.promise === promise) {
-        inFlightRequests.delete(key);
+      if (inFlightRequests.get(normalizedKey)?.promise === promise) {
+        inFlightRequests.delete(normalizedKey);
       }
     }, 0);
   });
 
-  inFlightRequests.set(key, { promise, timestamp: Date.now() });
+  inFlightRequests.set(normalizedKey, { promise, timestamp: Date.now() });
   return promise;
 }
 

@@ -13,3 +13,9 @@ If a request is still pending after 5 seconds, a later call with the same key
 starts another request; the original request continues and is not cancelled.
 Use keys that identify the request and its relevant inputs, so callers only
 share promises for equivalent work.
+
+Empty, whitespace-only, or nullish keys bypass the deduplication map and invoke
+`factory()` directly so unrelated callers with missing identifiers never share a
+single `""` cache bucket. Falsy resolved values (`0`, `0n`, `""`, `[]`, `null`)
+under a non-empty key are shared across concurrent callers just like any other
+resolved payload.
