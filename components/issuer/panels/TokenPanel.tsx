@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
-import { assetToken } from "@/lib/contracts";
+import { assetToken, compliance } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
 import { parseTokenAmount, formatTokenAmount, formatRawPlain } from "@/lib/format";
 import { ActionCard } from "@/components/issuer/ActionCard";
@@ -13,12 +13,19 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 interface TokenPanelProps {
   asset: AssetDetail;
   onMinted?: () => void;
+  onTransferred?: () => void;
   onPauseToggled?: () => void;
   isAdmin?: boolean;
 }
 
-/** Mint tokens to an address, and pause / unpause the token contract. */
-export function TokenPanel({ asset, onMinted, onPauseToggled, isAdmin = true }: TokenPanelProps) {
+/** Mint tokens to an address, distribute batch transfers, and pause / unpause the token contract. */
+export function TokenPanel({
+  asset,
+  onMinted,
+  onTransferred,
+  onPauseToggled,
+  isAdmin = true,
+}: TokenPanelProps) {
   const { metadata, tokenContract } = asset;
 
   return (
@@ -30,6 +37,16 @@ export function TokenPanel({ asset, onMinted, onPauseToggled, isAdmin = true }: 
         tokenContract={tokenContract}
         metadata={metadata}
         {...(onMinted !== undefined ? { onMinted } : {})}
+        isAdmin={isAdmin}
+      />
+      <BatchTransferCard
+        tokenContract={tokenContract}
+        metadata={metadata}
+        {...(onTransferred !== undefined
+          ? { onTransferred }
+          : onMinted !== undefined
+            ? { onTransferred: onMinted }
+            : {})}
         isAdmin={isAdmin}
       />
       <PauseCard
@@ -227,6 +244,245 @@ function MintCard({
       </form>
       </ActionCard>
     </>
+  );
+}
+
+// ---- Batch Transfer (#580) ----
+
+interface BatchRow {
+  to: string;
+  quantity: string;
+}
+
+function parseCsvRows(csv: string): BatchRow[] {
+  return csv
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const [to = "", quantity = ""] = line.split(/[,\t;]+/).map((part) => part.trim());
+      return { to, quantity };
+    });
+}
+
+function BatchTransferCard({
+  tokenContract,
+  metadata,
+  onTransferred,
+  isAdmin = true,
+}: {
+  tokenContract: string;
+  metadata: AssetDetail["metadata"];
+  onTransferred?: () => void;
+  isAdmin?: boolean;
+}) {
+  const tx = useTx();
+  const [rows, setRows] = useState<BatchRow[]>([
+    { to: "", quantity: "" },
+    { to: "", quantity: "" },
+  ]);
+  const [csvText, setCsvText] = useState("");
+  const [checkingCompliance, setCheckingCompliance] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  function updateRow(index: number, patch: Partial<BatchRow>) {
+    setRows((prev) =>
+      prev.map((row, idx) => (idx === index ? { ...row, ...patch } : row)),
+    );
+  }
+
+  function addRow() {
+    setRows((prev) => [...prev, { to: "", quantity: "" }]);
+  }
+
+  function removeRow(index: number) {
+    setRows((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== index)));
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setFormError(null);
+
+    if (metadata.paused) {
+      setFormError("Transfers are paused by the issuer for this asset.");
+      return;
+    }
+
+    const activeRows =
+      csvText.trim().length > 0
+        ? parseCsvRows(csvText)
+        : rows.filter((r) => r.to.trim() !== "" || r.quantity.trim() !== "");
+
+    if (activeRows.length === 0) {
+      setFormError("Enter at least one destination wallet and token quantity.");
+      return;
+    }
+
+    const parsed: [string, bigint][] = [];
+    for (let i = 0; i < activeRows.length; i++) {
+      const row = activeRows[i]!;
+      const dest = row.to.trim();
+      if (!StrKey.isValidEd25519PublicKey(dest) && !StrKey.isValidContract(dest)) {
+        setFormError(`Row ${i + 1}: Enter a valid Stellar address (G… or C…).`);
+        return;
+      }
+      let raw: bigint;
+      try {
+        raw = parseTokenAmount(row.quantity.trim(), metadata.decimals);
+      } catch (err) {
+        setFormError(
+          `Row ${i + 1}: ${err instanceof Error ? err.message : "Invalid quantity."}`,
+        );
+        return;
+      }
+      if (raw <= 0n) {
+        setFormError(`Row ${i + 1}: Quantity must be greater than zero.`);
+        return;
+      }
+      parsed.push([dest, raw]);
+    }
+
+    // Validate compliance per recipient before submitting the batch transaction (#580)
+    if (compliance?.isAllowed) {
+      setCheckingCompliance(true);
+      try {
+        const results = await Promise.all(
+          parsed.map(([dest]) =>
+            compliance.isAllowed("testnet", metadata.complianceContract, dest),
+          ),
+        );
+        const failedIdx = results.findIndex((allowed) => !allowed);
+        if (failedIdx !== -1) {
+          const failedAddr = parsed[failedIdx]![0];
+          setFormError(
+            `Row ${failedIdx + 1} (${failedAddr}): Recipient isn't KYC-approved for this asset and can't receive a transfer.`,
+          );
+          return;
+        }
+      } catch (err) {
+        setFormError(
+          err instanceof Error
+            ? `Failed to verify recipient compliance: ${err.message}`
+            : "Failed to verify recipient compliance.",
+        );
+        return;
+      } finally {
+        setCheckingCompliance(false);
+      }
+    }
+
+    const res = await tx.run((ctx) =>
+      assetToken.transferBatch(ctx, tokenContract, parsed),
+    );
+    if (res) {
+      setRows([
+        { to: "", quantity: "" },
+        { to: "", quantity: "" },
+      ]);
+      setCsvText("");
+      onTransferred?.();
+    }
+  }
+
+  return (
+    <ActionCard
+      title="Batch transfer"
+      description="Distribute tokens to multiple KYC-approved recipients in a single transaction."
+      icon={
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M17 8l4 4-4 4M3 12h18M7 16l-4-4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      }
+    >
+      <form onSubmit={onSubmit} className="space-y-3">
+        <div className="space-y-2">
+          {rows.map((row, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <input
+                aria-label={`Destination wallet ${index + 1}`}
+                value={row.to}
+                onChange={(e) => updateRow(index, { to: e.target.value })}
+                placeholder="G… or C…"
+                disabled={tx.pending || checkingCompliance || !isAdmin}
+                className="input flex-1 font-mono text-xs"
+                spellCheck={false}
+              />
+              <input
+                aria-label={`Token quantity ${index + 1}`}
+                value={row.quantity}
+                onChange={(e) => updateRow(index, { quantity: e.target.value })}
+                placeholder="0.00"
+                inputMode="decimal"
+                disabled={tx.pending || checkingCompliance || !isAdmin}
+                className="input w-32 text-xs"
+              />
+              {rows.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => removeRow(index)}
+                  disabled={tx.pending || checkingCompliance || !isAdmin}
+                  aria-label={`Remove row ${index + 1}`}
+                  className="btn-secondary px-2 py-1 text-xs"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={addRow}
+            disabled={tx.pending || checkingCompliance || !isAdmin}
+            className="text-xs text-brand-400 hover:text-brand-300"
+          >
+            + Add row
+          </button>
+        </div>
+
+        <div>
+          <label htmlFor="batch-transfer-csv" className="label">
+            Or paste CSV lines (address,quantity)
+          </label>
+          <textarea
+            id="batch-transfer-csv"
+            value={csvText}
+            onChange={(e) => setCsvText(e.target.value)}
+            placeholder={"GALICE...,100\nGBOB...,250"}
+            rows={2}
+            disabled={tx.pending || checkingCompliance || !isAdmin}
+            className="input font-mono text-xs"
+            spellCheck={false}
+          />
+        </div>
+
+        {formError && (
+          <p role="alert" className="text-xs text-red-400">
+            {formError}
+          </p>
+        )}
+
+        {tx.phase === "idle" ? (
+          <button
+            type="submit"
+            disabled={tx.pending || checkingCompliance || !isAdmin}
+            className="btn-primary"
+          >
+            {checkingCompliance ? "Checking compliance…" : "Submit batch transfer"}
+          </button>
+        ) : (
+          <TxProgress
+            phase={tx.phase}
+            hash={tx.hash}
+            error={tx.error}
+            errorType={tx.errorType}
+            onDismiss={tx.reset}
+            onRetry={tx.retry}
+            retryable={tx.retryable}
+            successMessage="Batch transfer completed."
+          />
+        )}
+      </form>
+    </ActionCard>
   );
 }
 

@@ -29,8 +29,12 @@ jest.mock("@/hooks/useWallet", () => ({
 jest.mock("@/lib/contracts", () => ({
   assetToken: {
     mint: jest.fn(),
+    transferBatch: jest.fn(),
     pause: jest.fn(),
     unpause: jest.fn(),
+  },
+  compliance: {
+    isAllowed: jest.fn(() => Promise.resolve(true)),
   },
 }));
 
@@ -218,6 +222,129 @@ describe("TokenPanel — PauseCard confirmation", () => {
       render(<TokenPanel asset={ASSET_PAUSED} />);
       fireEvent.click(screen.getByRole("button", { name: /unpause transfers/i }));
       fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("TokenPanel — BatchTransferCard (#580)", () => {
+    const { assetToken, compliance } = jest.requireMock("@/lib/contracts") as {
+      assetToken: { transferBatch: jest.Mock };
+      compliance: { isAllowed: jest.Mock };
+    };
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      setupTx();
+      compliance.isAllowed.mockResolvedValue(true);
+      mockRun.mockImplementation(async (fn: (ctx: unknown) => unknown) => {
+        await fn({ network: "testnet", source: "GISSUER", sign: jest.fn() });
+        return true;
+      });
+    });
+
+    it("submits multiple multi-row recipients in a single transferBatch transaction after checking compliance per recipient", async () => {
+      render(<TokenPanel asset={ASSET_UNPAUSED} />);
+
+      fireEvent.change(screen.getByLabelText("Destination wallet 1"), {
+        target: { value: "GALICE" },
+      });
+      fireEvent.change(screen.getByLabelText("Token quantity 1"), {
+        target: { value: "12.50" },
+      });
+      fireEvent.change(screen.getByLabelText("Destination wallet 2"), {
+        target: { value: "GBOB" },
+      });
+      fireEvent.change(screen.getByLabelText("Token quantity 2"), {
+        target: { value: "7.25" },
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /submit batch transfer/i }));
+
+      await screen.findByRole("button", { name: /submit batch transfer/i });
+      expect(compliance.isAllowed).toHaveBeenCalledTimes(2);
+      expect(compliance.isAllowed).toHaveBeenNthCalledWith(
+        1,
+        "testnet",
+        "CCOMPLIANCE",
+        "GALICE",
+      );
+      expect(compliance.isAllowed).toHaveBeenNthCalledWith(
+        2,
+        "testnet",
+        "CCOMPLIANCE",
+        "GBOB",
+      );
+      expect(assetToken.transferBatch).toHaveBeenCalledTimes(1);
+      expect(assetToken.transferBatch).toHaveBeenCalledWith(
+        expect.anything(),
+        "CTOKEN",
+        [
+          ["GALICE", 1250n],
+          ["GBOB", 725n],
+        ],
+      );
+    });
+
+    it("parses CSV lines and submits all recipients in one transaction", async () => {
+      render(<TokenPanel asset={ASSET_UNPAUSED} />);
+
+      fireEvent.change(
+        screen.getByLabelText(/or paste csv lines \(address,quantity\)/i),
+        {
+          target: { value: "GCAROL,10\nGDAVE,20.5" },
+        },
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /submit batch transfer/i }));
+
+      await screen.findByRole("button", { name: /submit batch transfer/i });
+      expect(compliance.isAllowed).toHaveBeenCalledTimes(2);
+      expect(assetToken.transferBatch).toHaveBeenCalledWith(
+        expect.anything(),
+        "CTOKEN",
+        [
+          ["GCAROL", 1000n],
+          ["GDAVE", 2050n],
+        ],
+      );
+    });
+
+    it("blocks batch transfer submission when any recipient fails compliance validation", async () => {
+      compliance.isAllowed
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+
+      render(<TokenPanel asset={ASSET_UNPAUSED} />);
+
+      fireEvent.change(screen.getByLabelText("Destination wallet 1"), {
+        target: { value: "GALICE" },
+      });
+      fireEvent.change(screen.getByLabelText("Token quantity 1"), {
+        target: { value: "5" },
+      });
+      fireEvent.change(screen.getByLabelText("Destination wallet 2"), {
+        target: { value: "GUNAPPROVED" },
+      });
+      fireEvent.change(screen.getByLabelText("Token quantity 2"), {
+        target: { value: "5" },
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /submit batch transfer/i }));
+
+      expect(
+        await screen.findByText(
+          /Row 2 \(GUNAPPROVED\): Recipient isn't KYC-approved/i,
+        ),
+      ).toBeInTheDocument();
+      expect(mockRun).not.toHaveBeenCalled();
+    });
+
+    it("blocks batch transfer when the token is paused", () => {
+      render(<TokenPanel asset={ASSET_PAUSED} />);
+      fireEvent.click(screen.getByRole("button", { name: /submit batch transfer/i }));
+      expect(
+        screen.getByText(/transfers are paused by the issuer for this asset/i),
+      ).toBeInTheDocument();
       expect(mockRun).not.toHaveBeenCalled();
     });
   });

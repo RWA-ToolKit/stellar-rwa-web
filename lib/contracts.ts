@@ -390,6 +390,17 @@ export const assetToken = {
     ]);
   },
 
+  transferBatch(
+    ctx: WriteCtx,
+    tokenId: string,
+    recipients: readonly (readonly [string, bigint])[],
+  ): Promise<TxResult> {
+    return write(ctx, tokenId, "transfer_batch", [
+      arg.address(ctx.source),
+      arg.vecOfTuples(recipients),
+    ]);
+  },
+
   mint(
     ctx: WriteCtx,
     tokenId: string,
