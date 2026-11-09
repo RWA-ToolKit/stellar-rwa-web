@@ -1,6 +1,9 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useCompliance, useComplianceOverview, useAllowlist } from "../useCompliance";
 import { compliance } from "@/lib/contracts";
+import type { Network } from "@/types";
+
+let mockNetwork: Network = "testnet";
 
 jest.mock("@/lib/contracts", () => ({
   compliance: {
@@ -12,11 +15,12 @@ jest.mock("@/lib/contracts", () => ({
 }));
 
 jest.mock("@/hooks/useWallet", () => ({
-  useWallet: () => ({ network: "testnet" }),
+  useWallet: () => ({ network: mockNetwork }),
 }));
 
 describe("useCompliance", () => {
   beforeEach(() => {
+    mockNetwork = "testnet";
     jest.clearAllMocks();
   });
 
@@ -132,6 +136,101 @@ describe("useCompliance", () => {
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.data).toEqual([rec1, rec2]);
+    });
+  });
+
+  describe("stale closure and dependency array audit (#633)", () => {
+    it("re-runs useCompliance with updated complianceId, address, and network without stale closures", async () => {
+      (compliance.isAllowed as jest.Mock).mockImplementation(
+        async (net: string, cid: string, addr: string) =>
+          net === "mainnet" && cid === "C_NEW" && addr === "G_NEW",
+      );
+      (compliance.getRecord as jest.Mock).mockImplementation(
+        async (_net: string, cid: string, addr: string) => ({
+          address: addr,
+          status: cid === "C_NEW" ? ("Approved" as const) : ("Pending" as const),
+          jurisdiction: "US",
+          verifiedAt: 1000,
+          expiresAt: 0,
+        }),
+      );
+
+      const { result, rerender } = renderHook(
+        ({ cid, addr }: { cid: string | null; addr: string | null }) =>
+          useCompliance(cid, addr),
+        { initialProps: { cid: "C_OLD", addr: "G_OLD" } },
+      );
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(compliance.isAllowed).toHaveBeenLastCalledWith("testnet", "C_OLD", "G_OLD");
+      expect(result.current.data?.allowed).toBe(false);
+      expect(result.current.data?.status).toBe("Pending");
+
+      // Update complianceId and address
+      rerender({ cid: "C_NEW", addr: "G_NEW" });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(compliance.isAllowed).toHaveBeenLastCalledWith("testnet", "C_NEW", "G_NEW");
+      expect(result.current.data?.record?.address).toBe("G_NEW");
+      expect(result.current.data?.status).toBe("Approved");
+
+      // Switch wallet network to mainnet
+      mockNetwork = "mainnet";
+      rerender({ cid: "C_NEW", addr: "G_NEW" });
+      await waitFor(() => expect(result.current.data?.allowed).toBe(true));
+      expect(compliance.isAllowed).toHaveBeenLastCalledWith("mainnet", "C_NEW", "G_NEW");
+
+      // Manual refetch must also use the latest closure values
+      act(() => {
+        result.current.refetch();
+      });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(compliance.isAllowed).toHaveBeenLastCalledWith("mainnet", "C_NEW", "G_NEW");
+    });
+
+    it("re-runs useComplianceOverview and useAllowlist when complianceId or network changes", async () => {
+      (compliance.getAllowlist as jest.Mock).mockImplementation(
+        async (net: string, cid: string) => [`${net}:${cid}`],
+      );
+      (compliance.getRecord as jest.Mock).mockImplementation(
+        async (_net: string, _cid: string, addr: string) => ({
+          address: addr,
+          status: "Approved" as const,
+          jurisdiction: addr.startsWith("mainnet") ? "CH" : "US",
+          verifiedAt: 100,
+          expiresAt: 0,
+        }),
+      );
+      (compliance.isJurisdictionBlocked as jest.Mock).mockResolvedValue(false);
+
+      const { result: overviewRes, rerender: rerenderOverview } = renderHook(
+        ({ cid }: { cid: string | null }) => useComplianceOverview(cid),
+        { initialProps: { cid: "C_1" } },
+      );
+      const { result: allowlistRes, rerender: rerenderAllowlist } = renderHook(
+        ({ cid }: { cid: string | null }) => useAllowlist(cid),
+        { initialProps: { cid: "C_1" } },
+      );
+
+      await waitFor(() => expect(overviewRes.current.loading).toBe(false));
+      await waitFor(() => expect(allowlistRes.current.loading).toBe(false));
+      expect(overviewRes.current.data?.jurisdictions).toEqual([
+        { code: "US", blocked: false },
+      ]);
+      expect(allowlistRes.current.data?.[0]?.address).toBe("testnet:C_1");
+
+      // Update complianceId and network
+      mockNetwork = "mainnet";
+      rerenderOverview({ cid: "C_2" });
+      rerenderAllowlist({ cid: "C_2" });
+
+      await waitFor(() =>
+        expect(overviewRes.current.data?.jurisdictions).toEqual([
+          { code: "CH", blocked: false },
+        ]),
+      );
+      await waitFor(() =>
+        expect(allowlistRes.current.data?.[0]?.address).toBe("mainnet:C_2"),
+      );
     });
   });
 });

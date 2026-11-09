@@ -34,6 +34,10 @@ export function useCompliance(complianceId: string | null, address: string | nul
         record,
       };
     },
+    // Dependency audit (#633): all reactive values read inside the loader
+    // (`complianceId`, `address`, `network`) are listed here so `useAsync`
+    // re-memoizes its runner whenever any input changes. `compliance` is a
+    // static module-level binding and does not need to be in the deps array.
     [complianceId, address, network],
     Boolean(complianceId && address),
   );
@@ -90,6 +94,8 @@ export function useComplianceOverview(complianceId: string | null) {
         jurisdictions,
       };
     },
+    // Dependency audit (#633): `complianceId` and `network` are the only
+    // reactive inputs closed over by the loader (`compliance` is module-static).
     [complianceId, network],
     Boolean(complianceId),
   );
@@ -107,6 +113,8 @@ export function useAllowlist(complianceId: string | null) {
       );
       return records.filter((r): r is KycRecord => r !== null);
     },
+    // Dependency audit (#633): `complianceId` and `network` are the only
+    // reactive inputs closed over by the loader (`compliance` is module-static).
     [complianceId, network],
     Boolean(complianceId),
   );
