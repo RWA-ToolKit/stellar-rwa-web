@@ -16,7 +16,9 @@
  *   - Resets all in-flight entries so the next call invokes the factory
  */
 
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { dedupeRequest, clearRequestCache } from "../requestCache";
+import { useAsync } from "@/hooks/useAsync";
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
@@ -135,6 +137,59 @@ describe("dedupeRequest", () => {
     const p2 = dedupeRequest("key-a", factory);
     expect(factory).toHaveBeenCalledTimes(2);
     await expect(p2).resolves.toBe("recovered");
+  });
+
+  it("converts a synchronous factory throw into a rejected promise and evicts immediately (#586)", async () => {
+    const factory = jest
+      .fn<Promise<string>, []>()
+      .mockImplementationOnce(() => {
+        throw new Error("sync factory failure");
+      })
+      .mockResolvedValueOnce("recovered-after-sync-throw");
+
+    const p1 = dedupeRequest("key-sync-err", factory);
+    await expect(p1).rejects.toThrow("sync factory failure");
+
+    // Even before setTimeout(0) runs, the failed entry is already evicted
+    const p2 = dedupeRequest("key-sync-err", factory);
+    expect(factory).toHaveBeenCalledTimes(2);
+    await expect(p2).resolves.toBe("recovered-after-sync-throw");
+  });
+
+  it("surfaces rejected and non-Error requestCache failures as readable hook state without crashing (#586)", async () => {
+    jest.useRealTimers();
+    const factory = jest
+      .fn<Promise<string[]>, []>()
+      .mockRejectedValueOnce(new Error("Soroban RPC simulation failed"))
+      .mockRejectedValueOnce("raw string rejection")
+      .mockResolvedValueOnce(["G_RECOVERED"]);
+
+    const { result } = renderHook(() =>
+      useAsync(
+        () => dedupeRequest("allowlist:testnet:C_ERR", factory),
+        ["testnet", "C_ERR"],
+      ),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe("Soroban RPC simulation failed");
+    expect(result.current.data).toBeNull();
+
+    // Retry with non-Error rejection surfaces fallback readable message
+    act(() => {
+      result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe("Something went wrong.");
+    expect(result.current.data).toBeNull();
+
+    // Subsequent retry succeeds cleanly because failed entries are never kept
+    act(() => {
+      result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBeNull();
+    expect(result.current.data).toEqual(["G_RECOVERED"]);
   });
 });
 

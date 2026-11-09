@@ -36,14 +36,35 @@ export function dedupeRequest<T>(
     return cached.promise as Promise<T>;
   }
 
-  const promise = factory().finally(() => {
-    // Clean up after a short delay to allow concurrent consumers to receive the result
-    setTimeout(() => {
+  let rawPromise: Promise<T>;
+  try {
+    rawPromise = Promise.resolve(factory());
+  } catch (err) {
+    // Convert synchronous factory throws into rejected promises (#586) so
+    // hook callers (`useAsync` / `useHolders`) surface a readable error state
+    // instead of crashing the component tree with an uncaught exception.
+    rawPromise = Promise.reject(err);
+  }
+
+  const promise = rawPromise.then(
+    (value) => {
+      // Clean up after a short delay to allow concurrent consumers to receive the result
+      setTimeout(() => {
+        if (inFlightRequests.get(key)?.promise === promise) {
+          inFlightRequests.delete(key);
+        }
+      }, 0);
+      return value;
+    },
+    (err) => {
+      // Evict rejected entries immediately on settlement so retries in the
+      // next microtask do not receive a poisoned rejected promise (#586).
       if (inFlightRequests.get(key)?.promise === promise) {
         inFlightRequests.delete(key);
       }
-    }, 0);
-  });
+      throw err;
+    },
+  );
 
   inFlightRequests.set(key, { promise, timestamp: Date.now() });
   return promise;
