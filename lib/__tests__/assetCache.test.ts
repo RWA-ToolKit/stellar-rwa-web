@@ -21,24 +21,54 @@
  *   - Returns null after the TTL has expired
  */
 
+import { act, renderHook, waitFor } from "@testing-library/react";
 import {
   cacheAssetEntries,
   getCachedAsset,
+  getCachedAssetEntries,
+  loadAssetEntries,
   prefetchAssetMetadata,
   takePrefetchedAssetMetadata,
 } from "../assetCache";
-import { assetToken } from "@/lib/contracts";
+import { api } from "@/lib/api";
+import { assetToken, registry } from "@/lib/contracts";
+import { useAssets } from "@/hooks/useAssets";
+import { useAsset } from "@/hooks/useAsset";
+import { useWallet } from "@/hooks/useWallet";
 import type { AssetEntry, AssetMetadata } from "@/types";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
+
+jest.mock("@/lib/api", () => ({
+  api: {
+    getAllAssets: jest.fn(),
+    getAsset: jest.fn(),
+  },
+}));
 
 jest.mock("@/lib/contracts", () => ({
   assetToken: {
     getMetadata: jest.fn(),
   },
+  registry: {
+    getAllAssets: jest.fn(),
+    getAsset: jest.fn(),
+  },
+}));
+
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: jest.fn(),
+}));
+
+jest.mock("@/lib/stellar", () => ({
+  isNotFoundError: () => false,
 }));
 
 const mockGetMetadata = assetToken.getMetadata as jest.Mock;
+const mockApiGetAllAssets = api.getAllAssets as jest.Mock;
+const mockRegistryGetAllAssets = registry.getAllAssets as jest.Mock;
+const mockRegistryGetAsset = registry.getAsset as jest.Mock;
+const mockUseWallet = useWallet as jest.Mock;
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -280,3 +310,109 @@ describe("takePrefetchedAssetMetadata", () => {
     expect(taken).toBeNull();
   });
 });
+
+describe("error path (#581)", () => {
+  beforeEach(() => {
+    mockGetMetadata.mockReset();
+    mockApiGetAllAssets.mockReset();
+    mockRegistryGetAllAssets.mockReset();
+    mockRegistryGetAsset.mockReset();
+    mockUseWallet.mockReturnValue({ network: "testnet", address: null });
+    cacheAssetEntries("testnet", []);
+  });
+
+  it("loadAssetEntries falls back to on-chain registry when api.getAllAssets rejects", async () => {
+    const entry = makeEntry({ id: BigInt(10), name: "Fallback Asset" });
+    mockApiGetAllAssets.mockRejectedValueOnce(new Error("Indexer offline"));
+    mockRegistryGetAllAssets.mockResolvedValueOnce([entry]);
+
+    const result = await loadAssetEntries("testnet");
+    expect(result).toEqual([entry]);
+    expect(getCachedAsset("testnet", BigInt(10))).toEqual(entry);
+    expect( getCachedAssetEntries("testnet") ).toEqual([entry]);
+  });
+
+  it("loadAssetEntries preserves previously cached entries when both api and registry reject", async () => {
+    const existing = makeEntry({ id: BigInt(7), name: "Previously Cached" });
+    cacheAssetEntries("testnet", [existing]);
+
+    mockApiGetAllAssets.mockRejectedValueOnce(new Error("Indexer down"));
+    mockRegistryGetAllAssets.mockRejectedValueOnce(new Error("Soroban RPC timeout"));
+
+    await expect(loadAssetEntries("testnet")).rejects.toThrow("Soroban RPC timeout");
+    expect(getCachedAsset("testnet", BigInt(7))).toEqual(existing);
+    expect(getCachedAssetEntries("testnet")).toEqual([existing]);
+  });
+
+  it("prefetchAssetMetadata converts synchronous throws into a rejected promise and evicts the cache entry", async () => {
+    const token = "CTOKEN_SYNC_ERR";
+    takePrefetchedAssetMetadata("testnet", token);
+
+    mockGetMetadata.mockImplementationOnce(() => {
+      throw new Error("Synchronous XDR decode error");
+    });
+
+    // Fire-and-forget call must not throw synchronously into a component event handler
+    let promise!: Promise<AssetMetadata>;
+    expect(() => {
+      promise = prefetchAssetMetadata("testnet", token);
+    }).not.toThrow();
+
+    await expect(promise).rejects.toThrow("Synchronous XDR decode error");
+    await Promise.resolve();
+
+    // Entry was evicted, so takePrefetchedAssetMetadata returns null
+    expect(takePrefetchedAssetMetadata("testnet", token)).toBeNull();
+  });
+
+  it("useAssets surfaces a readable error state instead of crashing when loadAssetEntries rejects", async () => {
+    mockApiGetAllAssets.mockRejectedValueOnce(new Error("Indexer 503"));
+    mockRegistryGetAllAssets.mockRejectedValueOnce(new Error("Registry RPC unreachable"));
+
+    const { result } = renderHook(() => useAssets());
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBe("Registry RPC unreachable");
+    expect(result.current.assets).toEqual([]);
+  });
+
+  it("useAsset surfaces a readable error state and recovers on retry when prefetched metadata rejects", async () => {
+    const entry = makeEntry({ id: BigInt(42), tokenContract: "CTOKEN_ERR_42" });
+    cacheAssetEntries("testnet", [entry]);
+    takePrefetchedAssetMetadata("testnet", entry.tokenContract);
+
+    mockGetMetadata.mockRejectedValueOnce(new Error("Metadata RPC failed"));
+    const prefetched = prefetchAssetMetadata("testnet", entry.tokenContract);
+    // Attach a no-op handler so Jest does not flag unhandled rejection before useAsset consumes it
+    prefetched.catch(() => {});
+
+    const { result } = renderHook(() => useAsset(BigInt(42)));
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBe("Metadata RPC failed");
+    expect(result.current.data).toBeNull();
+    expect(result.current.notFound).toBe(false);
+
+    // Retry should perform a fresh metadata fetch and recover cleanly
+    const metadata = makeMetadata({ name: "Recovered Asset" });
+    mockGetMetadata.mockResolvedValueOnce(metadata);
+
+    await act(async () => {
+      result.current.refetch();
+    });
+
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.data).toEqual({ ...entry, metadata });
+  });
+});
+

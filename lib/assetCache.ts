@@ -25,12 +25,23 @@ export function getCachedAssetEntries(network: Network): AssetEntry[] | null {
   return assets ? Array.from(assets.values()) : null;
 }
 
+/**
+ * Load asset entries for `network`, falling back to the on-chain registry if
+ * the indexer returns `null` or rejects.
+ *
+ * Error path (#581):
+ * - If `api.getAllAssets()` throws/rejects, `loadAssetEntries` falls back to
+ *   `registry.getAllAssets(network)`.
+ * - If `registry.getAllAssets(network)` also rejects, previously cached entries
+ *   for `network` are left untouched and the rejection propagates to `useAsync`
+ *   so `useAssets` exposes a readable `error` state rather than crashing.
+ */
 export async function loadAssetEntries(
   network: Network,
   includeInactive = false,
 ): Promise<AssetEntry[]> {
-  const fromApi = await api.getAllAssets();
-  const all = fromApi ?? await registry.getAllAssets(network);
+  const fromApi = await api.getAllAssets().catch(() => null);
+  const all = fromApi ?? (await registry.getAllAssets(network));
   const assets = includeInactive ? all : all.filter((asset) => asset.active);
   cacheAssetEntries(network, assets);
   return assets;
@@ -40,6 +51,16 @@ export function getCachedAsset(network: Network, id: bigint): AssetEntry | null 
   return assetsByNetwork.get(network)?.get(id.toString()) ?? null;
 }
 
+/**
+ * Prefetch token metadata for `(network, tokenContract)` with a 15s TTL.
+ *
+ * Error path (#581):
+ * - Synchronous throws from `assetToken.getMetadata` are converted into a
+ *   rejected promise so fire-and-forget callers (e.g. hover prefetch) never
+ *   crash a component render or event handler.
+ * - Any rejection evicts the prefetch entry immediately so the next call or
+ *   `useAsset` retry performs a fresh read.
+ */
 export function prefetchAssetMetadata(
   network: Network,
   tokenContract: string,
@@ -50,7 +71,12 @@ export function prefetchAssetMetadata(
   if (cached && cached.expiresAt > now) return cached.promise;
   if (cached) metadataPrefetches.delete(key);
 
-  const promise = assetToken.getMetadata(network, tokenContract);
+  let promise: Promise<AssetMetadata>;
+  try {
+    promise = Promise.resolve(assetToken.getMetadata(network, tokenContract));
+  } catch (err) {
+    promise = Promise.reject(err);
+  }
   const prefetch = { promise, expiresAt: now + PREFETCH_TTL_MS };
   metadataPrefetches.set(key, prefetch);
   promise.catch(() => {
