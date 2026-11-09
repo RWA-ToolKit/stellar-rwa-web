@@ -55,3 +55,21 @@ export function dedupeRequest<T>(
 export function clearRequestCache(): void {
   inFlightRequests.clear();
 }
+
+/**
+ * Clear in-flight deduplication entries associated with a specific network
+ * (`"testnet"` or `"mainnet"`), or all entries when `network` is omitted.
+ * Prevents cross-network reuse when callers switch networks mid-session (#590).
+ */
+export function clearNetworkRequestCache(network?: string): void {
+  if (!network) {
+    inFlightRequests.clear();
+    return;
+  }
+  const token = `${network}:`;
+  for (const key of Array.from(inFlightRequests.keys())) {
+    if (key.startsWith(token) || key.includes(`:${network}:`) || key.endsWith(`:${network}`)) {
+      inFlightRequests.delete(key);
+    }
+  }
+}
