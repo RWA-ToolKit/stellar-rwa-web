@@ -36,6 +36,11 @@ export function useAsync<T>(
   const [error, setError] = useState<string | null>(null);
   const [updatedAt, setUpdatedAt] = useState<number | null>(null);
   const reqId = useRef(0);
+  // Keep a ref to the latest `loader` closure so `run` never invokes a stale
+  // closure even though `loader` is intentionally omitted from `useCallback`
+  // deps (since callers pass an inline arrow function on each render).
+  const loaderRef = useRef(loader);
+  loaderRef.current = loader;
   // Serialize deps to a stable string key so memoization is by value, not by
   // array identity/length — unstable references or a changing-length caller
   // deps array no longer break the useCallback dependency list below.
@@ -67,7 +72,8 @@ export function useAsync<T>(
     loadedKey.current = runKey;
     setLoading(true);
     setError(null);
-    loader()
+    loaderRef
+      .current()
       .then((res) => {
         if (id === reqId.current) {
           setData(res);

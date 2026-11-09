@@ -16,7 +16,9 @@
  *   - Resets all in-flight entries so the next call invokes the factory
  */
 
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { dedupeRequest, clearRequestCache } from "../requestCache";
+import { useAsync } from "@/hooks/useAsync";
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
@@ -177,5 +179,95 @@ describe("clearRequestCache", () => {
     expect(factory).toHaveBeenCalledTimes(2); // 1 before clear + 1 after
     expect(p1).toBe(p2);
     await expect(p1).resolves.toBe("after-clear");
+  });
+});
+
+// ─── stale closure / dependency array audit (#588) ──────────────────────────
+
+describe("stale closure and dependency array audit (#588)", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    clearRequestCache();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    clearRequestCache();
+  });
+
+  it("invokes the updated factory closure immediately when key reflects new closure inputs", async () => {
+    let capturedParam = "initial";
+    const calls: string[] = [];
+
+    const p1 = dedupeRequest(`req:${capturedParam}`, async () => {
+      calls.push(capturedParam);
+      return `value:${capturedParam}`;
+    });
+
+    capturedParam = "updated";
+    const p2 = dedupeRequest(`req:${capturedParam}`, async () => {
+      calls.push(capturedParam);
+      return `value:${capturedParam}`;
+    });
+
+    expect(p1).not.toBe(p2);
+    await expect(p1).resolves.toBe("value:initial");
+    await expect(p2).resolves.toBe("value:updated");
+    expect(calls).toEqual(["initial", "updated"]);
+  });
+
+  it("never retains a stale factory closure after settlement and timer cleanup", async () => {
+    let version = 1;
+    const firstClosure = jest.fn(async () => `v${version}`);
+
+    await expect(dedupeRequest("same-key", firstClosure)).resolves.toBe("v1");
+    jest.runAllTimers();
+
+    version = 2;
+    const secondClosure = jest.fn(async () => `v${version}`);
+    await expect(dedupeRequest("same-key", secondClosure)).resolves.toBe("v2");
+
+    expect(firstClosure).toHaveBeenCalledTimes(1);
+    expect(secondClosure).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses the latest closure values across hook rerenders and manual refetch", async () => {
+    jest.useRealTimers();
+    const seenArgs: Array<{ complianceId: string; suffix: string }> = [];
+
+    const { result, rerender } = renderHook(
+      ({ complianceId, suffix }: { complianceId: string; suffix: string }) =>
+        useAsync(
+          () =>
+            dedupeRequest(`allowlist:testnet:${complianceId}`, async () => {
+              seenArgs.push({ complianceId, suffix });
+              return `${complianceId}:${suffix}`;
+            }),
+          [complianceId],
+        ),
+      { initialProps: { complianceId: "C_1", suffix: "s1" } },
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.data).toBe("C_1:s1");
+
+    // Rerender with updated complianceId and suffix
+    rerender({ complianceId: "C_2", suffix: "s2" });
+    await waitFor(() => expect(result.current.data).toBe("C_2:s2"));
+
+    // Even if only a non-dep prop changes before manual refetch(), loaderRef
+    // ensures refetch() executes the latest closure rather than a stale one.
+    rerender({ complianceId: "C_2", suffix: "s3" });
+    await new Promise((r) => setTimeout(r, 10));
+    act(() => {
+      result.current.refetch();
+    });
+    await waitFor(() => expect(result.current.data).toBe("C_2:s3"));
+
+    expect(seenArgs).toEqual([
+      { complianceId: "C_1", suffix: "s1" },
+      { complianceId: "C_2", suffix: "s2" },
+      { complianceId: "C_2", suffix: "s3" },
+    ]);
   });
 });

@@ -23,6 +23,13 @@ const CACHE_DURATION_MS = 5000;
  * the same key within the 5-second deduplication window. Settlement schedules
  * the entry for removal on the next timer turn. This does not cache response
  * data or guarantee that a response is fresh for 5 seconds.
+ *
+ * Stale-closure audit (#588): `dedupeRequest` stores only the resulting
+ * `Promise<T>` and never retains the `factory` closure itself. However, any
+ * reactive prop or state variable closed over by `factory` (such as `network`
+ * or `complianceId`) MUST be included in both the `key` passed to
+ * `dedupeRequest` and the caller hook's dependency array so a render with
+ * updated inputs never reuses an in-flight promise started by an older closure.
  */
 export function dedupeRequest<T>(
   key: CacheKey,
