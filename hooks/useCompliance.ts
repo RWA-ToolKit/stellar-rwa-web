@@ -16,17 +16,25 @@ export interface ComplianceInfo {
  * The compliance status of `address` against a specific compliance contract.
  * Combines the authoritative `is_allowed` gate with the raw KYC record so the
  * UI can explain *why* an address is or isn't permitted.
+ *
+ * Empty-input behaviour (#632): when `complianceId` or `address` is `null`,
+ * empty (`""`), or whitespace-only, `useAsync` is disabled (`enabled = false`).
+ * The hook therefore returns `{ data: null, loading: false, error: null }`
+ * without issuing any Soroban RPC requests, and clears any previously loaded
+ * `data` if an input becomes empty mid-session (e.g. wallet disconnect).
  */
 export function useCompliance(complianceId: string | null, address: string | null) {
   const { network } = useWallet();
+  const normalizedComplianceId = complianceId?.trim() || null;
+  const normalizedAddress = address?.trim() || null;
   return useAsync<ComplianceInfo>(
     async () => {
-      if (!complianceId || !address) {
+      if (!normalizedComplianceId || !normalizedAddress) {
         return { allowed: false, status: "None", record: null };
       }
       const [allowed, record] = await Promise.all([
-        compliance.isAllowed(network, complianceId, address),
-        compliance.getRecord(network, complianceId, address),
+        compliance.isAllowed(network, normalizedComplianceId, normalizedAddress),
+        compliance.getRecord(network, normalizedComplianceId, normalizedAddress),
       ]);
       return {
         allowed,
@@ -34,8 +42,8 @@ export function useCompliance(complianceId: string | null, address: string | nul
         record,
       };
     },
-    [complianceId, address, network],
-    Boolean(complianceId && address),
+    [normalizedComplianceId, normalizedAddress, network],
+    Boolean(normalizedComplianceId && normalizedAddress),
   );
 }
 
@@ -63,12 +71,13 @@ export interface ComplianceOverview {
  */
 export function useComplianceOverview(complianceId: string | null) {
   const { network } = useWallet();
+  const normalizedComplianceId = complianceId?.trim() || null;
   return useAsync<ComplianceOverview>(
     async () => {
-      if (!complianceId) return { allowlistSize: 0, jurisdictions: [] };
-      const addresses = await compliance.getAllowlist(network, complianceId);
+      if (!normalizedComplianceId) return { allowlistSize: 0, jurisdictions: [] };
+      const addresses = await compliance.getAllowlist(network, normalizedComplianceId);
       const records = await Promise.all(
-        addresses.map((a) => compliance.getRecord(network, complianceId, a)),
+        addresses.map((a) => compliance.getRecord(network, normalizedComplianceId, a)),
       );
       const codes = [
         ...new Set(
@@ -80,7 +89,7 @@ export function useComplianceOverview(complianceId: string | null) {
           code,
           blocked: await compliance.isJurisdictionBlocked(
             network,
-            complianceId,
+            normalizedComplianceId,
             code,
           ),
         })),
@@ -90,24 +99,25 @@ export function useComplianceOverview(complianceId: string | null) {
         jurisdictions,
       };
     },
-    [complianceId, network],
-    Boolean(complianceId),
+    [normalizedComplianceId, network],
+    Boolean(normalizedComplianceId),
   );
 }
 
 /** Full KYC allowlist (with records) for a compliance contract — issuer views. */
 export function useAllowlist(complianceId: string | null) {
   const { network } = useWallet();
+  const normalizedComplianceId = complianceId?.trim() || null;
   return useAsync<KycRecord[]>(
     async () => {
-      if (!complianceId) return [];
-      const addresses = await compliance.getAllowlist(network, complianceId);
+      if (!normalizedComplianceId) return [];
+      const addresses = await compliance.getAllowlist(network, normalizedComplianceId);
       const records = await Promise.all(
-        addresses.map((a) => compliance.getRecord(network, complianceId, a)),
+        addresses.map((a) => compliance.getRecord(network, normalizedComplianceId, a)),
       );
       return records.filter((r): r is KycRecord => r !== null);
     },
-    [complianceId, network],
-    Boolean(complianceId),
+    [normalizedComplianceId, network],
+    Boolean(normalizedComplianceId),
   );
 }

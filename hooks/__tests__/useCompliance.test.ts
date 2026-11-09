@@ -31,6 +31,52 @@ describe("useCompliance", () => {
       expect(res2.current.loading).toBe(false);
     });
 
+    it("does not invoke contract reads when given empty or whitespace-only inputs (#632)", () => {
+      const cases: Array<[string | null, string | null]> = [
+        ["", "GABC123"],
+        ["C123", ""],
+        ["", ""],
+        ["   ", "GABC123"],
+        ["C123", "   "],
+        [null, null],
+      ];
+
+      for (const [cid, addr] of cases) {
+        const { result } = renderHook(() => useCompliance(cid, addr));
+        expect(result.current.data).toBeNull();
+        expect(result.current.loading).toBe(false);
+        expect(result.current.error).toBeNull();
+      }
+
+      expect(compliance.isAllowed).not.toHaveBeenCalled();
+      expect(compliance.getRecord).not.toHaveBeenCalled();
+    });
+
+    it("clears previously loaded data when complianceId or address becomes empty (#632)", async () => {
+      (compliance.isAllowed as jest.Mock).mockResolvedValue(true);
+      (compliance.getRecord as jest.Mock).mockResolvedValue({
+        address: "GABC123",
+        status: "Approved" as const,
+        jurisdiction: "US",
+        verifiedAt: 1000,
+        expiresAt: 0,
+      });
+
+      const { result, rerender } = renderHook(
+        ({ cid, addr }: { cid: string | null; addr: string | null }) =>
+          useCompliance(cid, addr),
+        { initialProps: { cid: "C123", addr: "GABC123" } },
+      );
+
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.data?.allowed).toBe(true);
+
+      rerender({ cid: "C123", addr: "" });
+      expect(result.current.data).toBeNull();
+      expect(result.current.loading).toBe(false);
+      expect(compliance.isAllowed).toHaveBeenCalledTimes(1);
+    });
+
     it("returns compliance summary when contract calls succeed", async () => {
       const mockRecord = {
         address: "GABC123",
@@ -71,10 +117,19 @@ describe("useCompliance", () => {
   });
 
   describe("useComplianceOverview", () => {
-    it("returns null overview when complianceId is null", async () => {
+    it("returns null overview when complianceId is null or empty (#632)", async () => {
       const { result } = renderHook(() => useComplianceOverview(null));
       expect(result.current.data).toBeNull();
       expect(result.current.loading).toBe(false);
+
+      const { result: emptyRes } = renderHook(() => useComplianceOverview(""));
+      expect(emptyRes.current.data).toBeNull();
+      expect(emptyRes.current.loading).toBe(false);
+
+      const { result: blankRes } = renderHook(() => useComplianceOverview("   "));
+      expect(blankRes.current.data).toBeNull();
+      expect(blankRes.current.loading).toBe(false);
+      expect(compliance.getAllowlist).not.toHaveBeenCalled();
     });
 
     it("returns compliance overview summary when contract calls succeed", async () => {
@@ -113,10 +168,19 @@ describe("useCompliance", () => {
   });
 
   describe("useAllowlist", () => {
-    it("returns null allowlist when complianceId is null", async () => {
+    it("returns null allowlist when complianceId is null or empty (#632)", async () => {
       const { result } = renderHook(() => useAllowlist(null));
       expect(result.current.data).toBeNull();
       expect(result.current.loading).toBe(false);
+
+      const { result: emptyRes } = renderHook(() => useAllowlist(""));
+      expect(emptyRes.current.data).toBeNull();
+      expect(emptyRes.current.loading).toBe(false);
+
+      const { result: blankRes } = renderHook(() => useAllowlist("   "));
+      expect(blankRes.current.data).toBeNull();
+      expect(blankRes.current.loading).toBe(false);
+      expect(compliance.getAllowlist).not.toHaveBeenCalled();
     });
 
     it("returns full allowlist records when contract calls succeed", async () => {
