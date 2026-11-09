@@ -1,8 +1,10 @@
+import { renderHook, waitFor } from "@testing-library/react";
 import {
   CONTRACT_ERROR_CODES,
   isAuthError,
   parseContractError,
 } from "@/lib/contractErrors";
+import { useAsync } from "@/hooks/useAsync";
 
 describe("CONTRACT_ERROR_CODES", () => {
   it("should contain all documented error codes", () => {
@@ -134,5 +136,62 @@ describe("isAuthError", () => {
       expect(parseContractError(raw)).toBe(CONTRACT_ERROR_CODES[code]);
       expect(isAuthError(raw)).toBe(expectedAuthBehavior[code]);
     }
+  });
+});
+
+describe("error and rejection paths (#591)", () => {
+  it("handles malformed or non-contract Soroban error strings without throwing", () => {
+    const malformedInputs = [
+      "Error(Contract, #)",
+      "Error(Contract, #abc)",
+      "Error(WasmVm, #3)",
+      "Error(Storage, #1)",
+      "HostError: Error(Budget, #0)",
+      "0",
+    ];
+
+    for (const raw of malformedInputs) {
+      expect(() => parseContractError(raw)).not.toThrow();
+      expect(parseContractError(raw)).toBe("The contract call could not be completed.");
+      expect(() => isAuthError(raw)).not.toThrow();
+      expect(isAuthError(raw)).toBe(false);
+    }
+  });
+
+  it("extracts readable messages from rejected Error instances and error-like objects", () => {
+    const authErr = new Error("HostError: Error(Contract, #3)");
+    expect(parseContractError(authErr)).toBe(
+      "You are not authorized to perform this action."
+    );
+    expect(isAuthError(authErr)).toBe(true);
+
+    const pausedPayload = { message: "Simulation failed: Error(Contract, #6)" };
+    expect(parseContractError(pausedPayload)).toBe("This asset is currently paused.");
+    expect(isAuthError(pausedPayload)).toBe(false);
+  });
+
+  it("degrades predictably for nullish or non-string runtime rejection values", () => {
+    const unexpectedValues: unknown[] = [null, undefined, 42, false, {}, []];
+
+    for (const value of unexpectedValues) {
+      expect(() => parseContractError(value)).not.toThrow();
+      expect(parseContractError(value)).toBe("The contract call could not be completed.");
+      expect(() => isAuthError(value)).not.toThrow();
+      expect(isAuthError(value)).toBe(false);
+    }
+  });
+
+  it("surfaces a rejected contract simulation as readable hook error state rather than crashing", async () => {
+    const failingCall = async () => {
+      const simulatedRawError = "HostError: Error(Contract, #7)";
+      throw new Error(parseContractError(simulatedRawError));
+    };
+
+    const { result } = renderHook(() => useAsync(failingCall, []));
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.data).toBeNull();
+    expect(result.current.error).toBe("The sender is not KYC-approved for this asset.");
   });
 });

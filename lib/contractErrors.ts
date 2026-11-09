@@ -41,14 +41,34 @@ export const CONTRACT_ERROR_CODES: Record<number, string> = {
 const AUTH_ERROR_CODE = 3;
 
 /**
+ * Safely coerce any runtime error input (string, Error instance, RPC payload,
+ * or nullish value) into a string so `isAuthError` and `parseContractError`
+ * never throw an unhandled `TypeError` when given non-string rejection values.
+ */
+function normalizeRawError(raw: unknown): string {
+  if (typeof raw === "string") return raw;
+  if (raw instanceof Error) return raw.message;
+  if (
+    raw !== null &&
+    typeof raw === "object" &&
+    "message" in raw &&
+    typeof (raw as { message?: unknown }).message === "string"
+  ) {
+    return (raw as { message: string }).message;
+  }
+  return "";
+}
+
+/**
  * Whether a raw Soroban error string is an authorisation failure, so callers
  * can present it differently from other contract errors.
  *
  * Empty/zero input is deliberate: an empty string (or any string without a
  * `Error(Contract, #N)` match) is not an auth error, so this returns `false`.
  */
-export function isAuthError(raw: string): boolean {
-  const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
+export function isAuthError(raw: unknown): boolean {
+  const text = normalizeRawError(raw);
+  const codeMatch = text.match(/Error\(Contract,\s*#(\d+)\)/);
   return codeMatch !== null && Number(codeMatch[1]) === AUTH_ERROR_CODE;
 }
 
@@ -60,19 +80,21 @@ export function isAuthError(raw: string): boolean {
  * contract error code and no known heuristic, so it falls through to the
  * generic fallback message rather than throwing.
  *
- * @param raw The raw error string from Soroban RPC
+ * @param raw The raw error string or rejection payload from Soroban RPC
  * @returns A user-friendly error message
  */
-export function parseContractError(raw: string): string {
+export function parseContractError(raw: unknown): string {
+  const text = normalizeRawError(raw);
+
   // First, try to match the standard contract error format: Error(Contract, #N)
-  const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
+  const codeMatch = text.match(/Error\(Contract,\s*#(\d+)\)/);
   if (codeMatch) {
     const code = Number(codeMatch[1]);
     return CONTRACT_ERROR_CODES[code] ?? `Contract rejected the call (code ${code}).`;
   }
 
   // Fall back to heuristic patterns for common failures
-  if (/trustline|insufficient/i.test(raw)) {
+  if (/trustline|insufficient/i.test(text)) {
     return "Insufficient balance or a missing trustline for the payment token.";
   }
 
