@@ -89,6 +89,11 @@ export function useAsync<T>(
 
   useEffect(() => {
     run();
+    return () => {
+      // Invalidate any in-flight request on unmount so late-settling promises
+      // (including shared `dedupeRequest` entries) never update unmounted state.
+      reqId.current += 1;
+    };
   }, [run]);
 
   return { data, loading, error, updatedAt, refetch: run };

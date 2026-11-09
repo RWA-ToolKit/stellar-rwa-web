@@ -23,6 +23,12 @@ const CACHE_DURATION_MS = 5000;
  * the same key within the 5-second deduplication window. Settlement schedules
  * the entry for removal on the next timer turn. This does not cache response
  * data or guarantee that a response is fresh for 5 seconds.
+ *
+ * Unmount behaviour (#589): because a single in-flight promise may be shared
+ * across multiple mounted components, unmounting one caller does not abort the
+ * underlying request. Hook consumers (`useAsync` / `useHolders`) guard their
+ * own lifecycle so late settlements after unmount are silently ignored while
+ * remaining mounted consumers still receive the resolved value.
  */
 export function dedupeRequest<T>(
   key: CacheKey,

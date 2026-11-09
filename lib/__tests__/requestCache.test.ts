@@ -16,7 +16,9 @@
  *   - Resets all in-flight entries so the next call invokes the factory
  */
 
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { dedupeRequest, clearRequestCache } from "../requestCache";
+import { useAsync } from "@/hooks/useAsync";
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
@@ -177,5 +179,93 @@ describe("clearRequestCache", () => {
     expect(factory).toHaveBeenCalledTimes(2); // 1 before clear + 1 after
     expect(p1).toBe(p2);
     await expect(p1).resolves.toBe("after-clear");
+  });
+});
+
+// ─── unmount during in-flight async call (#589) ──────────────────────────────
+
+describe("unmount during in-flight dedupeRequest (#589)", () => {
+  beforeEach(() => {
+    clearRequestCache();
+  });
+
+  afterEach(() => {
+    clearRequestCache();
+  });
+
+  it("does not update state or emit React warnings when a hook unmounts before dedupeRequest resolves", async () => {
+    let resolveInFlight!: (val: string[]) => void;
+    const factory = jest.fn(
+      () =>
+        new Promise<string[]>((res) => {
+          resolveInFlight = res;
+        }),
+    );
+
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const { result, unmount } = renderHook(() =>
+        useAsync(
+          () => dedupeRequest("allowlist:testnet:C_UNMOUNT", factory),
+          ["testnet", "C_UNMOUNT"],
+        ),
+      );
+
+      expect(result.current.loading).toBe(true);
+      expect(factory).toHaveBeenCalledTimes(1);
+
+      unmount();
+
+      await act(async () => {
+        resolveInFlight(["G_HOLDER_1"]);
+      });
+
+      expect(result.current.data).toBeNull();
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+
+  it("delivers the shared result to still-mounted consumers when one consumer unmounts mid-flight", async () => {
+    let resolveShared!: (val: string[]) => void;
+    const factory = jest.fn(
+      () =>
+        new Promise<string[]>((res) => {
+          resolveShared = res;
+        }),
+    );
+
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    try {
+      const hookA = renderHook(() =>
+        useAsync(
+          () => dedupeRequest("allowlist:testnet:C_SHARED", factory),
+          ["testnet", "C_SHARED"],
+        ),
+      );
+      const hookB = renderHook(() =>
+        useAsync(
+          () => dedupeRequest("allowlist:testnet:C_SHARED", factory),
+          ["testnet", "C_SHARED"],
+        ),
+      );
+
+      expect(factory).toHaveBeenCalledTimes(1);
+      hookA.unmount();
+
+      await act(async () => {
+        resolveShared(["G_SURVIVOR"]);
+      });
+
+      await waitFor(() => expect(hookB.result.current.loading).toBe(false));
+      expect(hookB.result.current.data).toEqual(["G_SURVIVOR"]);
+      expect(hookA.result.current.data).toBeNull();
+      expect(errorSpy).not.toHaveBeenCalled();
+    } finally {
+      errorSpy.mockRestore();
+    }
   });
 });
