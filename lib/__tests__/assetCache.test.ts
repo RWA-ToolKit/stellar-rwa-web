@@ -24,21 +24,35 @@
 import {
   cacheAssetEntries,
   getCachedAsset,
+  getCachedAssetEntries,
+  loadAssetEntries,
   prefetchAssetMetadata,
   takePrefetchedAssetMetadata,
 } from "../assetCache";
-import { assetToken } from "@/lib/contracts";
+import { api } from "@/lib/api";
+import { assetToken, registry } from "@/lib/contracts";
 import type { AssetEntry, AssetMetadata } from "@/types";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
+
+jest.mock("@/lib/api", () => ({
+  api: {
+    getAllAssets: jest.fn(),
+  },
+}));
 
 jest.mock("@/lib/contracts", () => ({
   assetToken: {
     getMetadata: jest.fn(),
   },
+  registry: {
+    getAllAssets: jest.fn(),
+  },
 }));
 
 const mockGetMetadata = assetToken.getMetadata as jest.Mock;
+const mockApiGetAllAssets = api.getAllAssets as jest.Mock;
+const mockRegistryGetAllAssets = registry.getAllAssets as jest.Mock;
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -278,5 +292,74 @@ describe("takePrefetchedAssetMetadata", () => {
 
     const taken = takePrefetchedAssetMetadata("testnet", TOKEN);
     expect(taken).toBeNull();
+  });
+});
+
+describe("empty / zero / null inputs (#582)", () => {
+  beforeEach(() => {
+    mockGetMetadata.mockReset();
+    mockApiGetAllAssets.mockReset();
+    mockRegistryGetAllAssets.mockReset();
+    cacheAssetEntries("testnet", []);
+  });
+
+  it("handles empty array in cacheAssetEntries and returns [] from getCachedAssetEntries", () => {
+    cacheAssetEntries("testnet", []);
+    expect(getCachedAssetEntries("testnet")).toEqual([]);
+    expect(getCachedAsset("testnet", BigInt(0))).toBeNull();
+  });
+
+  it("caches and retrieves an asset with id = 0n and zero numeric fields without falsy coercion", () => {
+    const zeroEntry = makeEntry({
+      id: BigInt(0),
+      valuation: BigInt(0),
+      createdAt: 0,
+      name: "",
+    });
+    cacheAssetEntries("testnet", [zeroEntry]);
+
+    expect(getCachedAsset("testnet", BigInt(0))).toEqual(zeroEntry);
+    expect(getCachedAssetEntries("testnet")).toEqual([zeroEntry]);
+  });
+
+  it("returns null from getCachedAsset when id is null or undefined", () => {
+    const entry = makeEntry({ id: BigInt(0) });
+    cacheAssetEntries("testnet", [entry]);
+
+    expect(getCachedAsset("testnet", null)).toBeNull();
+    expect(getCachedAsset("testnet", undefined)).toBeNull();
+  });
+
+  it("does not fall back to registry when api.getAllAssets returns an empty array []", async () => {
+    mockApiGetAllAssets.mockResolvedValue([]);
+    mockRegistryGetAllAssets.mockResolvedValue([makeEntry({ id: BigInt(1) })]);
+
+    const result = await loadAssetEntries("testnet");
+    expect(result).toEqual([]);
+    expect(mockRegistryGetAllAssets).not.toHaveBeenCalled();
+    expect(getCachedAssetEntries("testnet")).toEqual([]);
+  });
+
+  it("falls back to registry when api.getAllAssets returns null and filters out inactive entries to []", async () => {
+    mockApiGetAllAssets.mockResolvedValue(null);
+    mockRegistryGetAllAssets.mockResolvedValue([
+      makeEntry({ id: BigInt(0), active: false }),
+    ]);
+
+    const activeOnly = await loadAssetEntries("testnet", false);
+    expect(activeOnly).toEqual([]);
+    expect(getCachedAssetEntries("testnet")).toEqual([]);
+  });
+
+  it("rejects empty or whitespace-only tokenContract in prefetchAssetMetadata without polluting cache and returns null from takePrefetchedAssetMetadata", async () => {
+    await expect(prefetchAssetMetadata("testnet", "")).rejects.toThrow(
+      "tokenContract is required",
+    );
+    await expect(prefetchAssetMetadata("testnet", "   ")).rejects.toThrow(
+      "tokenContract is required",
+    );
+    expect(mockGetMetadata).not.toHaveBeenCalled();
+    expect(takePrefetchedAssetMetadata("testnet", "")).toBeNull();
+    expect(takePrefetchedAssetMetadata("testnet", "   ")).toBeNull();
   });
 });
