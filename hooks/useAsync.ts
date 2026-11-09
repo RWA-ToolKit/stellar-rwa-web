@@ -89,6 +89,11 @@ export function useAsync<T>(
 
   useEffect(() => {
     run();
+    return () => {
+      // Invalidate any in-flight request when the hook unmounts or before
+      // re-running so late-settling promises never update unmounted state.
+      reqId.current += 1;
+    };
   }, [run]);
 
   return { data, loading, error, updatedAt, refetch: run };

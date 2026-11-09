@@ -16,6 +16,10 @@ export interface ComplianceInfo {
  * The compliance status of `address` against a specific compliance contract.
  * Combines the authoritative `is_allowed` gate with the raw KYC record so the
  * UI can explain *why* an address is or isn't permitted.
+ *
+ * In-flight contract reads are tied to the active `useAsync` request lifecycle,
+ * so unmounting while `isAllowed` or `getRecord` is still pending discards the
+ * late settlement without updating state on an unmounted component.
  */
 export function useCompliance(complianceId: string | null, address: string | null) {
   const { network } = useWallet();

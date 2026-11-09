@@ -1,6 +1,16 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { useCompliance, useComplianceOverview, useAllowlist } from "../useCompliance";
 import { compliance } from "@/lib/contracts";
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 jest.mock("@/lib/contracts", () => ({
   compliance: {
@@ -67,6 +77,76 @@ describe("useCompliance", () => {
 
       expect(result.current.error).toBe("Contract read error");
       expect(result.current.data).toBeNull();
+    });
+
+    it("does not update state or log React warnings when unmounted during an in-flight call", async () => {
+      const allowedDeferred = createDeferred<boolean>();
+      const recordDeferred = createDeferred<{
+        address: string;
+        status: "Approved";
+        jurisdiction: string;
+        verifiedAt: number;
+        expiresAt: number;
+      } | null>();
+      (compliance.isAllowed as jest.Mock).mockReturnValue(allowedDeferred.promise);
+      (compliance.getRecord as jest.Mock).mockReturnValue(recordDeferred.promise);
+
+      const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        const { result, unmount } = renderHook(() =>
+          useCompliance("C123", "GABC123"),
+        );
+
+        expect(result.current.loading).toBe(true);
+        expect(result.current.data).toBeNull();
+
+        unmount();
+
+        await act(async () => {
+          allowedDeferred.resolve(true);
+          recordDeferred.resolve({
+            address: "GABC123",
+            status: "Approved",
+            jurisdiction: "US",
+            verifiedAt: 1000,
+            expiresAt: 0,
+          });
+          await Promise.all([allowedDeferred.promise, recordDeferred.promise]);
+        });
+
+        expect(result.current.data).toBeNull();
+        expect(errorSpy).not.toHaveBeenCalled();
+      } finally {
+        errorSpy.mockRestore();
+      }
+    });
+
+    it("ignores an in-flight rejection after unmount without logging warnings", async () => {
+      const allowedDeferred = createDeferred<boolean>();
+      (compliance.isAllowed as jest.Mock).mockReturnValue(allowedDeferred.promise);
+      (compliance.getRecord as jest.Mock).mockResolvedValue(null);
+
+      const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+      try {
+        const { result, unmount } = renderHook(() =>
+          useCompliance("C123", "GABC123"),
+        );
+
+        expect(result.current.loading).toBe(true);
+        unmount();
+
+        await act(async () => {
+          allowedDeferred.reject(new Error("late RPC failure"));
+          await allowedDeferred.promise.catch(() => {});
+        });
+
+        expect(result.current.error).toBeNull();
+        expect(errorSpy).not.toHaveBeenCalled();
+      } finally {
+        errorSpy.mockRestore();
+      }
     });
   });
 
