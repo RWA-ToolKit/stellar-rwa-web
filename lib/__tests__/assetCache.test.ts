@@ -21,24 +21,51 @@
  *   - Returns null after the TTL has expired
  */
 
+import { act, renderHook } from "@testing-library/react";
 import {
   cacheAssetEntries,
   getCachedAsset,
+  getCachedAssetEntries,
+  loadAssetEntries,
   prefetchAssetMetadata,
   takePrefetchedAssetMetadata,
 } from "../assetCache";
-import { assetToken } from "@/lib/contracts";
+import { api } from "@/lib/api";
+import { assetToken, registry } from "@/lib/contracts";
+import { useAssets } from "@/hooks/useAssets";
+import { useAsset } from "@/hooks/useAsset";
+import { useWallet } from "@/hooks/useWallet";
 import type { AssetEntry, AssetMetadata } from "@/types";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
+
+jest.mock("@/lib/api", () => ({
+  api: {
+    getAllAssets: jest.fn(),
+    getAsset: jest.fn(),
+  },
+}));
 
 jest.mock("@/lib/contracts", () => ({
   assetToken: {
     getMetadata: jest.fn(),
   },
+  registry: {
+    getAllAssets: jest.fn(),
+    getAsset: jest.fn(),
+  },
+}));
+
+jest.mock("@/hooks/useWallet", () => ({
+  useWallet: jest.fn(),
 }));
 
 const mockGetMetadata = assetToken.getMetadata as jest.Mock;
+const mockApiGetAllAssets = api.getAllAssets as jest.Mock;
+const mockApiGetAsset = api.getAsset as jest.Mock;
+const mockRegistryGetAllAssets = registry.getAllAssets as jest.Mock;
+const mockRegistryGetAsset = registry.getAsset as jest.Mock;
+const mockUseWallet = useWallet as jest.Mock;
 
 // ─── fixtures ─────────────────────────────────────────────────────────────────
 
@@ -278,5 +305,152 @@ describe("takePrefetchedAssetMetadata", () => {
 
     const taken = takePrefetchedAssetMetadata("testnet", TOKEN);
     expect(taken).toBeNull();
+  });
+});
+
+describe("unmount during an in-flight async call (#584)", () => {
+  let consoleErrorSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    mockGetMetadata.mockReset();
+    mockApiGetAllAssets.mockReset();
+    mockApiGetAsset.mockReset();
+    mockRegistryGetAllAssets.mockReset();
+    mockRegistryGetAsset.mockReset();
+    mockUseWallet.mockReset();
+    mockUseWallet.mockReturnValue({ network: "testnet" });
+    cacheAssetEntries("testnet", []);
+    takePrefetchedAssetMetadata("testnet", "CTOKEN_A");
+    consoleErrorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+  });
+
+  it("does not update state or emit a React warning when useAssets unmounts while loadAssetEntries is in flight and later resolves", async () => {
+    const entry = makeEntry({ id: BigInt(1), name: "Delayed Asset" });
+    let resolveApi!: (value: AssetEntry[] | null) => void;
+    mockApiGetAllAssets.mockImplementation(
+      () =>
+        new Promise<AssetEntry[] | null>((resolve) => {
+          resolveApi = resolve;
+        }),
+    );
+
+    const { result, unmount } = renderHook(() => useAssets());
+    expect(result.current.loading).toBe(true);
+    expect(result.current.data).toBeNull();
+
+    // Unmount while loadAssetEntries is still in flight
+    unmount();
+
+    await act(async () => {
+      resolveApi([entry]);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Hook state remains untouched after unmount
+    expect(result.current.data).toBeNull();
+    expect(result.current.loading).toBe(true);
+    expect(result.current.error).toBeNull();
+    // Module-level cache still receives the resolved asset entry in background
+    expect(getCachedAssetEntries("testnet")).toEqual([entry]);
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not update state or emit a React warning when useAssets unmounts while loadAssetEntries is in flight and later rejects", async () => {
+    let rejectRegistry!: (reason?: unknown) => void;
+    mockApiGetAllAssets.mockResolvedValue(null);
+    mockRegistryGetAllAssets.mockImplementation(
+      () =>
+        new Promise<AssetEntry[]>((_, reject) => {
+          rejectRegistry = reject;
+        }),
+    );
+
+    const { result, unmount } = renderHook(() => useAssets());
+    expect(result.current.loading).toBe(true);
+
+    // Let api.getAllAssets() resolve null so registry.getAllAssets() is in flight
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    unmount();
+
+    await act(async () => {
+      rejectRegistry(new Error("Soroban RPC timeout"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(result.current.data).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not update state or emit a React warning when useAsset unmounts while prefetched metadata is in flight", async () => {
+    const entry = makeEntry({ id: BigInt(7), tokenContract: "CTOKEN_A" });
+    cacheAssetEntries("testnet", [entry]);
+
+    let resolveMetadata!: (value: AssetMetadata) => void;
+    mockGetMetadata.mockImplementation(
+      () =>
+        new Promise<AssetMetadata>((resolve) => {
+          resolveMetadata = resolve;
+        }),
+    );
+
+    // Start an in-flight metadata prefetch in assetCache before mounting useAsset
+    const inflightPrefetch = prefetchAssetMetadata("testnet", "CTOKEN_A");
+
+    const { result, unmount } = renderHook(() => useAsset(BigInt(7)));
+    expect(result.current.loading).toBe(true);
+    expect(result.current.data).toBeNull();
+
+    // Unmount while the prefetched metadata promise is still pending
+    unmount();
+
+    const metadata = makeMetadata({ name: "Settled After Unmount" });
+    await act(async () => {
+      resolveMetadata(metadata);
+      await inflightPrefetch;
+    });
+
+    expect(result.current.data).toBeNull();
+    expect(result.current.loading).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it("evicts failed in-flight metadata prefetch cleanly after caller unmount without emitting a React warning", async () => {
+    const entry = makeEntry({ id: BigInt(8), tokenContract: "CTOKEN_A" });
+    cacheAssetEntries("testnet", [entry]);
+
+    let rejectMetadata!: (reason?: unknown) => void;
+    mockGetMetadata.mockImplementationOnce(
+      () =>
+        new Promise<AssetMetadata>((_, reject) => {
+          rejectMetadata = reject;
+        }),
+    );
+
+    const inflightPrefetch = prefetchAssetMetadata("testnet", "CTOKEN_A");
+    const { result, unmount } = renderHook(() => useAsset(BigInt(8)));
+    expect(result.current.loading).toBe(true);
+
+    unmount();
+
+    await act(async () => {
+      rejectMetadata(new Error("Metadata RPC failed after unmount"));
+      await inflightPrefetch.catch(() => {});
+      await Promise.resolve();
+    });
+
+    expect(result.current.data).toBeNull();
+    expect(result.current.error).toBeNull();
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
   });
 });

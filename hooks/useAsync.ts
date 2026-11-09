@@ -89,6 +89,11 @@ export function useAsync<T>(
 
   useEffect(() => {
     run();
+    return () => {
+      // Invalidate any in-flight request when dependencies change or the
+      // component unmounts so late promise settlements never update state.
+      reqId.current += 1;
+    };
   }, [run]);
 
   return { data, loading, error, updatedAt, refetch: run };

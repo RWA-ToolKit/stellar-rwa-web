@@ -25,6 +25,16 @@ export function getCachedAssetEntries(network: Network): AssetEntry[] | null {
   return assets ? Array.from(assets.values()) : null;
 }
 
+/**
+ * Load asset entries for `network` and populate the in-memory network cache.
+ *
+ * Unmount / in-flight safety:
+ * - `loadAssetEntries` only mutates the module-level `assetsByNetwork` map and
+ *   never touches React component state directly.
+ * - Hooks consuming `loadAssetEntries` (`useAssets`) invalidate their request
+ *   ID on unmount so late resolution or rejection after unmount does not
+ *   trigger a state update on an unmounted component.
+ */
 export async function loadAssetEntries(
   network: Network,
   includeInactive = false,
@@ -40,6 +50,11 @@ export function getCachedAsset(network: Network, id: bigint): AssetEntry | null 
   return assetsByNetwork.get(network)?.get(id.toString()) ?? null;
 }
 
+/**
+ * Prefetch token metadata for `(network, tokenContract)` with a 15s TTL.
+ * If the calling component unmounts while `getMetadata` is in flight, the
+ * promise settles harmlessly in the background and evicts itself on rejection.
+ */
 export function prefetchAssetMetadata(
   network: Network,
   tokenContract: string,
