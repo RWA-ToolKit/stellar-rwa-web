@@ -78,6 +78,8 @@ function write(
 }
 
 // ---- normalisers ----
+// Empty/null list responses from readContract are deliberately normalised to `[]`
+// and null scalar balances/counts to `0n` so callers can render safely.
 
 type RawEntry = {
   id: bigint;
