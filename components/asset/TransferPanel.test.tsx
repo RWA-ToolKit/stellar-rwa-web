@@ -310,4 +310,69 @@ describe("TransferPanel", () => {
       // If TxProgress is shown instead, that's also correct (button won't exist)
     });
   });
+
+  describe("unmount during in-flight async call (#679)", () => {
+    it("unmounting while tx.run is in flight produces no console error/warning and skips post-unmount updates", async () => {
+      const APPROVED_RECIPIENT = "GAPPROVEDRECIPIENT1234567890ABCDEFGHIJKLMNOPQRSTUVWX";
+      const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+      mockUseWallet.mockReturnValue({ address: SENDER } as ReturnType<typeof useWallet>);
+      mockUseCompliance.mockReturnValue({
+        data: { allowed: true, status: "Approved", record: null },
+        loading: false,
+        error: null,
+        updatedAt: null,
+        refetch: jest.fn(),
+      });
+
+      let resolveTransfer!: (value: boolean) => void;
+      const run = jest.fn(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolveTransfer = resolve;
+          }),
+      );
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: false,
+        retryable: false,
+        run,
+        retry: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      const onTransferred = jest.fn();
+      const { unmount } = render(
+        <TransferPanel asset={asset} balance={100n} onTransferred={onTransferred} />,
+      );
+
+      fireEvent.change(screen.getByLabelText("Recipient address"), {
+        target: { value: APPROVED_RECIPIENT },
+      });
+      fireEvent.change(screen.getByLabelText("Amount"), {
+        target: { value: "20" },
+      });
+      fireEvent.submit(screen.getByRole("button", { name: "Transfer" }).closest("form")!);
+
+      expect(run).toHaveBeenCalledTimes(1);
+
+      unmount();
+
+      resolveTransfer(true);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(onTransferred).not.toHaveBeenCalled();
+      expect(errorSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      errorSpy.mockRestore();
+      warnSpy.mockRestore();
+    });
+  });
 });
