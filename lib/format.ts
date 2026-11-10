@@ -93,6 +93,7 @@ function compactBigint(n: bigint): string {
  * Convert a raw token amount (bigint, in base units) to a human string using
  * the token's decimals. 100000n @ 2 decimals -> "1,000".
  */
+// Stateless per-call formatting ensures testnet/mainnet switches never leak cached state.
 export function formatTokenAmount(raw: bigint, decimals: number): string {
   const negative = raw < 0n;
   const abs = negative ? -raw : raw;
