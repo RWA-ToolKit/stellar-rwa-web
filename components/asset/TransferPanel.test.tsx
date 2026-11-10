@@ -310,4 +310,83 @@ describe("TransferPanel", () => {
       // If TxProgress is shown instead, that's also correct (button won't exist)
     });
   });
+
+  describe("error path (#676)", () => {
+    it("turns a non-Error rejection from tx.run into a readable alert and preserves form inputs", async () => {
+      const APPROVED_RECIPIENT = "GAPPROVEDRECIPIENT1234567890ABCDEFGHIJKLMNOPQRSTUVWX";
+      mockUseWallet.mockReturnValue({ address: SENDER } as ReturnType<typeof useWallet>);
+      mockUseCompliance.mockReturnValue({
+        data: { allowed: true, status: "Approved", record: null },
+        loading: false,
+        error: null,
+        updatedAt: null,
+        refetch: jest.fn(),
+      });
+
+      const run = jest.fn().mockRejectedValueOnce("rpc 503");
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: false,
+        retryable: false,
+        run,
+        retry: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      const onTransferred = jest.fn();
+      render(<TransferPanel asset={asset} balance={100n} onTransferred={onTransferred} />);
+
+      fireEvent.change(screen.getByLabelText("Recipient address"), {
+        target: { value: APPROVED_RECIPIENT },
+      });
+      fireEvent.change(screen.getByLabelText("Amount"), {
+        target: { value: "15" },
+      });
+      fireEvent.submit(screen.getByRole("button", { name: "Transfer" }).closest("form")!);
+
+      expect(await screen.findByText("Transfer failed.")).toBeInTheDocument();
+      expect(onTransferred).not.toHaveBeenCalled();
+      expect((screen.getByLabelText("Recipient address") as HTMLInputElement).value).toBe(
+        APPROVED_RECIPIENT,
+      );
+      expect((screen.getByLabelText("Amount") as HTMLInputElement).value).toBe("15");
+    });
+
+    it("surfaces compliance read errors via ErrorState with retry instead of allowlist warning", () => {
+      const refetch = jest.fn();
+      mockUseWallet.mockReturnValue({ address: SENDER } as ReturnType<typeof useWallet>);
+      mockUseCompliance.mockReturnValue({
+        data: null,
+        loading: false,
+        error: "Compliance RPC unreachable",
+        updatedAt: null,
+        refetch,
+      });
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: false,
+        retryable: false,
+        run: jest.fn(),
+        retry: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      render(<TransferPanel asset={asset} balance={100n} />);
+
+      expect(screen.getByText(/couldn't check your compliance status/i)).toBeInTheDocument();
+      expect(screen.getByText("Compliance RPC unreachable")).toBeInTheDocument();
+      expect(screen.queryByText(/isn't on this asset's kyc allowlist/i)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /try again/i }));
+      expect(refetch).toHaveBeenCalledTimes(1);
+    });
+  });
 });

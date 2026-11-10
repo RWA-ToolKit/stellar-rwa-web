@@ -135,9 +135,15 @@ export function TransferPanel({
       return;
     }
 
-    const res = await tx.run((ctx) =>
-      assetToken.transfer(ctx, asset.tokenContract, recipient, raw),
-    );
+    let res = false;
+    try {
+      res = await tx.run((ctx) =>
+        assetToken.transfer(ctx, asset.tokenContract, recipient, raw),
+      );
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Transfer failed.");
+      return;
+    }
     if (res) {
       setTo("");
       setAmount("");
