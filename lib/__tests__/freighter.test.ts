@@ -512,3 +512,96 @@ describe("LockedWalletError", () => {
     expect(new LockedWalletError()).toBeInstanceOf(WalletError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #675 — network switch mid-session (testnet/mainnet)
+// ---------------------------------------------------------------------------
+
+describe("freighter wallet client – network switch mid-session (#675)", () => {
+  beforeEach(() => {
+    mockGetNetwork.mockReset();
+    mockSignTransaction.mockReset();
+    mockWatcherWatch.mockReset();
+    mockWatcherStop.mockReset();
+  });
+
+  it("reports updated network identity across mid-session switches between testnet and mainnet", async () => {
+    mockGetNetwork
+      .mockResolvedValueOnce({
+        networkPassphrase: TESTNET_PASSPHRASE,
+        network: "TESTNET",
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        networkPassphrase: MAINNET_PASSPHRASE,
+        network: "PUBLIC",
+        error: null,
+      })
+      .mockResolvedValueOnce({
+        networkPassphrase: TESTNET_PASSPHRASE,
+        network: "TESTNET",
+        error: null,
+      });
+
+    await expect(getWalletNetwork()).resolves.toBe("testnet");
+    await expect(getWalletNetwork()).resolves.toBe("mainnet");
+    await expect(getWalletNetwork()).resolves.toBe("testnet");
+  });
+
+  it("isolates overlapping in-flight getWalletNetwork and signTx calls when network switches mid-flight", async () => {
+    let resolveStaleTestnet!: (value: {
+      signedTxXdr: string;
+      error: null;
+    }) => void;
+    mockSignTransaction
+      .mockImplementationOnce(
+        () =>
+          new Promise<{ signedTxXdr: string; error: null }>((resolve) => {
+            resolveStaleTestnet = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({
+        signedTxXdr: "SIGNED_MAINNET_XDR",
+        error: null,
+      });
+
+    const testnetTx = signTx("XDR_TESTNET", TESTNET_PASSPHRASE, "GTEST");
+    const mainnetTx = signTx("XDR_MAINNET", MAINNET_PASSPHRASE, "GMAIN");
+
+    await expect(mainnetTx).resolves.toBe("SIGNED_MAINNET_XDR");
+
+    resolveStaleTestnet({ signedTxXdr: "SIGNED_TESTNET_XDR", error: null });
+    await expect(testnetTx).resolves.toBe("SIGNED_TESTNET_XDR");
+
+    expect(mockSignTransaction).toHaveBeenNthCalledWith(1, "XDR_TESTNET", {
+      networkPassphrase: TESTNET_PASSPHRASE,
+      address: "GTEST",
+    });
+    expect(mockSignTransaction).toHaveBeenNthCalledWith(2, "XDR_MAINNET", {
+      networkPassphrase: MAINNET_PASSPHRASE,
+      address: "GMAIN",
+    });
+  });
+
+  it("notifies watchWallet subscribers when Freighter switches from TESTNET to PUBLIC mid-session", () => {
+    const events: Array<{ address: string; network: string }> = [];
+    let registeredCallback: ((info: { address: string; network: string }) => void) | undefined;
+    mockWatcherWatch.mockImplementation((cb: (info: { address: string; network: string }) => void) => {
+      registeredCallback = cb;
+    });
+
+    const unsubscribe = watchWallet((info) => events.push(info));
+    expect(registeredCallback).toBeDefined();
+
+    registeredCallback!({ address: "GADDR1", network: "TESTNET" });
+    registeredCallback!({ address: "GADDR1", network: "PUBLIC" });
+
+    expect(events).toEqual([
+      { address: "GADDR1", network: "TESTNET" },
+      { address: "GADDR1", network: "PUBLIC" },
+    ]);
+
+    unsubscribe();
+    expect(mockWatcherStop).toHaveBeenCalledTimes(1);
+  });
+});
