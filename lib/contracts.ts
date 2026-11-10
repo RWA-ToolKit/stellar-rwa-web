@@ -320,6 +320,8 @@ export const registry = {
 
 // ================= Asset token =================
 
+// Keyed by `${network}:${tokenId}` so switching between testnet and mainnet
+// mid-session never serves cached decimals from the previous network.
 const decimalsCache = new Map<string, Promise<number>>();
 
 export const assetToken = {
