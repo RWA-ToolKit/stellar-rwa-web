@@ -189,6 +189,8 @@ function toDistribution(r: RawDist): Distribution {
  */
 const GET_ALL_ASSETS_PAGE_SIZE = 50;
 
+// Callers awaiting contract reads inside React effects should guard state updates
+// with a cleanup `cancelled` flag so unmounting during an in-flight RPC call stays silent.
 export const registry = {
   /**
    * Fetches all assets from the registry, paging through them automatically.
