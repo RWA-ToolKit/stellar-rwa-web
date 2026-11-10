@@ -310,4 +310,59 @@ describe("TransferPanel", () => {
       // If TxProgress is shown instead, that's also correct (button won't exist)
     });
   });
+
+  describe("empty/zero input (#677)", () => {
+    it("hides Max button and disables Transfer when balance is 0n without producing NaN", () => {
+      mockUseWallet.mockReturnValue({ address: SENDER } as ReturnType<typeof useWallet>);
+      mockUseCompliance.mockReturnValue({
+        data: { allowed: true, status: "Approved", record: null },
+        loading: false,
+        error: null,
+        updatedAt: null,
+        refetch: jest.fn(),
+      });
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: false,
+        retryable: false,
+        run: jest.fn(),
+        retry: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      render(<TransferPanel asset={asset} balance={0n} />);
+
+      expect(screen.queryByRole("button", { name: "Max" })).not.toBeInTheDocument();
+      const unavailableBtn = screen.getByRole("button", { name: "Transfer unavailable" });
+      expect(unavailableBtn).toBeDisabled();
+      expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    });
+
+    it("rejects empty and whitespace-only recipient addresses and zero amounts without invoking tx.run", () => {
+      const APPROVED_RECIPIENT = "GAPPROVEDRECIPIENT1234567890ABCDEFGHIJKLMNOPQRSTUVWX";
+      setup(assetWith2Decimals);
+      const run = mockUseTx.mock.results[0]!.value.run;
+      const form = screen.getByRole("button", { name: "Transfer" }).closest("form")!;
+
+      // Empty recipient
+      fireEvent.change(screen.getByLabelText("Recipient address"), { target: { value: "   " } });
+      fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "10" } });
+      fireEvent.submit(form);
+      expect(screen.getByText(/enter a valid stellar address/i)).toBeInTheDocument();
+      expect(run).not.toHaveBeenCalled();
+
+      // Valid recipient + "0.00" amount
+      fireEvent.change(screen.getByLabelText("Recipient address"), {
+        target: { value: APPROVED_RECIPIENT },
+      });
+      fireEvent.change(screen.getByLabelText("Amount"), { target: { value: "0.00" } });
+      fireEvent.submit(form);
+      expect(screen.getByText("Amount must be greater than zero.")).toBeInTheDocument();
+      expect(run).not.toHaveBeenCalled();
+    });
+  });
 });
