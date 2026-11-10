@@ -32,6 +32,7 @@ export function formatStroopsToXLM(stroops: bigint | number): string {
  * Number.MAX_SAFE_INTEGER (2^53-1 cents) keep full precision — mirror of how
  * formatTokenAmount already scales raw token amounts.
  */
+// Pure synchronous formatter safe to invoke inside cancellable async pipelines.
 export function formatUsdCents(cents: bigint, opts?: { compact?: boolean }): string {
   const negative = cents < 0n;
   const abs = negative ? -cents : cents;
