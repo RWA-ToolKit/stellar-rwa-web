@@ -130,6 +130,8 @@ export function formatRawPlain(raw: bigint, decimals: number): string {
 
 /**
  * Parse a human-entered decimal string into raw base units for a token.
+ * Throws a descriptive Error on malformed or over-precision input so form
+ * handlers can surface validation feedback as readable UI state.
  * "1,000.5" @ 2 decimals -> 100050n. Throws on malformed input.
  */
 export function parseTokenAmount(input: string, decimals: number): bigint {
