@@ -310,4 +310,113 @@ describe("TransferPanel", () => {
       // If TxProgress is shown instead, that's also correct (button won't exist)
     });
   });
+
+  describe("stale closure / dependency array (#678)", () => {
+    it("re-evaluates inline decimal validation and compliance lookups when asset props change", () => {
+      mockUseWallet.mockReturnValue({ address: SENDER } as ReturnType<typeof useWallet>);
+      mockUseCompliance.mockReturnValue({
+        data: { allowed: true, status: "Approved", record: null },
+        loading: false,
+        error: null,
+        updatedAt: null,
+        refetch: jest.fn(),
+      });
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: false,
+        retryable: false,
+        run: jest.fn(),
+        retry: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      const { rerender } = render(<TransferPanel asset={asset} balance={100n} />);
+
+      fireEvent.change(screen.getByLabelText("Amount"), {
+        target: { value: "1.25" },
+      });
+      expect(screen.getByText(/maximum 0 decimal places/i)).toBeInTheDocument();
+
+      // Switch to an asset with 2 decimals and a new compliance contract:
+      // the stale 0-decimal error must clear and useCompliance must receive the new contract.
+      const updatedAsset = {
+        ...assetWith2Decimals,
+        tokenContract: "CTOKEN_NEW",
+        metadata: {
+          ...assetWith2Decimals.metadata,
+          complianceContract: "CCOMPLIANCE_NEW",
+        },
+      } as AssetDetail;
+
+      rerender(<TransferPanel asset={updatedAsset} balance={10000n} />);
+
+      expect(screen.queryByText(/maximum 0 decimal places/i)).not.toBeInTheDocument();
+      expect(mockUseCompliance).toHaveBeenCalledWith("CCOMPLIANCE_NEW", SENDER);
+    });
+
+    it("submits with the updated asset tokenContract and decimals after prop changes", async () => {
+      const APPROVED_RECIPIENT = "GAPPROVEDRECIPIENT1234567890ABCDEFGHIJKLMNOPQRSTUVWX";
+      mockUseWallet.mockReturnValue({ address: SENDER } as ReturnType<typeof useWallet>);
+      mockUseCompliance.mockReturnValue({
+        data: { allowed: true, status: "Approved", record: null },
+        loading: false,
+        error: null,
+        updatedAt: null,
+        refetch: jest.fn(),
+      });
+
+      const run = jest.fn(async (fn: (ctx: unknown) => Promise<unknown>) => {
+        await fn({});
+        return true;
+      });
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: false,
+        retryable: false,
+        run,
+        retry: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      const contracts = require("@/lib/contracts") as {
+        assetToken: { transfer: jest.Mock };
+      };
+      const transferSpy = jest
+        .spyOn(contracts.assetToken, "transfer")
+        .mockResolvedValue(undefined as never);
+
+      const { rerender } = render(<TransferPanel asset={asset} balance={100n} />);
+
+      fireEvent.change(screen.getByLabelText("Recipient address"), {
+        target: { value: APPROVED_RECIPIENT },
+      });
+      fireEvent.change(screen.getByLabelText("Amount"), {
+        target: { value: "5" },
+      });
+
+      const nextAsset = {
+        ...assetWith2Decimals,
+        tokenContract: "CTOKEN_V2",
+      } as AssetDetail;
+      rerender(<TransferPanel asset={nextAsset} balance={10000n} />);
+
+      fireEvent.submit(screen.getByRole("button", { name: "Transfer" }).closest("form")!);
+
+      expect(transferSpy).toHaveBeenCalledWith(
+        expect.anything(),
+        "CTOKEN_V2",
+        APPROVED_RECIPIENT,
+        500n,
+      );
+      transferSpy.mockRestore();
+    });
+  });
 });

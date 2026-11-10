@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
 import { assetToken } from "@/lib/contracts";
@@ -45,6 +45,19 @@ export function TransferPanel({
   const [amount, setAmount] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [amountError, setAmountError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (amount === "") {
+      setAmountError(null);
+      return;
+    }
+    try {
+      parseTokenAmount(amount, metadata.decimals);
+      setAmountError(null);
+    } catch (err) {
+      setAmountError(err instanceof Error ? err.message : null);
+    }
+  }, [amount, metadata.decimals]);
 
   const trimmedTo = to.trim();
   const recipientFormatValid =
