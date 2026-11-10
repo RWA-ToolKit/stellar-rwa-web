@@ -512,3 +512,67 @@ describe("LockedWalletError", () => {
     expect(new LockedWalletError()).toBeInstanceOf(WalletError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #674 — unmount during an in-flight async call
+// ---------------------------------------------------------------------------
+
+describe("freighter wallet client – unmount during in-flight async call (#674)", () => {
+  beforeEach(() => {
+    mockIsConnected.mockReset();
+    mockIsAllowed.mockReset();
+    mockGetAddress.mockReset();
+    mockGetNetwork.mockReset();
+    mockWatcherWatch.mockReset();
+    mockWatcherStop.mockReset();
+  });
+
+  it("stops the wallet watcher and produces no console error or warning when unsubscribed while async reads are in flight", async () => {
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+    let resolveAddress!: (value: { address: string; error: null }) => void;
+    let resolveNetwork!: (value: {
+      networkPassphrase: string;
+      network: string;
+      error: null;
+    }) => void;
+
+    mockIsAllowed.mockResolvedValue({ isAllowed: true });
+    mockGetAddress.mockReturnValue(
+      new Promise((resolve) => {
+        resolveAddress = resolve;
+      }),
+    );
+    mockGetNetwork.mockReturnValue(
+      new Promise((resolve) => {
+        resolveNetwork = resolve;
+      }),
+    );
+
+    const onChange = jest.fn();
+    const unsubscribe = watchWallet(onChange);
+    const pendingAddress = getConnectedAddress();
+    const pendingNetwork = getWalletNetwork();
+
+    // Simulate caller unmounting while getConnectedAddress and getWalletNetwork are still in flight
+    unsubscribe();
+    expect(mockWatcherStop).toHaveBeenCalledTimes(1);
+
+    resolveAddress({ address: "GADDR_LATE", error: null });
+    resolveNetwork({
+      networkPassphrase: TESTNET_PASSPHRASE,
+      network: "TESTNET",
+      error: null,
+    });
+
+    await expect(pendingAddress).resolves.toBe("GADDR_LATE");
+    await expect(pendingNetwork).resolves.toBe("testnet");
+
+    expect(errorSpy).not.toHaveBeenCalled();
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+    warnSpy.mockRestore();
+  });
+});
