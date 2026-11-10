@@ -1,6 +1,8 @@
 /**
  * Formatting helpers. All monetary valuations are stored on-chain as USD cents
  * (i128); token amounts are integers in the token's own `decimals` base.
+ * All exported formatters are pure functions of their arguments; memoized callers
+ * must list `decimals`, `compact`, and `supply` in their dependency arrays.
  */
 
 import type { AssetType, ComplianceStatus } from "@/types";
