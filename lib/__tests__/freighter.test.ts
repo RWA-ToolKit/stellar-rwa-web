@@ -512,3 +512,54 @@ describe("LockedWalletError", () => {
     expect(new LockedWalletError()).toBeInstanceOf(WalletError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #673 — stale closure / dependency array
+// ---------------------------------------------------------------------------
+
+describe("freighter wallet client – stale closure / dependency array (#673)", () => {
+  beforeEach(() => {
+    mockIsConnected.mockReset();
+    mockIsAllowed.mockReset();
+    mockRequestAccess.mockReset();
+    mockGetAddress.mockReset();
+    mockGetNetwork.mockReset();
+    mockSignTransaction.mockReset();
+    mockWatcherWatch.mockReset();
+    mockWatcherStop.mockReset();
+  });
+
+  it("does not retain stale account addresses or permission flags across sequential calls", async () => {
+    mockIsAllowed
+      .mockResolvedValueOnce({ isAllowed: true })
+      .mockResolvedValueOnce({ isAllowed: true })
+      .mockResolvedValueOnce({ isAllowed: false });
+    mockGetAddress
+      .mockResolvedValueOnce({ address: "GACCOUNT_ONE", error: null })
+      .mockResolvedValueOnce({ address: "GACCOUNT_TWO", error: null });
+
+    await expect(getConnectedAddress()).resolves.toBe("GACCOUNT_ONE");
+    await expect(getConnectedAddress()).resolves.toBe("GACCOUNT_TWO");
+    await expect(getConnectedAddress()).resolves.toBeNull();
+  });
+
+  it("binds watchWallet to the latest callback and interval on re-subscription without leaking the previous closure", () => {
+    const callbacks: Array<(info: { address: string; network: string }) => void> = [];
+    mockWatcherWatch.mockImplementation((cb: (info: { address: string; network: string }) => void) => {
+      callbacks.push(cb);
+    });
+
+    const staleHandler = jest.fn();
+    const freshHandler = jest.fn();
+
+    const unsubFirst = watchWallet(staleHandler, 4000);
+    unsubFirst();
+
+    const unsubSecond = watchWallet(freshHandler, 2000);
+    callbacks[1]!({ address: "GNEW", network: "PUBLIC" });
+
+    expect(staleHandler).not.toHaveBeenCalled();
+    expect(freshHandler).toHaveBeenCalledWith({ address: "GNEW", network: "PUBLIC" });
+    unsubSecond();
+  });
+});
