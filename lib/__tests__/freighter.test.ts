@@ -512,3 +512,48 @@ describe("LockedWalletError", () => {
     expect(new LockedWalletError()).toBeInstanceOf(WalletError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #672 — empty / zero input
+// ---------------------------------------------------------------------------
+
+describe("freighter wallet client – empty/zero input (#672)", () => {
+  beforeEach(() => {
+    mockIsConnected.mockReset();
+    mockIsAllowed.mockReset();
+    mockRequestAccess.mockReset();
+    mockGetAddress.mockReset();
+    mockGetNetwork.mockReset();
+    mockSignTransaction.mockReset();
+  });
+
+  it("normalizes empty string, 0, null, undefined, and empty message objects deterministically", () => {
+    expect(normalizeFreighterError("")).toEqual({ message: "" });
+    expect(normalizeFreighterError(0)).toEqual({ message: "0" });
+    expect(normalizeFreighterError(null)).toEqual({
+      message: "Freighter returned an unknown error.",
+    });
+    expect(normalizeFreighterError(undefined)).toEqual({
+      message: "Freighter returned an unknown error.",
+    });
+    expect(normalizeFreighterError({ message: "", code: 0 })).toEqual({
+      message: "Freighter returned an unknown error.",
+      code: 0,
+    });
+  });
+
+  it("handles empty signedTxXdr and empty address payloads without returning fabricated values", async () => {
+    mockIsConnected.mockResolvedValue({ isConnected: true });
+    mockRequestAccess.mockResolvedValue({ address: "", error: null });
+    await expect(connect()).rejects.toThrow("No account returned by Freighter.");
+
+    mockIsAllowed.mockResolvedValue({ isAllowed: true });
+    mockGetAddress.mockResolvedValue({ address: "", error: null });
+    await expect(getConnectedAddress()).resolves.toBeNull();
+
+    mockSignTransaction.mockResolvedValue({ signedTxXdr: "", error: null });
+    await expect(signTx("", TESTNET_PASSPHRASE, "")).rejects.toThrow(
+      "Freighter returned no signature.",
+    );
+  });
+});
