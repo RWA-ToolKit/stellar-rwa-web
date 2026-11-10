@@ -1,5 +1,7 @@
 /**
- * Formatting helpers. All monetary valuations are stored on-chain as USD cents
+ * Formatting helpers. All monetary valuations are stored on-chain as USD cents.
+ * Zero balances/valuations format to `'0'`/`'$0'`/`'0 XLM'`, ledger `0` maps to
+ * `null` (never expires), and empty strings are rejected by input parsers.
  * (i128); token amounts are integers in the token's own `decimals` base.
  */
 
