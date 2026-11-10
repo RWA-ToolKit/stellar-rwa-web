@@ -52,7 +52,11 @@ export function contractIds(network: Network): ContractIds {
   return IDS[network];
 }
 
-/** Context threaded through every write. `sign` is bound to the connected wallet. */
+/**
+ * Context threaded through every write. `sign` is bound to the connected wallet.
+ * Hook callers should include `network`, `source`, and target contract/token IDs
+ * in `useEffect`/`useCallback` dependency arrays to avoid stale closures.
+ */
 export interface WriteCtx {
   network: Network;
   source: string;
