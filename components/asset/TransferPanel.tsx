@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
 import { assetToken } from "@/lib/contracts";
@@ -36,15 +36,32 @@ export function TransferPanel({
   balanceLoading = false,
   onTransferred,
 }: TransferPanelProps) {
-  const { address } = useWallet();
+  const { address, network } = useWallet();
   const { metadata } = asset;
   const compliance = useCompliance(metadata.complianceContract, address);
   const tx = useTx();
+  const { reset: resetTx } = tx;
 
   const [to, setTo] = useState("");
   const [amount, setAmount] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formErrorState, setFormErrorState] = useState<{
+    network: typeof network;
+    message: string;
+  } | null>(null);
   const [amountError, setAmountError] = useState<string | null>(null);
+
+  const formError = formErrorState && formErrorState.network === network ? formErrorState.message : null;
+  const setFormError = (message: string | null) => {
+    setFormErrorState(message ? { network, message } : null);
+  };
+
+  const activeNetworkRef = useRef(network);
+  useEffect(() => {
+    if (activeNetworkRef.current !== network) {
+      activeNetworkRef.current = network;
+      resetTx();
+    }
+  }, [network, resetTx]);
 
   const trimmedTo = to.trim();
   const recipientFormatValid =
@@ -135,10 +152,11 @@ export function TransferPanel({
       return;
     }
 
+    const submittedNetwork = network;
     const res = await tx.run((ctx) =>
       assetToken.transfer(ctx, asset.tokenContract, recipient, raw),
     );
-    if (res) {
+    if (res && activeNetworkRef.current === submittedNetwork) {
       setTo("");
       setAmount("");
       setAmountError(null);
