@@ -47,14 +47,18 @@ export class LockedWalletError extends WalletError {
   }
 }
 
+const UNKNOWN_FREIGHTER_ERROR = "Freighter returned an unknown error.";
+
 export function normalizeFreighterError(
   error: unknown,
 ): { message: string; code?: number } {
-  if (typeof error === "string") return { message: error };
+  if (typeof error === "string") {
+    return { message: error.trim().length > 0 ? error : UNKNOWN_FREIGHTER_ERROR };
+  }
   if (error instanceof Error) {
     const code = (error as Error & { code?: unknown }).code;
     return {
-      message: error.message,
+      message: error.message.trim().length > 0 ? error.message : UNKNOWN_FREIGHTER_ERROR,
       ...(typeof code === "number" ? { code } : {}),
     };
   }
@@ -62,13 +66,13 @@ export function normalizeFreighterError(
     const value = error as { code?: unknown; message?: unknown };
     return {
       message:
-        typeof value.message === "string" && value.message.length > 0
+        typeof value.message === "string" && value.message.trim().length > 0
           ? value.message
-          : "Freighter returned an unknown error.",
+          : UNKNOWN_FREIGHTER_ERROR,
       ...(typeof value.code === "number" ? { code: value.code } : {}),
     };
   }
-  return { message: error == null ? "Freighter returned an unknown error." : String(error) };
+  return { message: error == null ? UNKNOWN_FREIGHTER_ERROR : String(error) };
 }
 
 /** Whether the Freighter extension is installed and reachable. */
@@ -98,7 +102,13 @@ export async function connect(): Promise<string> {
       "Freighter wallet not detected. Install it from freighter.app to continue.",
     );
   }
-  const res = await fRequestAccess();
+  let res: Awaited<ReturnType<typeof fRequestAccess>>;
+  try {
+    res = await fRequestAccess();
+  } catch (err) {
+    throw new WalletError(normalizeFreighterError(err).message);
+  }
+  if (!res) throw new WalletError(UNKNOWN_FREIGHTER_ERROR);
   if (res.error) throw new WalletError(normalizeFreighterError(res.error).message);
   if (!res.address) throw new WalletError("No account returned by Freighter.");
   return res.address;
@@ -109,7 +119,7 @@ export async function getConnectedAddress(): Promise<string | null> {
   try {
     if (!(await isAppAllowed())) return null;
     const res = await fGetAddress();
-    if (res.error || !res.address) return null;
+    if (!res || res.error || !res.address) return null;
     return res.address;
   } catch {
     return null;
@@ -120,7 +130,7 @@ export async function getConnectedAddress(): Promise<string | null> {
 export async function getWalletNetwork(): Promise<Network | null> {
   try {
     const res = await fGetNetwork();
-    if (res.error) return null;
+    if (!res || res.error) return null;
     if (res.networkPassphrase === Networks.PUBLIC) return "mainnet";
     if (res.networkPassphrase === Networks.TESTNET) return "testnet";
     // Fall back to the coarse label if the passphrase is unfamiliar.
@@ -136,10 +146,20 @@ export async function signTx(
   networkPassphrase: string,
   address: string,
 ): Promise<string> {
-  const res = await fSignTransaction(xdrBase64, {
-    networkPassphrase,
-    address,
-  });
+  let res: Awaited<ReturnType<typeof fSignTransaction>>;
+  try {
+    res = await fSignTransaction(xdrBase64, {
+      networkPassphrase,
+      address,
+    });
+  } catch (err) {
+    res = {
+      signedTxXdr: "",
+      signerAddress: "",
+      error: normalizeFreighterError(err),
+    } as Awaited<ReturnType<typeof fSignTransaction>>;
+  }
+  if (!res) throw new WalletError(UNKNOWN_FREIGHTER_ERROR);
   if (res.error) {
     const { message } = normalizeFreighterError(res.error);
     const errorMsg = message.toLowerCase();
@@ -187,7 +207,13 @@ export function watchWallet(
   try {
     const watcher = new WatchWalletChanges(intervalMs);
     watcher.watch(onChange);
-    return () => watcher.stop();
+    return () => {
+      try {
+        watcher.stop();
+      } catch {
+        // Ignore teardown errors if the extension unloaded mid-session.
+      }
+    };
   } catch {
     return () => {};
   }
