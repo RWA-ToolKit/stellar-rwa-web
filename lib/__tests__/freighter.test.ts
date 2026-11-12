@@ -512,3 +512,97 @@ describe("LockedWalletError", () => {
     expect(new LockedWalletError()).toBeInstanceOf(WalletError);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Issue #671 — error, rejection, and malformed-response paths
+// ---------------------------------------------------------------------------
+
+describe("error and rejection paths (#671)", () => {
+  beforeEach(() => {
+    mockIsConnected.mockReset();
+    mockIsAllowed.mockReset();
+    mockRequestAccess.mockReset();
+    mockGetAddress.mockReset();
+    mockGetNetwork.mockReset();
+    mockSignTransaction.mockReset();
+    mockWatcherWatch.mockReset();
+    mockWatcherStop.mockReset();
+  });
+
+  it("normalizeFreighterError always produces a readable non-empty message across malformed inputs", () => {
+    expect(normalizeFreighterError(null)).toEqual({
+      message: "Freighter returned an unknown error.",
+    });
+    expect(normalizeFreighterError(undefined)).toEqual({
+      message: "Freighter returned an unknown error.",
+    });
+    expect(normalizeFreighterError("   ")).toEqual({
+      message: "Freighter returned an unknown error.",
+    });
+    expect(normalizeFreighterError(new Error(""))).toEqual({
+      message: "Freighter returned an unknown error.",
+    });
+    expect(normalizeFreighterError({ message: "", code: -32603 })).toEqual({
+      message: "Freighter returned an unknown error.",
+      code: -32603,
+    });
+    expect(normalizeFreighterError(500)).toEqual({ message: "500" });
+
+    const codedErr = Object.assign(new Error("Transport disconnected"), {
+      code: 4900,
+    });
+    expect(normalizeFreighterError(codedErr)).toEqual({
+      message: "Transport disconnected",
+      code: 4900,
+    });
+  });
+
+  it("connect normalizes rejected requestAccess promises and null responses into readable WalletError", async () => {
+    mockIsConnected.mockResolvedValue({ isConnected: true });
+    mockRequestAccess.mockRejectedValueOnce(new Error("Extension popup closed unexpectedly"));
+    await expect(connect()).rejects.toThrow(WalletError);
+
+    mockRequestAccess.mockRejectedValueOnce(new Error(""));
+    await expect(connect()).rejects.toThrow("Freighter returned an unknown error.");
+
+    mockRequestAccess.mockResolvedValueOnce(null);
+    await expect(connect()).rejects.toThrow("Freighter returned an unknown error.");
+  });
+
+  it("signTx normalizes rejected signTransaction promises and null responses into typed errors", async () => {
+    mockSignTransaction.mockRejectedValueOnce(new Error("User canceled signing prompt"));
+    await expect(signTx("XDR", TESTNET_PASSPHRASE, "GADDR")).rejects.toBeInstanceOf(
+      UserRejectedError,
+    );
+
+    mockSignTransaction.mockRejectedValueOnce(new Error("Wallet is locked"));
+    await expect(signTx("XDR", TESTNET_PASSPHRASE, "GADDR")).rejects.toBeInstanceOf(
+      LockedWalletError,
+    );
+
+    mockSignTransaction.mockRejectedValueOnce(new Error("Extension IPC failure"));
+    await expect(signTx("XDR", TESTNET_PASSPHRASE, "GADDR")).rejects.toThrow(
+      "Extension IPC failure",
+    );
+
+    mockSignTransaction.mockResolvedValueOnce(null);
+    await expect(signTx("XDR", TESTNET_PASSPHRASE, "GADDR")).rejects.toThrow(
+      "Freighter returned an unknown error.",
+    );
+  });
+
+  it("passive probes and watchWallet teardown never throw when Freighter rejects or returns null", async () => {
+    mockGetAddress.mockResolvedValueOnce(null);
+    mockIsAllowed.mockResolvedValueOnce({ isAllowed: true });
+    await expect(getConnectedAddress()).resolves.toBeNull();
+
+    mockGetNetwork.mockResolvedValueOnce(null);
+    await expect(getWalletNetwork()).resolves.toBeNull();
+
+    mockWatcherStop.mockImplementationOnce(() => {
+      throw new Error("Extension unloaded");
+    });
+    const unsubscribe = watchWallet(jest.fn());
+    expect(() => unsubscribe()).not.toThrow();
+  });
+});
