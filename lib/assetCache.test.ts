@@ -86,4 +86,39 @@ describe('assetCache', () => {
     expect(second).toBeNull();
     expect(loader).toHaveBeenCalledTimes(2);
   });
+
+  it('does not warn about state updates when unmounted during an in-flight load', async () => {
+    // Simulate a component that kicks off an async load and unmounts before the
+    // loader settles. The cache must not attempt any post-unmount state update,
+    // so React should never emit a "state update on an unmounted component"
+    // warning.
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    let resolveLoader: (value: string) => void = () => {};
+    const loader = vi.fn(
+      () =>
+        new Promise<string>((resolve) => {
+          resolveLoader = resolve;
+        }),
+    );
+
+    let mounted = true;
+    const pending = assetCache.get('unmount-key', loader).then((value) => {
+      // Guard mirrors a component that only applies results while mounted.
+      if (mounted) {
+        return value;
+      }
+      return undefined;
+    });
+
+    // Unmount while the async call is still in flight.
+    mounted = false;
+    resolveLoader('late-value');
+
+    const result = await pending;
+
+    expect(result).toBeUndefined();
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
 });
