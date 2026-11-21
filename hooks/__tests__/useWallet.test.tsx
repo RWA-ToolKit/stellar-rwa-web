@@ -19,6 +19,11 @@ jest.mock("@/lib/freighter", () => ({
 
 describe("useWallet", () => {
   const STORAGE_KEY = "rwa.wallet.connected";
+  const MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+  const persistSession = (address: string, timestamp = Date.now()) => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ address, timestamp }));
+  };
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -49,7 +54,7 @@ describe("useWallet", () => {
   });
 
   it("restores session on mount ONLY when account is still authorized", async () => {
-    localStorage.setItem(STORAGE_KEY, "1");
+    persistSession("GAUTHORIZED123");
     (isFreighterInstalled as jest.Mock).mockResolvedValue(true);
     (getConnectedAddress as jest.Mock).mockResolvedValue("GAUTHORIZED123");
     (getWalletNetwork as jest.Mock).mockResolvedValue("testnet");
@@ -64,11 +69,13 @@ describe("useWallet", () => {
 
     expect(result.current.installed).toBe(true);
     expect(result.current.network).toBe("testnet");
-    expect(localStorage.getItem(STORAGE_KEY)).toBe("1");
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) as string);
+    expect(stored.address).toBe("GAUTHORIZED123");
+    expect(typeof stored.timestamp).toBe("number");
   });
 
   it("clears storage key and does NOT restore address when account is unauthorized / revoked", async () => {
-    localStorage.setItem(STORAGE_KEY, "1");
+    persistSession("GREVOKED123");
     (isFreighterInstalled as jest.Mock).mockResolvedValue(true);
     // getConnectedAddress returns null because access was revoked in wallet extension
     (getConnectedAddress as jest.Mock).mockResolvedValue(null);
@@ -86,7 +93,7 @@ describe("useWallet", () => {
   });
 
   it("clears state and local storage on disconnect", async () => {
-    localStorage.setItem(STORAGE_KEY, "1");
+    persistSession("GCONNECTED123");
     (isFreighterInstalled as jest.Mock).mockResolvedValue(true);
     (getConnectedAddress as jest.Mock).mockResolvedValue("GCONNECTED123");
     (getWalletNetwork as jest.Mock).mockResolvedValue("testnet");
@@ -124,7 +131,46 @@ describe("useWallet", () => {
     });
 
     expect(result.current.address).toBe("GNEWLYCONNECTED");
-    expect(localStorage.getItem(STORAGE_KEY)).toBe("1");
+    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) as string);
+    expect(stored.address).toBe("GNEWLYCONNECTED");
+    expect(typeof stored.timestamp).toBe("number");
+  });
+
+  it("clears a stale persisted session and does not restore it", async () => {
+    persistSession("GSTALE123", Date.now() - MAX_AGE_MS - 60_000);
+    (isFreighterInstalled as jest.Mock).mockResolvedValue(true);
+    (getConnectedAddress as jest.Mock).mockResolvedValue("GSTALE123");
+    (getWalletNetwork as jest.Mock).mockResolvedValue("testnet");
+
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <WalletProvider>{children}</WalletProvider>
+    );
+
+    const { result } = renderHook(() => useWallet(), { wrapper });
+
+    await waitFor(() => expect(isFreighterInstalled).toHaveBeenCalled());
+    await waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).toBeNull());
+
+    expect(getConnectedAddress).not.toHaveBeenCalled();
+    expect(result.current.address).toBeNull();
+  });
+
+  it("clears a persisted session whose address mismatches live Freighter state", async () => {
+    persistSession("GOLDADDRESS");
+    (isFreighterInstalled as jest.Mock).mockResolvedValue(true);
+    (getConnectedAddress as jest.Mock).mockResolvedValue("GNEWADDRESS");
+    (getWalletNetwork as jest.Mock).mockResolvedValue("testnet");
+
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <WalletProvider>{children}</WalletProvider>
+    );
+
+    const { result } = renderHook(() => useWallet(), { wrapper });
+
+    await waitFor(() => expect(isFreighterInstalled).toHaveBeenCalled());
+    await waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).toBeNull());
+
+    expect(result.current.address).toBeNull();
   });
 });
 

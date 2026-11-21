@@ -43,6 +43,25 @@ on the client side before enabling the action buttons, and show a clear
 "You are not the admin of this asset" notice instead of letting the transaction
 fail on-chain.
 
+## Third-party scripts
+
+Any external script tag — analytics, tag managers, chat widgets, or other
+third-party embeds, including anything injected globally in `app/layout.tsx` —
+must go through an explicit security review **before** it is merged. Third-party
+scripts are a common vector for wallet-draining supply-chain attacks in dApps,
+so treat every new external script as untrusted code running with full access to
+the page and the connected wallet.
+
+To add one:
+
+1. Open an issue or PR describing the script, its vendor, and why it is needed.
+2. Document the review outcome in the PR: what the script does, where it loads
+   from (pinned version/URL), and who reviewed it.
+3. Load it with the narrowest scope possible (avoid global injection in
+   `app/layout.tsx` when a page-level or component-level load will do).
+
+Do not merge a PR that adds an external script without this documented review.
+
 ## Verification
 
 Run these commands before submitting:
