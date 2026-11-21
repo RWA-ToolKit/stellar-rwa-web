@@ -15,8 +15,8 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { ConnectButton } from "./ConnectButton";
+import { act, render, screen, fireEvent } from "@testing-library/react";
+import { ConnectButton, FAILED_CONNECT_COOLDOWN_MS } from "./ConnectButton";
 
 // ── mock useWallet ────────────────────────────────────────────────────────
 
@@ -218,6 +218,54 @@ describe("ConnectButton", () => {
       expect(screen.getByRole("menu")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: /GABC…CDEF/i }));
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+  });
+
+  // ── failed-connect backoff (#824) ────────────────────────────────────
+  describe("failed connection retry backoff", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it("blocks repeated attempts after a failure until the cooldown expires", async () => {
+      const connect = jest.fn().mockRejectedValue(new Error("Freighter rejected"));
+      const { rerender } = setup({ installed: true, connect });
+      const connectButton = () =>
+        screen.getByRole("button", { name: /connect wallet/i });
+
+      await act(async () => {
+        fireEvent.click(connectButton());
+      });
+      expect(connect).toHaveBeenCalledTimes(1);
+
+      // useWallet surfaces the failure as an error, showing the "Try again" link.
+      mockUseWallet.mockReturnValue({
+        ...BASE_WALLET,
+        connect,
+        error: "Freighter rejected",
+      });
+      rerender(<ConnectButton />);
+
+      expect(connectButton()).toBeDisabled();
+      const retry = screen.getByRole("button", { name: /try again/i });
+      expect(retry).toBeDisabled();
+
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+      fireEvent.click(connectButton());
+      expect(connect).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        jest.advanceTimersByTime(FAILED_CONNECT_COOLDOWN_MS - 1);
+      });
+      fireEvent.click(retry);
+      expect(connect).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        jest.advanceTimersByTime(1);
+      });
+      expect(retry).not.toBeDisabled();
+      fireEvent.click(retry);
+      expect(connect).toHaveBeenCalledTimes(2);
     });
   });
 

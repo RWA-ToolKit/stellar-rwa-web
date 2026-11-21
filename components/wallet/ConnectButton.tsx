@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWallet } from "@/hooks/useWallet";
 import { truncateAddress } from "@/lib/format";
 import { explorerAccountUrl } from "@/lib/stellar";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
+
+/** Backoff after a failed connection before another attempt is allowed. */
+export const FAILED_CONNECT_COOLDOWN_MS = 2000;
 
 /**
  * Connect / connected-account control. When disconnected it prompts Freighter;
@@ -15,14 +18,34 @@ import { Spinner } from "@/components/ui/Spinner";
 export function ConnectButton() {
   const { address, connect, disconnect, connecting, installed, network, error } = useWallet();
   const [open, setOpen] = useState(false);
+  const [retryCooldown, setRetryCooldown] = useState(false);
+  const cooldownTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
+  }, []);
+
+  // Ignore extra clicks while a connection is in flight and after a failure,
+  // so a rejected Freighter/RPC call cannot be retried in a tight loop.
+  const handleConnect = useCallback(() => {
+    if (connecting || retryCooldown) return;
+    void connect().catch(() => {
+      setRetryCooldown(true);
+      if (cooldownTimer.current) clearTimeout(cooldownTimer.current);
+      cooldownTimer.current = setTimeout(() => {
+        setRetryCooldown(false);
+        cooldownTimer.current = null;
+      }, FAILED_CONNECT_COOLDOWN_MS);
+    });
+  }, [connect, connecting, retryCooldown]);
 
   if (!address) {
     return (
       <div className="flex flex-col items-end gap-2">
         {/* #215 a11y: btn-primary already has focus-visible ring from globals.css */}
         <button
-          onClick={() => connect().catch(() => {})}
-          disabled={connecting}
+          onClick={handleConnect}
+          disabled={connecting || retryCooldown}
           className="btn-primary"
         >
           {connecting ? <Spinner size={16} className="border-base-950/30 border-t-base-950" /> : <WalletIcon />}
@@ -36,7 +59,8 @@ export function ConnectButton() {
             <p>{error}</p>
             {installed ? (
               <button
-                onClick={() => connect().catch(() => {})}
+                onClick={handleConnect}
+                disabled={retryCooldown}
                 className="mt-1 font-medium underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-1 focus-visible:ring-offset-base-900 rounded"
               >
                 Try again
