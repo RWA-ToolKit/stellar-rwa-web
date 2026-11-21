@@ -75,10 +75,24 @@ lines** — about two points under the measured 82.0 / 71.8 / 70.6 / 83.2. Check
 locally with `npm run test:ci`. Raise the floor when coverage rises; do not
 lower it to get a PR through.
 
+### Updating bundle size budgets
+
 `npm run size` enforces the gzip budgets in `.size-limit.json` (440 kB for all
-JS chunks, 48 kB for the framework chunk), set ~7% above the measured
-411.8 kB / 44.8 kB. If a change legitimately grows the bundle, raise the budget
-in the same PR and explain why.
+JS chunks, 48 kB for the framework chunk). They are intentionally kept ~7%
+above the measured 411.8 kB / 44.8 kB so a real regression fails instead of
+hiding in slack; the same guidance is recorded in the `Bundle size check`
+comment in [.github/workflows/web.yml](.github/workflows/web.yml).
+
+When a change legitimately grows the bundle:
+
+1. Run `npm run build && npm run size` and note the new measured gzip sizes.
+2. Raise only the affected limit(s) in `.size-limit.json` in the same PR,
+   keeping roughly 7% headroom over the new measurement.
+3. Explain the increase in the PR description so reviewers can see the intent
+   (for example, a necessary dependency or a new feature).
+
+Do not relax a budget just to make a failing check pass without explaining the
+growth.
 
 If you add UI changes, prefer updating or adding a focused component test alongside the implementation.
 
