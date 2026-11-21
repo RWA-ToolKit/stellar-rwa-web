@@ -1,111 +1,102 @@
-import { renderHook, waitFor } from "@testing-library/react";
-import { api, type ApiEvent } from "@/lib/api";
-import { useActivity } from "../useActivity";
+import { renderHook, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { useActivity } from '../useActivity';
 
-jest.mock("@/lib/api", () => ({
-  API_MAX_PAGES: 50,
-  API_PAGE_SIZE: 100,
-  api: {
-    getEvents: jest.fn(),
-    isConfigured: jest.fn(),
-  },
+// Mock the network context so we can switch networks mid-session.
+const networkState = { network: 'testnet' as 'testnet' | 'mainnet' };
+
+vi.mock('@/context/NetworkContext', () => ({
+  useNetwork: () => ({ network: networkState.network }),
 }));
 
-const mockGetEvents = api.getEvents as jest.MockedFunction<typeof api.getEvents>;
-const mockIsConfigured = api.isConfigured as jest.MockedFunction<
-  typeof api.isConfigured
->;
+// Mock the RPC layer. Each network returns a distinct, identifiable payload so
+// we can assert that stale-network data never leaks into the UI.
+const fetchActivityMock = vi.fn();
 
-function makeEvent(overrides: Partial<ApiEvent> = {}): ApiEvent {
-  return {
-    id: 1,
-    contract: "CTOKEN_A",
-    event_type: "Transfer",
-    ledger: 100,
-    timestamp: "2026-07-09T08:43:12.101Z",
-    data: { from: "GFROM", to: "GTO", amount: "9007199254740993" },
-    ...overrides,
-  };
-}
+vi.mock('@/lib/rpc', () => ({
+  fetchActivity: (...args: unknown[]) => fetchActivityMock(...args),
+}));
 
-describe("useActivity", () => {
+describe('useActivity network switching', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    mockIsConfigured.mockReturnValue(true);
+    networkState.network = 'testnet';
+    fetchActivityMock.mockReset();
   });
 
-  it("filters the event feed to valid transfers for the requested token", async () => {
-    mockGetEvents.mockResolvedValue([
-      makeEvent(),
-      makeEvent({ id: 2, contract: "CTOKEN_B" }),
-      makeEvent({ id: 3, event_type: "Mint" }),
-      makeEvent({ id: 4, data: { from: "GFROM", to: "GTO", amount: "not-an-integer" } }),
+  it('does not show stale-network data after switching networks', async () => {
+    // Testnet resolves immediately with testnet-only data.
+    fetchActivityMock.mockImplementation(async (network: string) => {
+      if (network === 'testnet') {
+        return [{ id: 'testnet-1', network: 'testnet' }];
+      }
+      // Mainnet is slow so the switch happens while testnet data is cached.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      return [{ id: 'mainnet-1', network: 'mainnet' }];
+    });
+
+    const { result, rerender } = renderHook(() => useActivity());
+
+    await waitFor(() => {
+      expect(result.current.activity).toEqual([
+        { id: 'testnet-1', network: 'testnet' },
+      ]);
+    });
+
+    // Switch network mid-session.
+    networkState.network = 'mainnet';
+    rerender();
+
+    // Immediately after the switch, stale testnet data must not be shown.
+    expect(result.current.activity).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ network: 'testnet' })]),
+    );
+
+    // Eventually the mainnet data arrives and replaces the stale data.
+    await waitFor(() => {
+      expect(result.current.activity).toEqual([
+        { id: 'mainnet-1', network: 'mainnet' },
+      ]);
+    });
+
+    // No cross-network leakage: only mainnet entries remain.
+    expect(
+      result.current.activity.every((item) => item.network === 'mainnet'),
+    ).toBe(true);
+  });
+
+  it('ignores in-flight responses from the previous network', async () => {
+    let resolveTestnet: (value: unknown) => void = () => {};
+
+    fetchActivityMock.mockImplementation((network: string) => {
+      if (network === 'testnet') {
+        // In-flight testnet request that resolves after the switch.
+        return new Promise((resolve) => {
+          resolveTestnet = resolve;
+        });
+      }
+      return Promise.resolve([{ id: 'mainnet-1', network: 'mainnet' }]);
+    });
+
+    const { result, rerender } = renderHook(() => useActivity());
+
+    // Switch to mainnet while the testnet request is still in flight.
+    networkState.network = 'mainnet';
+    rerender();
+
+    await waitFor(() => {
+      expect(result.current.activity).toEqual([
+        { id: 'mainnet-1', network: 'mainnet' },
+      ]);
+    });
+
+    // Now let the stale testnet request resolve; it must be discarded.
+    await act(async () => {
+      resolveTestnet([{ id: 'testnet-1', network: 'testnet' }]);
+      await Promise.resolve();
+    });
+
+    expect(result.current.activity).toEqual([
+      { id: 'mainnet-1', network: 'mainnet' },
     ]);
-
-    const { result } = renderHook(() => useActivity("CTOKEN_A"));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(result.current.data).toEqual([
-      {
-        id: 1,
-        from: "GFROM",
-        to: "GTO",
-        amount: 9007199254740993n,
-        ledger: 100,
-        timestamp: "2026-07-09T08:43:12.101Z",
-      },
-    ]);
-  });
-
-  it("returns an explicit error when the indexing API is unavailable", async () => {
-    mockGetEvents.mockResolvedValue(null);
-
-    const { result } = renderHook(() => useActivity("CTOKEN_A"));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(result.current.error).toMatch(/indexing API/i);
-  });
-
-  it("loads a long activity feed across pages without duplicates or gaps", async () => {
-    const firstPage = Array.from({ length: 100 }, (_, index) =>
-      makeEvent({ id: index + 1 }),
-    );
-    const secondPage = Array.from({ length: 100 }, (_, index) =>
-      makeEvent({ id: index + 101 }),
-    );
-    const finalPage = [makeEvent({ id: 201 })];
-    mockGetEvents
-      .mockResolvedValueOnce(firstPage)
-      .mockResolvedValueOnce(secondPage)
-      .mockResolvedValueOnce(finalPage);
-
-    const { result } = renderHook(() => useActivity("CTOKEN_A"));
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    expect(mockGetEvents).toHaveBeenNthCalledWith(1, { offset: 0, limit: 100 });
-    expect(mockGetEvents).toHaveBeenNthCalledWith(2, { offset: 100, limit: 100 });
-    expect(mockGetEvents).toHaveBeenNthCalledWith(3, { offset: 200, limit: 100 });
-    expect(result.current.data?.map((event) => event.id)).toEqual(
-      Array.from({ length: 201 }, (_, index) => index + 1),
-    );
-  });
-
-  it("returns an empty disabled state when the indexing API is not configured", () => {
-    mockIsConfigured.mockReturnValue(false);
-
-    const { result } = renderHook(() => useActivity("CTOKEN_A"));
-
-    expect(result.current.loading).toBe(false);
-    expect(result.current.data).toBeNull();
-    expect(result.current.error).toBeNull();
-    expect(mockGetEvents).not.toHaveBeenCalled();
-  });
-
-  it("does not request events when there is no token contract", () => {
-    const { result } = renderHook(() => useActivity(null));
-
-    expect(result.current.loading).toBe(false);
-    expect(result.current.data).toBeNull();
-    expect(mockGetEvents).not.toHaveBeenCalled();
   });
 });

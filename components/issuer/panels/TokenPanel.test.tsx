@@ -2,7 +2,8 @@
  * Tests for components/issuer/panels/TokenPanel.tsx
  *
  * Focus: the PauseCard must show a ConfirmDialog before executing both pause
- * and unpause transactions.
+ * and unpause transactions, and the batch transfer UI must validate each
+ * recipient before submitting a single transfer_batch transaction.
  */
 
 import React from "react";
@@ -31,6 +32,7 @@ jest.mock("@/lib/contracts", () => ({
     mint: jest.fn(),
     pause: jest.fn(),
     unpause: jest.fn(),
+    transferBatch: jest.fn(),
   },
 }));
 
@@ -41,9 +43,11 @@ jest.mock("@/components/ui/TxProgress", () => ({
 // ── imports after mocks ────────────────────────────────────────────────────
 
 import { useTx } from "@/hooks/useTx";
+import { assetToken } from "@/lib/contracts";
 import { TokenPanel } from "./TokenPanel";
 
 const mockUseTx = useTx as jest.MockedFunction<typeof useTx>;
+const mockTransferBatch = assetToken.transferBatch as jest.Mock;
 
 const mockRun = jest.fn();
 const mockReset = jest.fn();
@@ -219,6 +223,40 @@ describe("TokenPanel — PauseCard confirmation", () => {
       fireEvent.click(screen.getByRole("button", { name: /unpause transfers/i }));
       fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
       expect(mockRun).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("TokenPanel — batch transfer", () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      setupTx();
+    });
+
+    it("submits multiple recipients in a single transfer_batch transaction", () => {
+      mockRun.mockResolvedValue(true);
+      render(<TokenPanel asset={ASSET_UNPAUSED} />);
+
+      fireEvent.change(screen.getByLabelText("Batch recipients (CSV)"), {
+        target: { value: "GDEST1,10\nGDEST2,20" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /send batch/i }));
+
+      expect(mockRun).toHaveBeenCalledTimes(1);
+      expect(mockTransferBatch).toHaveBeenCalledTimes(1);
+      const [, recipients] = mockTransferBatch.mock.calls[0];
+      expect(recipients).toHaveLength(2);
+    });
+
+    it("blocks submission when a recipient fails validation", () => {
+      render(<TokenPanel asset={ASSET_UNPAUSED} />);
+
+      fireEvent.change(screen.getByLabelText("Batch recipients (CSV)"), {
+        target: { value: "GDEST1,10\n,20" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: /send batch/i }));
+
+      expect(mockRun).not.toHaveBeenCalled();
+      expect(screen.getByText(/row 2/i)).toBeInTheDocument();
     });
   });
 });

@@ -25,16 +25,27 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
   const pct = percent(displayedDistributed, d.totalAmount);
   const deadline = d.claimDeadline ?? 0;
   const expired = deadline > 0 && currentLedger !== null && currentLedger >= deadline;
+  const cancelled = d.cancelled === true;
+  const reclaimed = d.reclaimed === true;
+  const inactive = cancelled || reclaimed;
   const when =
     currentLedger !== null ? approxDate(d.createdAt, currentLedger) : null;
 
   return (
-    <div className="card p-5">
+    <div className={`card p-5${inactive ? " opacity-75" : ""}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
             <h3 className="font-semibold text-base-100">Distribution #{d.id.toString()}</h3>
-            {d.completed ? (
+            {cancelled ? (
+              <span className="chip border border-red-500/25 bg-red-500/10 text-red-300">
+                Cancelled
+              </span>
+            ) : reclaimed ? (
+              <span className="chip border border-purple-500/25 bg-purple-500/10 text-purple-300">
+                Reclaimed
+              </span>
+            ) : d.completed ? (
               <span className="chip border border-brand-500/25 bg-brand-500/10 text-brand-300">
                 Complete
               </span>
@@ -56,6 +67,16 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
               {expired ? "Claim deadline passed" : `Claim by ledger ${deadline}`}
             </p>
           )}
+          {cancelled && (
+            <p className="mt-1 text-xs text-red-300">
+              This distribution was cancelled by the issuer.
+            </p>
+          )}
+          {reclaimed && (
+            <p className="mt-1 text-xs text-purple-300">
+              Unclaimed funds were reclaimed by the issuer.
+            </p>
+          )}
         </div>
         <div className="text-right">
           <p className="text-xs uppercase tracking-wide text-base-100/55">Total pool</p>
@@ -75,7 +96,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-white/5">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-brand-500 to-brand-400 transition-all"
+            className={`h-full rounded-full transition-all ${inactive ? "bg-base-100/30" : "bg-gradient-to-r from-brand-500 to-brand-400"}`}
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -86,7 +107,7 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
         )}
       </div>
 
-      {(d.claimable > 0n || d.claimed) && (
+      {!inactive && (d.claimable > 0n || d.claimed) && (
         <div className="mt-4 border-t border-white/5 pt-4">
           <ClaimButton
             distributionId={d.id}

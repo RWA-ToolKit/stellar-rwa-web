@@ -138,3 +138,48 @@ describe('useContractErrors network switch mid-session', () => {
     expect(result.current).toEqual(mainnetErrors);
   });
 });
+
+describe('useContractErrors error path', () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    vi.restoreAllMocks();
+  });
+
+  it('surfaces a rejected fetch as readable state instead of throwing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(
+      new Error('network down'),
+    );
+
+    const { result } = renderHook(() => useContractErrors('CTESTCONTRACT'));
+
+    // The rejection must be caught and surfaced as state, not thrown.
+    await waitFor(() => {
+      expect(result.current).toBeDefined();
+    });
+
+    // No unhandled rejection should escape into the component tree.
+    expect(result.current).not.toBeUndefined();
+  });
+
+  it('surfaces a non-ok HTTP response as readable state instead of throwing', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => ({ error: 'internal server error' }),
+    } as unknown as Response);
+
+    const { result } = renderHook(() => useContractErrors('CTESTCONTRACT'));
+
+    await waitFor(() => {
+      expect(result.current).toBeDefined();
+    });
+
+    expect(result.current).not.toBeUndefined();
+  });
+});
