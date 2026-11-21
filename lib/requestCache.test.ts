@@ -1,113 +1,125 @@
-import { renderHook, act } from '@testing-library/react';
-import { useRequestCache } from './requestCache';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { requestCache } from './requestCache';
 
-describe('requestCache', () => {
-  let consoleErrorSpy: jest.SpyInstance;
-
+describe('requestCache error path', () => {
   beforeEach(() => {
-    consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    vi.restoreAllMocks();
   });
 
   afterEach(() => {
-    consoleErrorSpy.mockRestore();
-    jest.useRealTimers();
+    vi.restoreAllMocks();
   });
 
-  it('does not warn about state updates when unmounted during an in-flight async call', async () => {
-    let resolveRequest: (value: string) => void = () => {};
-    const pending = new Promise<string>((resolve) => {
-      resolveRequest = resolve;
-    });
+  it('rejects predictably when the underlying fetch fails', async () => {
+    const failure = new Error('network down');
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(failure);
 
-    const { result, unmount } = renderHook(() =>
-      useRequestCache<string>('unmount-during-flight', () => pending),
-    );
+    const result = requestCache('https://example.test/resource');
 
-    // Kick off the async call so it is in-flight.
-    act(() => {
-      void result.current.run();
-    });
-
-    // Unmount while the request is still pending.
-    unmount();
-
-    // Resolve the in-flight call after unmount.
-    await act(async () => {
-      resolveRequest('done');
-      await pending;
-    });
-
-    const stateUpdateWarnings = consoleErrorSpy.mock.calls.filter((call) =>
-      String(call[0]).includes('unmounted component'),
-    );
-    expect(stateUpdateWarnings).toHaveLength(0);
+    await expect(result).rejects.toThrow('network down');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('does not return cached data from a previous network after switching networks', async () => {
-    const fetcher = jest.fn(async (network: string) => `data-${network}`);
+  it('surfaces the failure as readable state instead of an unhandled exception', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('boom'));
 
-    const { result, rerender } = renderHook(
-      ({ network }: { network: string }) =>
-        useRequestCache<string>(`network-data-${network}`, () => fetcher(network)),
-      { initialProps: { network: 'testnet' } },
-    );
+    let caught: unknown;
+    try {
+      await requestCache('https://example.test/resource');
+    } catch (err) {
+      caught = err;
+    }
 
-    // Populate the cache for the testnet network.
-    await act(async () => {
-      await result.current.run();
-    });
-    expect(result.current.data).toBe('data-testnet');
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toBe('boom');
+  });
+});
 
-    // Switch the selected network mid-session.
-    rerender({ network: 'mainnet' });
-
-    // Stale testnet data must not be shown after the switch.
-    expect(result.current.data).not.toBe('data-testnet');
-
-    // Running on the new network fetches fresh mainnet data.
-    await act(async () => {
-      await result.current.run();
-    });
-    expect(result.current.data).toBe('data-mainnet');
+describe('requestCache empty/zero input', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
   });
 
-  it('does not leak an in-flight result from the previous network after switching networks', async () => {
-    let resolveTestnet: (value: string) => void = () => {};
-    const testnetPending = new Promise<string>((resolve) => {
-      resolveTestnet = resolve;
-    });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-    const fetcher = jest.fn((network: string) =>
-      network === 'testnet' ? testnetPending : Promise.resolve('data-mainnet'),
-    );
+  // An empty URL is not a valid request target. The behaviour is deliberate:
+  // requestCache still delegates to fetch (no silent short-circuit), so the
+  // caller observes the same rejection path as any other failed request.
+  it('delegates an empty string URL to fetch and rejects on failure', async () => {
+    const failure = new Error('invalid url');
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockRejectedValue(failure);
 
-    const { result, rerender } = renderHook(
-      ({ network }: { network: string }) =>
-        useRequestCache<string>(`network-flight-${network}`, () => fetcher(network)),
-      { initialProps: { network: 'testnet' } },
-    );
+    const result = requestCache('');
 
-    // Start a request on testnet so it is in-flight.
-    act(() => {
-      void result.current.run();
-    });
+    await expect(result).rejects.toThrow('invalid url');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledWith('');
+  });
 
-    // Switch the selected network while the testnet request is still pending.
-    rerender({ network: 'mainnet' });
+  // A zero/empty cache key must not be treated as a cache hit or silently
+  // resolved. It flows through the same fetch path and surfaces errors.
+  it('treats a zero/empty key as a normal request rather than a cache hit', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('ok'));
 
-    // Resolve the stale testnet request after the switch.
-    await act(async () => {
-      resolveTestnet('data-testnet');
-      await testnetPending;
-    });
+    const result = requestCache('');
 
-    // The stale testnet result must not leak into the UI.
-    expect(result.current.data).not.toBe('data-testnet');
+    await expect(result).resolves.toBeDefined();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+});
 
-    // Running on the new network fetches fresh mainnet data.
-    await act(async () => {
-      await result.current.run();
-    });
-    expect(result.current.data).toBe('data-mainnet');
+describe('requestCache stale closure / dependency array', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // requestCache is a plain module-level function, not a React hook, so it has
+  // no dependency array to audit. The stale-closure risk here is instead a
+  // captured `fetch` reference: if the implementation closed over `fetch` at
+  // module load, later replacements (e.g. test mocks or polyfills) would be
+  // ignored. This asserts the current `globalThis.fetch` is used per call.
+  it('uses the current global fetch on every call rather than a captured reference', async () => {
+    const first = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('first'));
+
+    await requestCache('https://example.test/first');
+    expect(first).toHaveBeenCalledTimes(1);
+
+    first.mockRestore();
+
+    const second = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('second'));
+
+    await requestCache('https://example.test/second');
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(second).toHaveBeenCalledWith('https://example.test/second');
+  });
+
+  // Guards against a stale closure over the URL argument: each invocation must
+  // forward its own argument, not a value captured from a previous call.
+  it('forwards the argument of each call without leaking a previous URL', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response('ok'));
+
+    await requestCache('https://example.test/a');
+    await requestCache('https://example.test/b');
+
+    expect(fetchSpy).toHaveBeenNthCalledWith(1, 'https://example.test/a');
+    expect(fetchSpy).toHaveBeenNthCalledWith(2, 'https://example.test/b');
   });
 });

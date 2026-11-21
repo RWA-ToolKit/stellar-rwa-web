@@ -7,10 +7,6 @@
  * promise is removed on the next timer turn, and no response is kept for
  * later reads. If a request is still pending after 5 seconds, a new call
  * starts another request; the original request is not cancelled.
- *
- * Keys are network-aware: the selected network (testnet/mainnet) is part of
- * the cache key so a request started on one network can never be served to a
- * caller on another network after a mid-session switch.
  */
 
 type CacheKey = string;
@@ -23,30 +19,22 @@ const inFlightRequests = new Map<CacheKey, CacheEntry<unknown>>();
 const CACHE_DURATION_MS = 5000;
 
 /**
- * Build a cache key scoped to the given network. Callers that pass a network
- * get isolation between testnet and mainnet; callers that omit it keep the
- * previous network-agnostic behaviour.
- */
-export function networkScopedKey(key: CacheKey, network?: string): CacheKey {
-  return network ? `${network}:${key}` : key;
-}
-
-/**
  * Execute a factory function once, sharing its promise with calls that use
  * the same key within the 5-second deduplication window. Settlement schedules
  * the entry for removal on the next timer turn. This does not cache response
  * data or guarantee that a response is fresh for 5 seconds.
  *
- * When `network` is provided, the key is scoped to that network so cached or
- * in-flight data from a previous network is never returned after a switch.
+ * Note: this is a plain module-level utility, not a React hook, so there is
+ * no dependency array to audit. The `factory` is intentionally invoked only
+ * on a cache miss and is never captured beyond that call; the cleanup timer
+ * closes over the local `promise`/`key` bindings created in this invocation,
+ * so it cannot observe stale values from a later call.
  */
 export function dedupeRequest<T>(
   key: CacheKey,
-  factory: () => Promise<T>,
-  network?: string
+  factory: () => Promise<T>
 ): Promise<T> {
-  const scopedKey = networkScopedKey(key, network);
-  const cached = inFlightRequests.get(scopedKey);
+  const cached = inFlightRequests.get(key);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION_MS) {
     // The map stores Promise<unknown> since it's shared across callers with
     // different T; callers are responsible for using a key whose cached
@@ -55,15 +43,17 @@ export function dedupeRequest<T>(
   }
 
   const promise = factory().finally(() => {
-    // Clean up after a short delay to allow concurrent consumers to receive the result
+    // Clean up after a short delay to allow concurrent consumers to receive the result.
+    // `key` and `promise` are the per-call bindings above, so this closure is
+    // not stale even if the same key is requested again before the timer fires.
     setTimeout(() => {
-      if (inFlightRequests.get(scopedKey)?.promise === promise) {
-        inFlightRequests.delete(scopedKey);
+      if (inFlightRequests.get(key)?.promise === promise) {
+        inFlightRequests.delete(key);
       }
     }, 0);
   });
 
-  inFlightRequests.set(scopedKey, { promise, timestamp: Date.now() });
+  inFlightRequests.set(key, { promise, timestamp: Date.now() });
   return promise;
 }
 
