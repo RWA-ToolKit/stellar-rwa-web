@@ -1,5 +1,6 @@
 import {
   compactNumber,
+  formatDate,
   formatRawPlain,
   formatStroopsToXLM,
   formatTokenAmount,
@@ -531,6 +532,69 @@ describe("compactNumber", () => {
   it("keeps single decimal when significant", () => {
     // 1234567 / 1000000 = 1.234567, toFixed(1) = "1.2" (not trimmed)
     expect(compactNumber(1_234_567)).toBe("1.2M");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #847 — locale-aware formatting
+// ---------------------------------------------------------------------------
+describe("locale-aware formatting", () => {
+  describe("formatUsdCents", () => {
+    it("keeps en-US output unchanged by default", () => {
+      expect(formatUsdCents(123_456n)).toBe("$1,234.56");
+      expect(formatUsdCents(500_000_000n)).toBe("$5,000,000");
+    });
+
+    it("formats with de-DE grouping and decimal separators", () => {
+      // de-DE: '.' groups thousands, ',' separates decimals
+      expect(formatUsdCents(123_456n, { locale: "de-DE" })).toBe("1.234,56 $");
+    });
+
+    it("formats compact values with de-DE separators", () => {
+      expect(formatUsdCents(150_000_000n, { compact: true, locale: "de-DE" })).toBe(
+        "1,5 Mio. $",
+      );
+    });
+
+    it("formats with fr-FR narrow no-break space grouping", () => {
+      // fr-FR groups thousands with U+202F (narrow no-break space)
+      const formatted = formatUsdCents(123_456n, { locale: "fr-FR" });
+      expect(formatted).toContain("1\u202F234,56");
+    });
+  });
+
+  describe("formatTokenAmount", () => {
+    it("keeps en-US output unchanged by default", () => {
+      expect(formatTokenAmount(1_234_567_890n, 2)).toBe("12,345,678.9");
+    });
+
+    it("formats with de-DE separators", () => {
+      expect(formatTokenAmount(1_234_567_890n, 2, { locale: "de-DE" })).toBe(
+        "12.345.678,9",
+      );
+    });
+
+    it("formats with fr-FR separators", () => {
+      expect(formatTokenAmount(1_234_567_890n, 2, { locale: "fr-FR" })).toContain(
+        "12\u202F345\u202F678,9",
+      );
+    });
+  });
+
+  describe("formatDate", () => {
+    const date = new Date(Date.UTC(2024, 0, 15, 12, 0, 0));
+
+    it("formats with en-US month/day/year order by default", () => {
+      expect(formatDate(date)).toBe("1/15/2024");
+    });
+
+    it("formats with de-DE day.month.year order", () => {
+      expect(formatDate(date, { locale: "de-DE" })).toBe("15.1.2024");
+    });
+
+    it("formats with en-GB day/month/year order", () => {
+      expect(formatDate(date, { locale: "en-GB" })).toBe("15/01/2024");
+    });
   });
 });
 

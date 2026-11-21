@@ -1,29 +1,88 @@
 /**
  * Formatting helpers. All monetary valuations are stored on-chain as USD cents
  * (i128); token amounts are integers in the token's own `decimals` base.
+ *
+ * Localization: number and date formatting is driven by `Intl.*` and an
+ * optional `locale` argument. When omitted, the browser locale
+ * (`navigator.language`) is used, falling back to "en-US" (e.g. on the server
+ * or in non-browser environments). Passing "en-US" explicitly preserves the
+ * historical output exactly.
  */
 
 import type { AssetType, ComplianceStatus } from "@/types";
 import { ASSET_TYPE_LABELS } from "@/types";
+
+/** Default locale: browser preference when available, else "en-US". */
+export function defaultLocale(): string {
+  if (typeof navigator !== "undefined" && typeof navigator.language === "string" && navigator.language) {
+    return navigator.language;
+  }
+  return "en-US";
+}
+
+/** Resolve an optional locale argument to a concrete locale string. */
+function resolveLocale(locale?: string): string {
+  return locale ?? defaultLocale();
+}
+
+/** Cache of `Intl.NumberFormat` instances keyed by locale + options. */
+const numberFormatCache = new Map<string, Intl.NumberFormat>();
+
+function getNumberFormat(locale: string, options: Intl.NumberFormatOptions): Intl.NumberFormat {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let formatter = numberFormatCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(locale, options);
+    numberFormatCache.set(key, formatter);
+  }
+  return formatter;
+}
+
+/** Cache of `Intl.DateTimeFormat` instances keyed by locale + options. */
+const dateFormatCache = new Map<string, Intl.DateTimeFormat>();
+
+function getDateFormat(locale: string, options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let formatter = dateFormatCache.get(key);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(locale, options);
+    dateFormatCache.set(key, formatter);
+  }
+  return formatter;
+}
+
+/**
+ * Group a non-negative integer bigint with locale-aware separators. Keeps the
+ * value in bigint so values beyond Number.MAX_SAFE_INTEGER stay exact.
+ */
+function groupBigint(n: bigint, locale: string): string {
+  const digits = n.toString();
+  // Small values never need grouping; avoids Intl overhead on hot paths.
+  if (digits.length <= 3) return digits;
+  const formatter = getNumberFormat(locale, { useGrouping: true, maximumFractionDigits: 0 });
+  // Intl.NumberFormat accepts bigint directly, preserving precision.
+  return formatter.format(n);
+}
 
 /**
  * Format XLM (in stroops, the atomic unit: 1 XLM = 10,000,000 stroops)
  * as a currency string, e.g. 1000000n -> "0.1 XLM".
  * Used for displaying network fees estimated during transaction simulation.
  */
-export function formatStroopsToXLM(stroops: bigint | number): string {
+export function formatStroopsToXLM(stroops: bigint | number, locale?: string): string {
   const base = 10_000_000; // Stroops per XLM
   const xlm = typeof stroops === "bigint" ? stroops : BigInt(stroops);
   const whole = xlm / BigInt(base);
   const remainder = xlm % BigInt(base);
+  const loc = resolveLocale(locale);
 
   if (remainder === 0n) {
-    return `${whole.toString()} XLM`;
+    return `${groupBigint(whole, loc)} XLM`;
   }
 
   // Format fractional part with trailing zeros removed
   const fracStr = remainder.toString().padStart(7, "0").replace(/0+$/, "");
-  return `${whole}.${fracStr} XLM`;
+  return `${groupBigint(whole, loc)}.${fracStr} XLM`;
 }
 
 /**
@@ -32,18 +91,22 @@ export function formatStroopsToXLM(stroops: bigint | number): string {
  * Number.MAX_SAFE_INTEGER (2^53-1 cents) keep full precision — mirror of how
  * formatTokenAmount already scales raw token amounts.
  */
-export function formatUsdCents(cents: bigint, opts?: { compact?: boolean }): string {
+export function formatUsdCents(
+  cents: bigint,
+  opts?: { compact?: boolean; locale?: string },
+): string {
   const negative = cents < 0n;
   const abs = negative ? -cents : cents;
   const dollars = abs / 100n;
   const remainder = abs % 100n;
   const sign = negative ? "-" : "";
+  const loc = resolveLocale(opts?.locale);
 
   if (opts?.compact && dollars >= 1_000_000n) {
-    return `${sign}$${compactBigint(dollars)}`;
+    return `${sign}$${compactBigint(dollars, loc)}`;
   }
 
-  const wholeStr = dollars.toLocaleString("en-US");
+  const wholeStr = groupBigint(dollars, loc);
   if (remainder === 0n) {
     return `${sign}$${wholeStr}`;
   }
@@ -52,16 +115,28 @@ export function formatUsdCents(cents: bigint, opts?: { compact?: boolean }): str
 }
 
 /** Compact large numbers: 5_000_000 -> "5M", 12_300 -> "12.3K". */
-export function compactNumber(n: number): string {
+export function compactNumber(n: number, locale?: string): string {
   const abs = Math.abs(n);
-  if (abs >= 1_000_000_000) return trimZero(n / 1_000_000_000) + "B";
-  if (abs >= 1_000_000) return trimZero(n / 1_000_000) + "M";
-  if (abs >= 1_000) return trimZero(n / 1_000) + "K";
-  return String(n);
+  const loc = resolveLocale(locale);
+  if (abs >= 1_000_000_000) return trimZero(n / 1_000_000_000, loc) + "B";
+  if (abs >= 1_000_000) return trimZero(n / 1_000_000, loc) + "M";
+  if (abs >= 1_000) return trimZero(n / 1_000, loc) + "K";
+  return getNumberFormat(loc, { maximumFractionDigits: 20 }).format(n);
 }
 
-function trimZero(n: number): string {
-  return n.toFixed(1).replace(/\.0$/, "");
+function trimZero(n: number, locale: string): string {
+  // One decimal place, locale-aware decimal separator, trailing ".0" removed.
+  const formatted = getNumberFormat(locale, {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+    useGrouping: false,
+  }).format(n);
+  const decimal = getNumberFormat(locale, { useGrouping: false })
+    .formatToParts(1.5)
+    .find((part) => part.type === "decimal")?.value ?? ".";
+  return formatted.endsWith(`${decimal}0`)
+    ? formatted.slice(0, -`${decimal}0`.length)
+    : formatted;
 }
 
 /**
@@ -69,7 +144,7 @@ function trimZero(n: number): string {
  * divided in bigint (so it never rounds away precision the way `Number()` on a
  * large cents value would), then the small quotient is formatted.
  */
-function compactBigint(n: bigint): string {
+function compactBigint(n: bigint, locale: string): string {
   const units = [
     { threshold: 1_000_000_000n, divisor: 1_000_000_000n, suffix: "B" },
     { threshold: 1_000_000n, divisor: 1_000_000n, suffix: "M" },
@@ -84,27 +159,34 @@ function compactBigint(n: bigint): string {
     ({ divisor, suffix } = units[--unitIndex]!);
     tenths = (n * 10n + divisor / 2n) / divisor;
   }
-  const whole = (tenths / 10n).toLocaleString("en-US");
+  const whole = groupBigint(tenths / 10n, locale);
   const fraction = tenths % 10n;
-  return `${whole}${fraction === 0n ? "" : `.${fraction}`}${suffix}`;
+  const decimal = getNumberFormat(locale, { useGrouping: false })
+    .formatToParts(1.5)
+    .find((part) => part.type === "decimal")?.value ?? ".";
+  return `${whole}${fraction === 0n ? "" : `${decimal}${fraction}`}${suffix}`;
 }
 
 /**
  * Convert a raw token amount (bigint, in base units) to a human string using
  * the token's decimals. 100000n @ 2 decimals -> "1,000".
  */
-export function formatTokenAmount(raw: bigint, decimals: number): string {
+export function formatTokenAmount(raw: bigint, decimals: number, locale?: string): string {
   const negative = raw < 0n;
   const abs = negative ? -raw : raw;
   const base = 10n ** BigInt(decimals);
   const whole = abs / base;
   const frac = abs % base;
-  const wholeStr = whole.toLocaleString("en-US");
+  const loc = resolveLocale(locale);
+  const wholeStr = groupBigint(whole, loc);
   if (decimals === 0 || frac === 0n) {
     return (negative ? "-" : "") + wholeStr;
   }
   const fracStr = frac.toString().padStart(decimals, "0").replace(/0+$/, "");
-  return (negative ? "-" : "") + wholeStr + "." + fracStr;
+  const decimal = getNumberFormat(loc, { useGrouping: false })
+    .formatToParts(1.5)
+    .find((part) => part.type === "decimal")?.value ?? ".";
+  return (negative ? "-" : "") + wholeStr + decimal + fracStr;
 }
 
 /**
@@ -278,4 +360,54 @@ function clampPrecision(epochMs: number, horizonSeconds: number): number {
   if (horizonSeconds < 3600) return epochMs;
   const roundToMs = horizonSeconds < 30 * 86400 ? 3_600_000 : 86_400_000;
   return Math.round(epochMs / roundToMs) * roundToMs;
+}
+
+/**
+ * Format a date (or epoch ms) using the locale's conventions. Defaults to a
+ * medium date + short time; pass `options` to override.
+ */
+export function formatDate(
+  date: Date | number,
+  opts?: { locale?: string; options?: Intl.DateTimeFormatOptions },
+): string {
+  const loc = resolveLocale(opts?.locale);
+  const value = typeof date === "number" ? new Date(date) : date;
+  return getDateFormat(loc, opts?.options ?? { dateStyle: "medium", timeStyle: "short" }).format(value);
+}
+
+/** Format a date as a locale-aware date only (no time). */
+export function formatDateOnly(date: Date | number, locale?: string): string {
+  return formatDate(date, { locale, options: { dateStyle: "medium" } });
+}
+
+/**
+ * Format a date as a locale-aware relative time, e.g. "in 3 days" / "vor 3 Tagen".
+ * `now` is injectable for deterministic tests.
+ */
+export function formatRelativeDate(
+  date: Date | number,
+  opts?: { locale?: string; now?: Date | number },
+): string {
+  const loc = resolveLocale(opts?.locale);
+  const target = typeof date === "number" ? date : date.getTime();
+  const nowMs = opts?.now === undefined
+    ? Date.now()
+    : typeof opts.now === "number" ? opts.now : opts.now.getTime();
+  const diffSeconds = Math.round((target - nowMs) / 1000);
+  const formatter = new Intl.RelativeTimeFormat(loc, { numeric: "auto" });
+  const units: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+    ["year", 31_536_000],
+    ["month", 2_592_000],
+    ["week", 604_800],
+    ["day", 86_400],
+    ["hour", 3_600],
+    ["minute", 60],
+    ["second", 1],
+  ];
+  for (const [unit, seconds] of units) {
+    if (Math.abs(diffSeconds) >= seconds || unit === "second") {
+      return formatter.format(Math.round(diffSeconds / seconds), unit);
+    }
+  }
+  return formatter.format(0, "second");
 }

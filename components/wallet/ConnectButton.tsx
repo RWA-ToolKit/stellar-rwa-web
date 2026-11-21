@@ -8,26 +8,86 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
 
 /**
- * Connect / connected-account control. When disconnected it prompts Freighter;
+ * Connect / connected-account control. When disconnected it opens a wallet
+ * selection menu listing the available adapters (Freighter, xBull, Albedo);
  * when connected it shows the truncated address with a dropdown to copy,
  * inspect on the explorer, or disconnect.
  */
 export function ConnectButton() {
-  const { address, connect, disconnect, connecting, installed, network, error } = useWallet();
+  const {
+    address,
+    connect,
+    disconnect,
+    connecting,
+    installed,
+    network,
+    error,
+    adapters,
+    selectAdapter,
+  } = useWallet();
   const [open, setOpen] = useState(false);
+  const [selecting, setSelecting] = useState(false);
+
+  const anyInstalled = adapters.some((a) => a.installed);
+
+  function handleSelect(id: string) {
+    selectAdapter(id);
+    setSelecting(false);
+    connect().catch(() => {});
+  }
 
   if (!address) {
     return (
-      <div className="flex flex-col items-end gap-2">
+      <div className="relative flex flex-col items-end gap-2">
         {/* #215 a11y: btn-primary already has focus-visible ring from globals.css */}
         <button
-          onClick={() => connect().catch(() => {})}
+          onClick={() => {
+            if (anyInstalled) {
+              setSelecting((v) => !v);
+            } else {
+              connect().catch(() => {});
+            }
+          }}
           disabled={connecting}
           className="btn-primary"
+          aria-expanded={anyInstalled ? selecting : undefined}
+          aria-haspopup={anyInstalled ? "menu" : undefined}
         >
           {connecting ? <Spinner size={16} className="border-base-950/30 border-t-base-950" /> : <WalletIcon />}
-          {connecting ? "Connecting…" : installed ? "Connect Wallet" : "Get Freighter"}
+          {connecting ? "Connecting…" : anyInstalled ? "Connect Wallet" : "Get Freighter"}
         </button>
+
+        {selecting && anyInstalled && (
+          <>
+            <button
+              type="button"
+              className="fixed inset-0 z-10 cursor-default border-0 bg-transparent p-0"
+              aria-label="Close wallet selection"
+              onClick={() => setSelecting(false)}
+            />
+            <div
+              role="menu"
+              aria-label="Select a wallet"
+              className="absolute right-0 top-full z-20 mt-2 w-64 animate-fade-in rounded-2xl border border-white/10 bg-base-850 p-2 shadow-2xl shadow-black/40"
+            >
+              {adapters.map((adapter) => (
+                <button
+                  key={adapter.id}
+                  role="menuitem"
+                  onClick={() => handleSelect(adapter.id)}
+                  disabled={!adapter.installed}
+                  className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-base-100/80 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-inset"
+                >
+                  <span>{adapter.name}</span>
+                  <span className="text-[10px] uppercase tracking-wide text-base-100/55">
+                    {adapter.installed ? "Detected" : "Not installed"}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
         {error && !connecting && (
           <div
             role="alert"
