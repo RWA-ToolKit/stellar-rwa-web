@@ -23,6 +23,12 @@ const CACHE_DURATION_MS = 5000;
  * the same key within the 5-second deduplication window. Settlement schedules
  * the entry for removal on the next timer turn. This does not cache response
  * data or guarantee that a response is fresh for 5 seconds.
+ *
+ * Note: this is a plain module-level utility, not a React hook, so there is
+ * no dependency array to audit. The `factory` is intentionally invoked only
+ * on a cache miss and is never captured beyond that call; the cleanup timer
+ * closes over the local `promise`/`key` bindings created in this invocation,
+ * so it cannot observe stale values from a later call.
  */
 export function dedupeRequest<T>(
   key: CacheKey,
@@ -37,7 +43,9 @@ export function dedupeRequest<T>(
   }
 
   const promise = factory().finally(() => {
-    // Clean up after a short delay to allow concurrent consumers to receive the result
+    // Clean up after a short delay to allow concurrent consumers to receive the result.
+    // `key` and `promise` are the per-call bindings above, so this closure is
+    // not stale even if the same key is requested again before the timer fires.
     setTimeout(() => {
       if (inFlightRequests.get(key)?.promise === promise) {
         inFlightRequests.delete(key);

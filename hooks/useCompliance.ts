@@ -16,6 +16,13 @@ export interface ComplianceInfo {
  * The compliance status of `address` against a specific compliance contract.
  * Combines the authoritative `is_allowed` gate with the raw KYC record so the
  * UI can explain *why* an address is or isn't permitted.
+ *
+ * Empty input: when `complianceId` or `address` is null/empty, no RPC call is
+ * made and the hook deliberately resolves to a deny-by-default result
+ * (`{ allowed: false, status: "None", record: null }`) rather than `undefined`.
+ * The async run is disabled in that case, so `data` stays `undefined` until a
+ * real query is enabled — callers should treat a missing `data` as "not yet
+ * known" and the resolved `None` result as "not permitted".
  */
 export function useCompliance(complianceId: string | null, address: string | null) {
   const { network } = useWallet();
