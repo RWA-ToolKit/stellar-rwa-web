@@ -8,6 +8,8 @@ export type SortKey = "valuation" | "newest";
 export interface FilterValue {
   type: TypeFilter;
   sort: SortKey;
+  /** When true, only favorited assets are shown. */
+  favoritesOnly: boolean;
 }
 
 interface AssetFilterProps {
@@ -16,7 +18,7 @@ interface AssetFilterProps {
   search: string;
   onSearchChange: (search: string) => void;
   /** Per-type counts, used to annotate the filter chips. */
-  counts?: Record<TypeFilter, number>;
+  counts?: Record<TypeFilter, number> & { favorites?: number };
 }
 
 const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
@@ -47,7 +49,8 @@ export function AssetFilter({
       {/* #215 a11y: focus-visible rings added to filter chip buttons.
           #216 a11y: aria-label encodes the count so screen readers announce it
                      alongside the visible badge (e.g. "Real Estate, 12 assets").
-          #218 a11y: inactive chip text bumped from /60 to /70. */}
+          #218 a11y: inactive chip text bumped from /60 to /70.
+          #849: "Favorites" chip toggles a favorites-only view. */}
       <div role="group" aria-label="Filter by asset type" className="flex flex-wrap gap-2 sm:gap-3">
         {TYPE_OPTIONS.map((opt) => {
           const active = value.type === opt.value;
@@ -74,6 +77,29 @@ export function AssetFilter({
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() => onChange({ ...value, favoritesOnly: !value.favoritesOnly })}
+          aria-pressed={value.favoritesOnly}
+          aria-label={
+            counts?.favorites !== undefined
+              ? `Favorites, ${counts.favorites} asset${counts.favorites === 1 ? "" : "s"}`
+              : "Favorites"
+          }
+          className={`chip border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-base-950 ${
+            value.favoritesOnly
+              ? "border-amber-400/40 bg-amber-400/15 text-amber-200"
+              : "border-white/10 bg-white/[0.03] text-base-100/70 hover:text-base-100/90"
+          }`}
+        >
+          <span aria-hidden="true">★</span>
+          Favorites
+          {counts?.favorites !== undefined && (
+            <span aria-hidden="true" className={value.favoritesOnly ? "text-amber-300/70" : "text-base-100/55"}>
+              {counts.favorites}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* #219 a11y: the <label> wraps the <select> so they're associated. The

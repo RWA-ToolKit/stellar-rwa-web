@@ -138,6 +138,60 @@ describe("AssetFilter", () => {
     expect(onChange).toHaveBeenCalledWith({ type: "all", sort: "valuation" });
   });
 
+  // ── favorites filter ─────────────────────────────────────────────────
+
+  it("renders a Favorites chip inside the filter group", () => {
+    renderFilter();
+    const group = screen.getByRole("group", { name: /filter by asset type/i });
+    const favorites = screen.getByRole("button", { name: /favorites/i });
+    expect(favorites).toBeInTheDocument();
+    expect(group.contains(favorites)).toBe(true);
+  });
+
+  it("Favorites chip is a real, keyboard-reachable button", () => {
+    renderFilter();
+    const favorites = screen.getByRole("button", { name: /favorites/i });
+    expect(favorites).toHaveAttribute("type", "button");
+    expect(favorites).toHaveAttribute("aria-pressed");
+    expect(favorites).not.toHaveAttribute("tabindex", "-1");
+  });
+
+  it("marks the Favorites chip as pressed when favorites is active", () => {
+    renderFilter({ type: "all", sort: "valuation", favorites: true });
+    expect(
+      screen.getByRole("button", { name: /favorites/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("marks the Favorites chip as not pressed when favorites is inactive", () => {
+    renderFilter();
+    expect(
+      screen.getByRole("button", { name: /favorites/i }),
+    ).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("calls onChange with favorites: true when the Favorites chip is clicked", () => {
+    const { onChange } = renderFilter();
+    fireEvent.click(screen.getByRole("button", { name: /favorites/i }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith({
+      type: "all",
+      sort: "valuation",
+      favorites: true,
+    });
+  });
+
+  it("calls onChange with favorites: false when the active Favorites chip is clicked again", () => {
+    const onChange = jest.fn();
+    renderFilter({ type: "all", sort: "valuation", favorites: true }, onChange);
+    fireEvent.click(screen.getByRole("button", { name: /favorites/i }));
+    expect(onChange).toHaveBeenCalledWith({
+      type: "all",
+      sort: "valuation",
+      favorites: false,
+    });
+  });
+
   // ── optional counts ──────────────────────────────────────────────────
 
   it("renders a count badge inside the chip when counts are provided", () => {

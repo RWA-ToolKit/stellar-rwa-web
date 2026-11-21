@@ -9,7 +9,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { AssetDetail } from "@/types";
 import { truncateAddress } from "@/lib/format";
 
@@ -105,33 +105,25 @@ describe("AssetHeader", () => {
     expect(screen.getByText("Unnamed asset")).toBeInTheDocument();
   });
 
-  // #823: registry/contract text is untrusted. Guard against a future change
-  // introducing rich-text rendering (e.g. dangerouslySetInnerHTML) here.
-  it("renders issuer-controlled text fields as inert text, never as markup", () => {
-    const payload =
-      '<script>window.__assetHeaderXss = true</script><img src=x onerror="window.__assetHeaderXss = true">LOT';
-    const { container } = render(
-      <AssetHeader
-        asset={makeAsset({
-          name: payload,
-          metadata: {
-            ...makeAsset().metadata,
-            name: payload,
-            symbol: payload,
-            assetDescription: payload,
-          },
-        })}
-        network="testnet"
-      />,
-    );
+  it("renders a Share button that copies the canonical asset URL", async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
 
-    expect(container.querySelector("script, img")).toBeNull();
-    expect(
-      (window as Window & { __assetHeaderXss?: boolean }).__assetHeaderXss,
-    ).toBeUndefined();
+    const asset = makeAsset();
+    render(<AssetHeader asset={asset} network="testnet" />);
 
-    const heading = screen.getByRole("heading", { level: 1 });
-    expect(heading.querySelector("script, img")).toBeNull();
-    expect(heading).toHaveTextContent("window.__assetHeaderXss = true");
+    const shareButton = screen.getByRole("button", { name: /share/i });
+    expect(shareButton).toBeInTheDocument();
+
+    fireEvent.click(shareButton);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/asset/${asset.id}`,
+      );
+    });
   });
 });

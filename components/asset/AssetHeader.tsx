@@ -11,9 +11,17 @@ interface AssetHeaderProps {
   network: Network;
 }
 
+/** Builds the canonical, shareable URL for an asset detail page. */
+export function assetShareUrl(assetId: string | number, origin?: string): string {
+  const base =
+    origin ?? (typeof window !== "undefined" ? window.location.origin : "");
+  return `${base}/asset/${assetId}`;
+}
+
 /** Hero for the asset detail page: name, class, symbol and headline valuation. */
 export function AssetHeader({ asset, network }: AssetHeaderProps) {
   const { metadata } = asset;
+  const shareUrl = assetShareUrl(asset.id);
   return (
     <header className="card overflow-hidden">
       <div className="relative border-b border-white/5 bg-gradient-to-br from-brand-500/[0.07] via-transparent to-gold-500/[0.05] p-6 sm:p-8">
@@ -32,6 +40,9 @@ export function AssetHeader({ asset, network }: AssetHeaderProps) {
               Delisted
             </span>
           )}
+          <span className="ml-auto flex items-center gap-1.5">
+            <CopyButton value={shareUrl} label="Share" />
+          </span>
         </div>
 
         <h1 className="mt-4 overflow-hidden text-3xl font-bold tracking-tight text-base-100 sm:text-4xl">

@@ -3,6 +3,7 @@
 import { useMemo, useCallback, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAssets } from "@/hooks/useAssets";
+import { useFavorites } from "@/hooks/useFavorites";
 import { AssetGrid } from "./AssetGrid";
 import {
   AssetFilter,
@@ -38,6 +39,7 @@ const DEBOUNCE_DELAY_MS = 300;
 
 export function AssetExplorer() {
   const { assets, loading, error, refetch, updatedAt } = useAssets();
+  const { favorites, isFavorite, toggleFavorite } = useFavorites();
   const router = useRouter();
   const searchParams = useSearchParams();
   const search = searchParams.get("q") ?? "";
@@ -56,6 +58,8 @@ export function AssetExplorer() {
       sort: isValidSortKey(rawSort) ? rawSort : "valuation",
     };
   }, [searchParams]);
+
+  const favoritesOnly = searchParams.get("favorites") === "1";
 
   const page = useMemo(() => {
     const raw = searchParams.get("page");
@@ -78,6 +82,9 @@ export function AssetExplorer() {
 
   const filtered = useMemo(() => {
     let list = assets;
+    if (favoritesOnly) {
+      list = list.filter((a) => favorites.has(a.id));
+    }
     if (filter.type !== "all") {
       list = list.filter((a) => a.assetType === filter.type);
     }
@@ -100,7 +107,7 @@ export function AssetExplorer() {
       return b.createdAt - a.createdAt;
     });
     return sorted;
-  }, [assets, filter, search]);
+  }, [assets, filter, search, favoritesOnly, favorites]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -108,8 +115,23 @@ export function AssetExplorer() {
 
   /** Build a new URL by merging changes into the current search params. */
   const buildUrl = useCallback(
-    (updates: Partial<{ type: TypeFilter; sort: SortKey; page: number; q: string }>) => {
+    (
+      updates: Partial<{
+        type: TypeFilter;
+        sort: SortKey;
+        page: number;
+        q: string;
+        favorites: boolean;
+      }>,
+    ) => {
       const params = new URLSearchParams(searchParams.toString());
+      if (updates.favorites !== undefined) {
+        if (updates.favorites) {
+          params.set("favorites", "1");
+        } else {
+          params.delete("favorites");
+        }
+      }
       if (updates.type !== undefined) {
         if (updates.type === "all") {
           params.delete("type");
@@ -157,6 +179,13 @@ export function AssetExplorer() {
     [router, buildUrl, filterTimeout],
   );
 
+  const updateFavoritesOnly = useCallback(
+    (next: boolean) => {
+      router.push(buildUrl({ favorites: next, page: 1 }));
+    },
+    [router, buildUrl],
+  );
+
   const goToPage = useCallback(
     (p: number) => {
       router.push(buildUrl({ page: p }));
@@ -184,6 +213,9 @@ export function AssetExplorer() {
         search={search}
         onSearchChange={updateSearch}
         counts={counts}
+        favoritesOnly={favoritesOnly}
+        onFavoritesOnlyChange={updateFavoritesOnly}
+        favoritesCount={favorites.size}
       />
 
       {loading ? (
@@ -196,16 +228,20 @@ export function AssetExplorer() {
           title={
             search.trim()
               ? "No assets found"
-              : filter.type === "all"
-                ? "No assets tokenized yet"
-                : "No assets of this type"
+              : favoritesOnly
+                ? "No favorites yet"
+                : filter.type === "all"
+                  ? "No assets tokenized yet"
+                  : "No assets of this type"
           }
           description={
             search.trim()
               ? "Try a different search or clear the search field."
-              : filter.type === "all"
-                ? "Be the first to bring a real-world asset on-chain."
-                : "Try a different asset class or clear the filter."
+              : favoritesOnly
+                ? "Star assets you're interested in to build a shortlist."
+                : filter.type === "all"
+                  ? "Be the first to bring a real-world asset on-chain."
+                  : "Try a different asset class or clear the filter."
           }
         />
       ) : (
@@ -216,6 +252,8 @@ export function AssetExplorer() {
           totalPages={totalPages}
           total={filtered.length}
           onPageChange={goToPage}
+          isFavorite={isFavorite}
+          onToggleFavorite={toggleFavorite}
         />
       )}
       {!loading && !error && <DataFreshness updatedAt={updatedAt} />}

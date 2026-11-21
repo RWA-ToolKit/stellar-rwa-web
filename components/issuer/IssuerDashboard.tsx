@@ -7,6 +7,7 @@ import { IssuerAssetSelector } from "@/components/issuer/IssuerAssetSelector";
 import { TokenPanel } from "@/components/issuer/panels/TokenPanel";
 import { CompliancePanel } from "@/components/issuer/panels/CompliancePanel";
 import { DistributionPanel } from "@/components/issuer/panels/DistributionPanel";
+import { BatchTransferPanel } from "@/components/issuer/BatchTransferPanel";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { AssetTypeBadge } from "@/components/asset/AssetTypeBadge";
 import { CopyButton } from "@/components/ui/CopyButton";
@@ -18,7 +19,7 @@ import { explorerAddressUrl } from "@/lib/stellar";
 import type { AssetEntry } from "@/types";
 import { DataFreshness } from "@/components/ui/DataFreshness";
 
-type Tab = "token" | "compliance" | "distributions";
+type Tab = "token" | "compliance" | "distributions" | "batch";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   {
@@ -47,6 +48,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
     icon: (
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: "batch",
+    label: "Batch Transfer",
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M4 7h16M4 12h16M4 17h10" strokeLinecap="round" />
+        <path d="m17 15 3 2-3 2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
@@ -228,6 +239,13 @@ export function IssuerDashboard() {
                   <DistributionPanel
                     asset={assetDetail.data}
                     onCreated={handleMutated}
+                    isAdmin={address === assetDetail.data.metadata.admin}
+                  />
+                )}
+                {activeTab === "batch" && (
+                  <BatchTransferPanel
+                    asset={assetDetail.data}
+                    onSubmitted={handleMutated}
                     isAdmin={address === assetDetail.data.metadata.admin}
                   />
                 )}
