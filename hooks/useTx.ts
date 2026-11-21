@@ -7,12 +7,22 @@ import { useWallet } from "@/hooks/useWallet";
 import { useToast } from "@/components/ui/ToastProvider";
 import { ContractError, TransactionTimeoutError } from "@/lib/stellar";
 import { LockedWalletError, UserRejectedError } from "@/lib/freighter";
+import { getPhaseAwareMessage } from "@/lib/contractErrors";
+
+/** Which transaction phase a failure originated from, when known. */
+export type TxErrorPhase = "simulate" | "submit" | null;
 
 interface RunResult {
   phase: TxPhase;
   hash: string | null;
   error: string | null;
   errorType: TxErrorType;
+  /**
+   * Which phase the last error came from. `"simulate"` means the transaction
+   * was never signed or submitted (no fee spent); `"submit"` means it was
+   * signed and sent to the network. Null when not applicable.
+   */
+  errorPhase: TxErrorPhase;
   /** Estimated network fee in stroops from simulation. */
   estimatedFee: bigint | null;
   /** True while the transaction is building/signing/submitting/confirming. */
@@ -73,6 +83,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
   const [hash, setHash] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [errorType, setErrorType] = useState<TxErrorType>("generic");
+  const [errorPhase, setErrorPhase] = useState<TxErrorPhase>(null);
   const [estimatedFee, setEstimatedFee] = useState<bigint | null>(null);
   const [retryable, setRetryable] = useState(false);
   /** Holds the last submitted action so `retry()` can re-run it. */
@@ -84,6 +95,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     setHash(null);
     setError(null);
     setErrorType("generic");
+    setErrorPhase(null);
     setEstimatedFee(null);
     setRetryable(false);
     lastActionRef.current = null;
@@ -94,6 +106,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
       lastActionRef.current = action;
       setError(null);
       setErrorType("generic");
+      setErrorPhase(null);
       setHash(null);
       setEstimatedFee(null);
       setRetryable(false);
@@ -123,6 +136,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
         let msg: string;
         let nextPhase: TxPhase = "error";
         let errType: TxErrorType = "generic";
+        let errPhase: TxErrorPhase = null;
 
         if (e instanceof TransactionTimeoutError) {
           msg = e.message;
@@ -137,11 +151,16 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
           if (e instanceof ContractError) {
             console.error("Transaction failed:", e.detail);
             errType = e.isAuth ? "auth" : "generic";
+            errPhase = e.phase === "simulate" || e.phase === "submit" ? e.phase : null;
+            // Label the failing phase so users can tell whether the tx was
+            // ever signed/submitted (simulate) or actually sent (submit).
+            msg = getPhaseAwareMessage(e, msg);
           }
         }
 
         setError(msg);
         setErrorType(errType);
+        setErrorPhase(errPhase);
         setPhase(nextPhase);
         // Only offer retry for errors that are not deterministic contract rejections.
         setRetryable(!isNonRetryableError(e));
@@ -165,6 +184,7 @@ export function useTx(telemetry?: TxTelemetry): RunResult {
     hash,
     error,
     errorType,
+    errorPhase,
     estimatedFee,
     pending: phase === "building" || phase === "signing" || phase === "submitting" || phase === "confirming",
     retryable,

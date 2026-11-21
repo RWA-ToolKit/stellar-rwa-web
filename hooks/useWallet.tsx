@@ -56,6 +56,42 @@ const WalletContext = createContext<WalletContextValue | null>(null);
 const STORAGE_KEY = "rwa.wallet.connected";
 
 /**
+ * How long a persisted connection may be trusted before it is re-validated
+ * against live Freighter state. A shared/public machine should not stay in an
+ * apparently-connected state indefinitely, and a stale entry could mask the
+ * fact that the underlying Freighter session changed.
+ */
+const STORAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+interface PersistedWallet {
+  address: string;
+  timestamp: number;
+}
+
+/**
+ * Parse a persisted entry. Returns `null` for anything that isn't a
+ * well-formed, non-expired payload — including the legacy bare "1" flag,
+ * which carries no address or timestamp and so cannot be trusted.
+ */
+function parsePersisted(raw: string | null, now: number): PersistedWallet | null {
+  if (!raw) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const { address, timestamp } = parsed as Partial<PersistedWallet>;
+  if (typeof address !== "string" || !address) return null;
+  if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) return null;
+  const age = now - timestamp;
+  if (age < 0 || age > STORAGE_MAX_AGE_MS) return null;
+  return { address, timestamp };
+}
+=======
+
+/**
  * `localStorage` access can throw a `SecurityError` rather than return null:
  * private-browsing modes, browsers configured to block site data and sandboxed
  * iframes all deny the access. Because the flag is only a convenience (it tells
@@ -185,17 +221,26 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       if (cancelled) return;
       setInstalled(present);
       if (!present) return;
-      // A null flag means either "never connected" or "storage is blocked";
-      // both cases simply skip session restore.
-      if (safeStorage.get(STORAGE_KEY)) {
+      // A null entry means either "never connected" or "storage is blocked";
+      // both cases simply skip session restore. A malformed or expired entry
+      // is cleared and also skips restore.
+      const raw = safeStorage.get(STORAGE_KEY);
+      if (raw) {
+        const persisted = parsePersisted(raw, Date.now());
+        if (!persisted) {
+          safeStorage.remove(STORAGE_KEY);
+          return;
+        }
+        // Always re-validate against live Freighter rather than trusting the
+        // cached flag: the session may have been revoked or switched.
         const existing = await getConnectedAddress();
         if (cancelled) return;
-        if (existing) {
+        if (existing && existing === persisted.address) {
           setAddress(existing);
           await syncNetwork();
         } else {
-          // Access was revoked in the wallet since we last connected — drop
-          // the stale flag so we stop silently probing on every load.
+          // Access was revoked or the account changed since we last
+          // connected — drop the stale entry so we stop probing on every load.
           safeStorage.remove(STORAGE_KEY);
         }
       }
@@ -264,9 +309,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const addr = await fConnect();
       setAddress(addr);
-      // Persisting the flag is best-effort: if storage is blocked the wallet is
-      // still connected, so a failure here must not surface as a connect error.
-      safeStorage.set(STORAGE_KEY, "1");
+      // Persisting the session is best-effort: if storage is blocked the wallet
+      // is still connected, so a failure here must not surface as a connect
+      // error. The timestamp lets us expire the entry on a later load.
+      const persisted: PersistedWallet = { address: addr, timestamp: Date.now() };
+      safeStorage.set(STORAGE_KEY, JSON.stringify(persisted));
       await syncNetwork();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect wallet.");
