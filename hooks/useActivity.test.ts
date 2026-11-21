@@ -170,4 +170,115 @@ describe('useActivity', () => {
     );
     expect(unmountedWarning).toBeUndefined();
   });
+
+  // Network switch mid-session: when the selected network changes while the
+  // hook has cached or in-flight data, the hook must refetch against the new
+  // network and must not surface data fetched from the previous network.
+  it('refetches and drops stale data when the network switches mid-session', async () => {
+    const testnetData = [{ id: 'testnet-activity', network: 'testnet' }];
+    const mainnetData = [{ id: 'mainnet-activity', network: 'mainnet' }];
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        const payload = url.includes('testnet') ? testnetData : mainnetData;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => payload,
+        } as Response;
+      });
+
+    const { result, rerender } = renderHook(
+      ({ network }: { network: 'testnet' | 'mainnet' }) =>
+        useActivity('GABC123', network),
+      { initialProps: { network: 'testnet' as 'testnet' | 'mainnet' } },
+    );
+
+    // Cached testnet data is present before the switch.
+    await waitFor(() => {
+      expect(result.current.data).toEqual(testnetData);
+    });
+
+    // Switch the selected network mid-session.
+    rerender({ network: 'mainnet' });
+
+    // The hook must refetch against the new network...
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    const secondCallUrl = String(fetchSpy.mock.calls[1][0]);
+    expect(secondCallUrl).toContain('mainnet');
+    expect(secondCallUrl).not.toContain('testnet');
+
+    // ...and must not leak the stale testnet data into the UI.
+    await waitFor(() => {
+      expect(result.current.data).toEqual(mainnetData);
+    });
+    expect(result.current.data).not.toEqual(testnetData);
+  });
+
+  // Network switch while a request is still in flight: the late response from
+  // the previous network must be discarded so it cannot overwrite the data
+  // fetched for the newly selected network.
+  it('discards an in-flight response from the previous network after a switch', async () => {
+    const testnetData = [{ id: 'testnet-activity', network: 'testnet' }];
+    const mainnetData = [{ id: 'mainnet-activity', network: 'mainnet' }];
+
+    let resolveTestnet: (value: Response) => void = () => {};
+    const pendingTestnet = new Promise<Response>((resolve) => {
+      resolveTestnet = resolve;
+    });
+
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('testnet')) {
+          return pendingTestnet;
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => mainnetData,
+        } as Response);
+      });
+
+    const { result, rerender } = renderHook(
+      ({ network }: { network: 'testnet' | 'mainnet' }) =>
+        useActivity('GABC123', network),
+      { initialProps: { network: 'testnet' as 'testnet' | 'mainnet' } },
+    );
+
+    // The testnet request is in flight when the network switches.
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({ network: 'mainnet' });
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    // The mainnet data lands first.
+    await waitFor(() => {
+      expect(result.current.data).toEqual(mainnetData);
+    });
+
+    // The stale testnet response resolves late and must be ignored.
+    resolveTestnet({
+      ok: true,
+      status: 200,
+      json: async () => testnetData,
+    } as Response);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(result.current.data).toEqual(mainnetData);
+    expect(result.current.data).not.toEqual(testnetData);
+  });
 });

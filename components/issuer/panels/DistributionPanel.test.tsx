@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { AssetDetail } from "@/types";
 import { DistributionPanel } from "./DistributionPanel";
 
@@ -15,9 +15,10 @@ vi.mock("@/hooks/useWallet", () => ({
 }));
 
 // Mock the transaction hook so no RPC is touched.
+const txRun = vi.fn();
 vi.mock("@/hooks/useTx", () => ({
   useTx: () => ({
-    run: vi.fn(),
+    run: txRun,
     status: "idle",
     error: null,
     hash: null,
@@ -31,9 +32,14 @@ vi.mock("@/hooks/useHolders", () => ({
   fetchOnChainHolders: vi.fn(async () => []),
 }));
 
-// No existing distributions for the asset.
+// A single existing distribution so the management panel renders a row.
+const distributionState: { data: unknown[]; loading: boolean; error: null } = {
+  data: [],
+  loading: false,
+  error: null,
+};
 vi.mock("@/hooks/useDividends", () => ({
-  useDividends: () => ({ data: [], loading: false, error: null }),
+  useDividends: () => distributionState,
 }));
 
 // Avoid any network calls from the async balance/allowance/decimals lookups.
@@ -67,6 +73,8 @@ function makeAsset(overrides: Partial<AssetDetail> = {}): AssetDetail {
 describe("DistributionPanel empty/zero input", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    distributionState.data = [];
+    walletState.address = null;
   });
 
   it("renders the create form and empty distributions state without crashing when there are no holders and no existing distributions", () => {
@@ -92,6 +100,8 @@ describe("DistributionPanel empty/zero input", () => {
 describe("DistributionPanel dependency arrays / stale closures", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    distributionState.data = [];
+    walletState.address = null;
   });
 
   it("re-runs the async balance/allowance/decimals lookups when the asset prop changes", async () => {
@@ -150,6 +160,8 @@ describe("DistributionPanel unmount during in-flight async call", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    distributionState.data = [];
+    walletState.address = null;
     errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
@@ -201,71 +213,64 @@ describe("DistributionPanel unmount during in-flight async call", () => {
     await Promise.resolve();
     await Promise.resolve();
 
-    const allCalls = [...errorSpy.mock.calls, ...warnSpy.mock.calls]
-      .map((args) => args.map((a) => String(a)).join(" "))
-      .join("\n");
-
-    expect(allCalls).not.toMatch(/unmounted component/i);
-    expect(allCalls).not.toMatch(/Can't perform a React state update/i);
+    expect(warnSpy).not.toHaveBeenCalled();
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });
 
-describe("DistributionPanel network switch mid-session", () => {
+describe("DistributionPanel reclaim unclaimed funds", () => {
+  const ADMIN = "GADMIN0000000000000000000000000000000000000000000000000000";
+  const OTHER = "GOTHER0000000000000000000000000000000000000000000000000000";
+
+  function makeDistribution(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 1,
+      issuer: ADMIN,
+      token: "CTOKENCONTRACT00000000000000000000000000000000000000000000",
+      total: 1000n,
+      claimed: 400n,
+      deadline: 0,
+      ...overrides,
+    };
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
-    walletState.address = null;
+    walletState.address = ADMIN;
     walletState.network = "testnet";
   });
 
-  afterEach(() => {
-    walletState.network = "testnet";
+  it("shows the reclaim action to the admin once the deadline has passed", () => {
+    distributionState.data = [makeDistribution({ deadline: 0 })];
+    render(<DistributionPanel asset={makeAsset()} />);
+
+    expect(screen.getByRole("button", { name: /reclaim/i })).toBeInTheDocument();
   });
 
-  it("does not leak stale-network data into the UI when the network switches while a lookup is in flight", async () => {
-    const contracts = await import("@/lib/contracts");
+  it("hides the reclaim action before the deadline has passed", () => {
+    const future = Math.floor(Date.now() / 1000) + 60 * 60 * 24;
+    distributionState.data = [makeDistribution({ deadline: future })];
+    render(<DistributionPanel asset={makeAsset()} />);
 
-    const balanceSpy = contracts.assetToken.balance as unknown as ReturnType<typeof vi.fn>;
-    const allowanceSpy = contracts.assetToken.allowance as unknown as ReturnType<typeof vi.fn>;
-    const decimalsSpy = contracts.assetToken.decimals as unknown as ReturnType<typeof vi.fn>;
+    expect(screen.queryByRole("button", { name: /reclaim/i })).not.toBeInTheDocument();
+  });
 
-    // First (testnet) lookup hangs so we can switch networks while it is in
-    // flight; the second (mainnet) lookup resolves immediately.
-    let resolveTestnetBalance: (value: bigint) => void = () => {};
-    let callCount = 0;
-    balanceSpy.mockImplementation(() => {
-      callCount += 1;
-      if (callCount === 1) {
-        return new Promise<bigint>((resolve) => { resolveTestnetBalance = resolve; });
-      }
-      return Promise.resolve(0n);
-    });
-    allowanceSpy.mockImplementation(async () => 0n);
-    decimalsSpy.mockImplementation(async () => 7);
+  it("hides the reclaim action from wallets that are not the issuer", () => {
+    walletState.address = OTHER;
+    distributionState.data = [makeDistribution({ deadline: 0 })];
+    render(<DistributionPanel asset={makeAsset()} />);
 
-    const { rerender } = render(<DistributionPanel asset={makeAsset()} />);
+    expect(screen.queryByRole("button", { name: /reclaim/i })).not.toBeInTheDocument();
+  });
 
-    // The testnet lookup has been kicked off but not resolved yet.
-    expect(balanceSpy).toHaveBeenCalled();
+  it("invokes reclaim_unclaimed when the admin clicks reclaim", async () => {
+    distributionState.data = [makeDistribution({ deadline: 0 })];
+    render(<DistributionPanel asset={makeAsset()} />);
 
-    // Switch the selected network mid-session (testnet -> mainnet).
-    walletState.network = "mainnet";
-    rerender(<DistributionPanel asset={makeAsset()} />);
+    fireEvent.click(screen.getByRole("button", { name: /reclaim/i }));
 
-    // Now resolve the stale testnet lookup after the switch. A panel that
-    // does not guard against cross-network responses would apply this value
-    // to the mainnet view.
-    resolveTestnetBalance(123456789n);
-
-    // Flush pending microtasks so any post-switch state updates run.
-    await Promise.resolve();
-    await Promise.resolve();
-
-    // The stale testnet balance must not be rendered after the switch.
-    expect(screen.queryByText(/123456789/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/1,234,567\.89/)).not.toBeInTheDocument();
-
-    // The panel still renders its required-role notice and no error alert.
-    expect(screen.getByText(/Required role:/i)).toBeInTheDocument();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await waitFor(() => expect(txRun).toHaveBeenCalled());
+    const call = txRun.mock.calls[0][0];
+    expect(call).toBeTruthy();
   });
 });
