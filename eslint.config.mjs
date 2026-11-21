@@ -7,6 +7,9 @@ export default [
   {
     rules: {
       "react/jsx-no-target-blank": "error",
+      // Enforce exhaustive-deps as an error so stale-closure bugs in custom
+      // hooks (hooks/useAsset.ts, hooks/useTx.ts, etc.) are caught in review.
+      "react-hooks/exhaustive-deps": "error",
       // react-hooks v6's set-state-in-effect rule flags setState calls inside
       // a fetch-on-mount effect's async callback as "synchronous," even
       // though they run after an awaited RPC/fetch resolves. That's the
