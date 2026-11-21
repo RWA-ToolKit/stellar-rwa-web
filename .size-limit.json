@@ -10,5 +10,23 @@
     "path": ".next/static/chunks/framework-*.js",
     "limit": "48 kB",
     "gzip": true
+  },
+  {
+    "name": "Route: /asset/[id] (gzip)",
+    "path": ".next/static/chunks/app/asset/**/*.js",
+    "limit": "60 kB",
+    "gzip": true
+  },
+  {
+    "name": "Route: /portfolio (gzip)",
+    "path": ".next/static/chunks/app/portfolio/**/*.js",
+    "limit": "60 kB",
+    "gzip": true
+  },
+  {
+    "name": "Route: /issuer (gzip)",
+    "path": ".next/static/chunks/app/issuer/**/*.js",
+    "limit": "60 kB",
+    "gzip": true
   }
 ]

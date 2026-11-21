@@ -104,4 +104,34 @@ describe("AssetHeader", () => {
 
     expect(screen.getByText("Unnamed asset")).toBeInTheDocument();
   });
+
+  // #823: registry/contract text is untrusted. Guard against a future change
+  // introducing rich-text rendering (e.g. dangerouslySetInnerHTML) here.
+  it("renders issuer-controlled text fields as inert text, never as markup", () => {
+    const payload =
+      '<script>window.__assetHeaderXss = true</script><img src=x onerror="window.__assetHeaderXss = true">LOT';
+    const { container } = render(
+      <AssetHeader
+        asset={makeAsset({
+          name: payload,
+          metadata: {
+            ...makeAsset().metadata,
+            name: payload,
+            symbol: payload,
+            assetDescription: payload,
+          },
+        })}
+        network="testnet"
+      />,
+    );
+
+    expect(container.querySelector("script, img")).toBeNull();
+    expect(
+      (window as Window & { __assetHeaderXss?: boolean }).__assetHeaderXss,
+    ).toBeUndefined();
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.querySelector("script, img")).toBeNull();
+    expect(heading).toHaveTextContent("window.__assetHeaderXss = true");
+  });
 });

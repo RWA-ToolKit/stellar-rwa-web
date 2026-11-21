@@ -8,6 +8,18 @@ Thanks for helping improve Stellar RWA Web.
 2. Keep changes focused on one issue or improvement at a time.
 3. Run the relevant tests and type checks before opening a PR.
 
+## Review ownership
+
+Some paths are owned by specific maintainers, listed in
+[.github/CODEOWNERS](.github/CODEOWNERS). GitHub automatically requests their
+review when a PR touches a path they own, so a first-time contributor should
+expect feedback from those owners rather than from whoever happens to notice
+the PR. Please allow time for the listed reviewers to respond — review
+turnaround for an owned path depends on their availability, and assigning an
+arbitrary reviewer does not replace the CODEOWNERS request. If you are unsure
+who owns a change, mention it in the PR description and the maintainers will
+help route it.
+
 ## Local setup
 
 - Copy [.env.example](.env.example) to `.env.local`.
@@ -82,10 +94,24 @@ lines** — about two points under the measured 82.0 / 71.8 / 70.6 / 83.2. Check
 locally with `npm run test:ci`. Raise the floor when coverage rises; do not
 lower it to get a PR through.
 
+### Updating bundle size budgets
+
 `npm run size` enforces the gzip budgets in `.size-limit.json` (440 kB for all
-JS chunks, 48 kB for the framework chunk), set ~7% above the measured
-411.8 kB / 44.8 kB. If a change legitimately grows the bundle, raise the budget
-in the same PR and explain why.
+JS chunks, 48 kB for the framework chunk). They are intentionally kept ~7%
+above the measured 411.8 kB / 44.8 kB so a real regression fails instead of
+hiding in slack; the same guidance is recorded in the `Bundle size check`
+comment in [.github/workflows/web.yml](.github/workflows/web.yml).
+
+When a change legitimately grows the bundle:
+
+1. Run `npm run build && npm run size` and note the new measured gzip sizes.
+2. Raise only the affected limit(s) in `.size-limit.json` in the same PR,
+   keeping roughly 7% headroom over the new measurement.
+3. Explain the increase in the PR description so reviewers can see the intent
+   (for example, a necessary dependency or a new feature).
+
+Do not relax a budget just to make a failing check pass without explaining the
+growth.
 
 If you add UI changes, prefer updating or adding a focused component test alongside the implementation.
 
