@@ -13,3 +13,11 @@ If a request is still pending after 5 seconds, a later call with the same key
 starts another request; the original request continues and is not cancelled.
 Use keys that identify the request and its relevant inputs, so callers only
 share promises for equivalent work.
+
+## Capacity and eviction
+
+The cache holds at most **100 entries**. Once full, adding a new key evicts the
+least recently used (LRU) entry — a cache hit refreshes that key's recency.
+This bounds memory during long sessions that visit many distinct assets; an
+evicted key simply starts a fresh request the next time it is asked for. The
+settled-entry cleanup and the 5-second window still apply to every entry.

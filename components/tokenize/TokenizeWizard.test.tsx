@@ -5,6 +5,13 @@ import { TokenizeWizard } from "./TokenizeWizard";
 // Mocks
 // ---------------------------------------------------------------------------
 
+// Tracks how many times each step component renders so tests can prove that
+// inactive steps are unmounted rather than kept alive off-screen.
+const mockStepRenderCounts: Record<number, number> = {};
+const mockCountRender = (step: number) => {
+  mockStepRenderCounts[step] = (mockStepRenderCounts[step] ?? 0) + 1;
+};
+
 // Wallet hook — default to connected; individual tests can override
 const mockUseWallet = jest.fn();
 jest.mock("@/hooks/useWallet", () => ({
@@ -33,7 +40,9 @@ jest.mock("@/lib/tokenizeFlow", () => ({
 
 // Step1TokenContract — calls onValidated when "Verify" is clicked
 jest.mock("./Step1TokenContract", () => ({
-  Step1TokenContract: ({ onValidated }: { onValidated: (r: unknown) => void }) => (
+  Step1TokenContract: ({ onValidated }: { onValidated: (r: unknown) => void }) => {
+    mockCountRender(1);
+    return (
     <div>
       <h2>Step 1</h2>
       <button
@@ -58,7 +67,8 @@ jest.mock("./Step1TokenContract", () => ({
         Verify &amp; continue
       </button>
     </div>
-  ),
+    );
+  },
 }));
 
 // Step2AssetDetails — calls onNext / onBack
@@ -69,7 +79,9 @@ jest.mock("./Step2AssetDetails", () => ({
   }: {
     onBack: () => void;
     onNext: (d: unknown) => void;
-  }) => (
+  }) => {
+    mockCountRender(2);
+    return (
     <div>
       <h2>Step 2</h2>
       <button onClick={onBack}>← Back</button>
@@ -85,7 +97,8 @@ jest.mock("./Step2AssetDetails", () => ({
         Review →
       </button>
     </div>
-  ),
+    );
+  },
 }));
 
 // Step3Confirm — calls onRegistered
@@ -96,7 +109,9 @@ jest.mock("./Step3Confirm", () => ({
   }: {
     onBack: () => void;
     onRegistered: (id: bigint | null, hash: string) => void;
-  }) => (
+  }) => {
+    mockCountRender(3);
+    return (
     <div>
       <h2>Step 3</h2>
       <button onClick={onBack}>← Back</button>
@@ -104,17 +119,21 @@ jest.mock("./Step3Confirm", () => ({
         Register asset on-chain
       </button>
     </div>
-  ),
+    );
+  },
 }));
 
 // Step4Done — final success screen
 jest.mock("./Step4Done", () => ({
-  Step4Done: ({ name }: { name: string }) => (
+  Step4Done: ({ name }: { name: string }) => {
+    mockCountRender(4);
+    return (
     <div>
       <h2>Asset registered</h2>
       <p>{name}</p>
     </div>
-  ),
+    );
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -141,6 +160,7 @@ beforeEach(() => {
     tokenContract: "CTEST123",
     metadata: { name: "Test Token", symbol: "TST" },
   });
+  Object.keys(mockStepRenderCounts).forEach((key) => delete mockStepRenderCounts[Number(key)]);
 });
 
 afterEach(() => {
@@ -288,5 +308,44 @@ describe("TokenizeWizard — step indicator", () => {
     await waitFor(() =>
       expect(screen.getByTestId("current-step")).toHaveTextContent("2"),
     );
+  });
+});
+
+describe("TokenizeWizard — single active step", () => {
+  it("renders only the active step component at each stage", async () => {
+    render(<TokenizeWizard />);
+
+    // Step 1 only: later steps must not mount at all on first render.
+    expect(mockStepRenderCounts[1]).toBeGreaterThan(0);
+    expect(mockStepRenderCounts[2]).toBeUndefined();
+    expect(mockStepRenderCounts[3]).toBeUndefined();
+    expect(mockStepRenderCounts[4]).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /verify & continue/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /step 2/i })).toBeInTheDocument(),
+    );
+    const step1Renders = mockStepRenderCounts[1];
+    expect(mockStepRenderCounts[2]).toBeGreaterThan(0);
+    expect(mockStepRenderCounts[3]).toBeUndefined();
+    expect(mockStepRenderCounts[4]).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /review/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /step 3/i })).toBeInTheDocument(),
+    );
+    const step2Renders = mockStepRenderCounts[2];
+    expect(mockStepRenderCounts[1]).toBe(step1Renders);
+    expect(mockStepRenderCounts[2]).toBe(step2Renders);
+    expect(mockStepRenderCounts[3]).toBeGreaterThan(0);
+    expect(mockStepRenderCounts[4]).toBeUndefined();
+
+    fireEvent.click(screen.getByRole("button", { name: /register asset on-chain/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /asset registered/i })).toBeInTheDocument(),
+    );
+    expect(mockStepRenderCounts[4]).toBeGreaterThan(0);
+    expect(mockStepRenderCounts[1]).toBe(step1Renders);
+    expect(mockStepRenderCounts[2]).toBe(step2Renders);
   });
 });
