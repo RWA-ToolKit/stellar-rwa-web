@@ -53,6 +53,9 @@ export function prefetchAssetMetadata(
   const promise = assetToken.getMetadata(network, tokenContract);
   const prefetch = { promise, expiresAt: now + PREFETCH_TTL_MS };
   metadataPrefetches.set(key, prefetch);
+  // Capture `key` and `prefetch` locally so the rejection handler only evicts
+  // this exact entry. Reading them from the enclosing scope would risk a stale
+  // closure if the map entry is replaced by a newer prefetch for the same key.
   promise.catch(() => {
     if (metadataPrefetches.get(key) === prefetch) {
       metadataPrefetches.delete(key);

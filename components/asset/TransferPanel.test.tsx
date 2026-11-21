@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { AssetDetail } from "@/types";
+import type { AssetDetail, TxResult } from "@/types";
 import { useCompliance } from "@/hooks/useCompliance";
 import { useTx } from "@/hooks/useTx";
 import { useWallet } from "@/hooks/useWallet";
@@ -308,6 +308,171 @@ describe("TransferPanel", () => {
         expect(submitButton).toBeDisabled();
       }
       // If TxProgress is shown instead, that's also correct (button won't exist)
+    });
+  });
+
+  describe("network switch mid-session (#680)", () => {
+    it("resets tx state and ignores stale testnet transfer completion after switching to mainnet", async () => {
+      const APPROVED_RECIPIENT = "GAPPROVEDRECIPIENT1234567890ABCDEFGHIJKLMNOPQRSTUVWX";
+      let currentNetwork: "testnet" | "mainnet" = "testnet";
+      mockUseWallet.mockImplementation(
+        () => ({ address: SENDER, network: currentNetwork }) as ReturnType<typeof useWallet>,
+      );
+      mockUseCompliance.mockReturnValue({
+        data: { allowed: true, status: "Approved", record: null },
+        loading: false,
+        error: null,
+        updatedAt: null,
+        refetch: jest.fn(),
+      });
+
+      let resolveTransfer!: (value: TxResult | null) => void;
+      const run = jest.fn<Promise<TxResult | null>, [Parameters<ReturnType<typeof useTx>["run"]>[0]]>(
+        () =>
+          new Promise<TxResult | null>((resolve) => {
+            resolveTransfer = resolve;
+          }),
+      );
+      const reset = jest.fn();
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: false,
+        retryable: false,
+        run,
+        retry: jest.fn(),
+        reset,
+      });
+
+      const onTransferred = jest.fn();
+      const { rerender } = render(
+        <TransferPanel asset={asset} balance={100n} onTransferred={onTransferred} />,
+      );
+
+      fireEvent.change(screen.getByLabelText("Recipient address"), {
+        target: { value: APPROVED_RECIPIENT },
+      });
+      fireEvent.change(screen.getByLabelText("Amount"), {
+        target: { value: "25" },
+      });
+      fireEvent.submit(screen.getByRole("button", { name: "Transfer" }).closest("form")!);
+
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(reset).not.toHaveBeenCalled();
+
+      // Switch network mid-session from testnet -> mainnet while tx.run is still in flight
+      currentNetwork = "mainnet";
+      rerender(<TransferPanel asset={asset} balance={100n} onTransferred={onTransferred} />);
+
+      expect(reset).toHaveBeenCalledTimes(1);
+
+      // Resolve the stale testnet transaction
+      resolveTransfer({ hash: "testnet-tx-hash" });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(onTransferred).not.toHaveBeenCalled();
+      expect((screen.getByLabelText("Recipient address") as HTMLInputElement).value).toBe(
+        APPROVED_RECIPIENT,
+      );
+      expect((screen.getByLabelText("Amount") as HTMLInputElement).value).toBe("25");
+    });
+
+    it("clears stale form submission errors when switching networks from testnet to mainnet", () => {
+      let currentNetwork: "testnet" | "mainnet" = "testnet";
+      mockUseWallet.mockImplementation(
+        () => ({ address: SENDER, network: currentNetwork }) as ReturnType<typeof useWallet>,
+      );
+      mockUseCompliance.mockReturnValue({
+        data: { allowed: true, status: "Approved", record: null },
+        loading: false,
+        error: null,
+        updatedAt: null,
+        refetch: jest.fn(),
+      });
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: false,
+        retryable: false,
+        run: jest.fn(),
+        retry: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      const { rerender } = render(<TransferPanel asset={asset} balance={100n} />);
+
+      fireEvent.submit(screen.getByRole("button", { name: "Transfer" }).closest("form")!);
+      expect(screen.getByText(/enter a valid stellar address/i)).toBeInTheDocument();
+
+      currentNetwork = "mainnet";
+      rerender(<TransferPanel asset={asset} balance={100n} />);
+
+      expect(screen.queryByText(/enter a valid stellar address/i)).not.toBeInTheDocument();
+    });
+
+    it("does not leak cached testnet compliance or balance state into mainnet UI during a switch", () => {
+      let currentNetwork: "testnet" | "mainnet" = "testnet";
+      mockUseWallet.mockImplementation(
+        () => ({ address: SENDER, network: currentNetwork }) as ReturnType<typeof useWallet>,
+      );
+      mockUseCompliance.mockImplementation(() =>
+        currentNetwork === "testnet"
+          ? {
+              data: {
+                allowed: true,
+                status: "Approved",
+                record: {
+                  address: SENDER,
+                  status: "Approved",
+                  jurisdiction: "US",
+                  verifiedAt: 1000,
+                  expiresAt: 42000,
+                },
+              },
+              loading: false,
+              error: null,
+              updatedAt: 1000,
+              refetch: jest.fn(),
+            }
+          : {
+              data: null,
+              loading: true,
+              error: null,
+              updatedAt: null,
+              refetch: jest.fn(),
+            },
+      );
+      mockUseTx.mockReturnValue({
+        phase: "idle",
+        hash: null,
+        error: null,
+        errorType: "generic",
+        estimatedFee: null,
+        pending: false,
+        retryable: false,
+        run: jest.fn(),
+        retry: jest.fn(),
+        reset: jest.fn(),
+      });
+
+      const { rerender } = render(<TransferPanel asset={asset} balance={250n} />);
+
+      expect(screen.getByText(/expires at ledger 42000/i)).toBeInTheDocument();
+      expect(screen.getByText("250 TOKEN")).toBeInTheDocument();
+
+      currentNetwork = "mainnet";
+      rerender(<TransferPanel asset={asset} balance={250n} balanceLoading />);
+
+      expect(screen.queryByText(/expires at ledger 42000/i)).not.toBeInTheDocument();
+      expect(screen.queryByText("250 TOKEN")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /checking compliance/i })).toBeDisabled();
     });
   });
 });

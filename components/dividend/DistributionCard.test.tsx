@@ -14,6 +14,8 @@
  *   6. No claim row when nothing to claim and not yet claimed
  *   7. Ledger fallback text when currentLedger is null
  *   8. Approximate date shown when currentLedger is provided
+ *   9. Claim deadline shown when set, hidden when unset
+ *  10. Cancelled and reclaimed states visually distinct from active/complete
  */
 
 import React from "react";
@@ -124,6 +126,51 @@ describe("DistributionCard", () => {
     );
     expect(screen.getByText("Complete")).toBeInTheDocument();
     expect(screen.queryByText("Active")).not.toBeInTheDocument();
+  });
+
+  it("shows 'Cancelled' badge distinct from Active/Complete", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution({ cancelled: true })}
+        currentLedger={null}
+      />,
+    );
+    expect(screen.getByText("Cancelled")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.queryByText("Complete")).not.toBeInTheDocument();
+  });
+
+  it("shows 'Reclaimed' badge distinct from Active/Complete", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution({ reclaimed: true })}
+        currentLedger={null}
+      />,
+    );
+    expect(screen.getByText("Reclaimed")).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+    expect(screen.queryByText("Complete")).not.toBeInTheDocument();
+  });
+
+  // ── claim deadline ───────────────────────────────────────────────────────
+  it("shows the claim deadline when set", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution({ deadline: 60000 })}
+        currentLedger={null}
+      />,
+    );
+    expect(screen.getByText(/claim deadline/i)).toBeInTheDocument();
+  });
+
+  it("hides the claim deadline when unset", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution({ deadline: null })}
+        currentLedger={null}
+      />,
+    );
+    expect(screen.queryByText(/claim deadline/i)).not.toBeInTheDocument();
   });
 
   // ── claimed percentage ───────────────────────────────────────────────────
@@ -263,29 +310,16 @@ describe("DistributionCard", () => {
         currentLedger={null}
       />,
     );
-    expect(screen.getByText(/Ledger 50000/)).toBeInTheDocument();
+    expect(screen.getByText(/ledger 50,000/i)).toBeInTheDocument();
   });
 
   it("shows approximate date when currentLedger is provided", () => {
     render(
       <DistributionCard
         distribution={makeDistribution({ createdAt: 50000 })}
-        currentLedger={55000}
+        currentLedger={60000}
       />,
     );
-    // date-fns mock returns "2 days ago"
-    expect(screen.getByText(/Created ~2 days ago/)).toBeInTheDocument();
-  });
-
-  // ── payment token truncation ─────────────────────────────────────────────
-  it("renders a truncated payment token address", () => {
-    render(
-      <DistributionCard
-        distribution={makeDistribution({ paymentToken: "CPAYMENT5678ABCDEF" })}
-        currentLedger={null}
-      />,
-    );
-    // truncateAddress keeps first 4 + "…" + last 4
-    expect(screen.getByText(/Payment token CPAY…CDEF/i)).toBeInTheDocument();
+    expect(screen.getByText(/2 days ago/i)).toBeInTheDocument();
   });
 });

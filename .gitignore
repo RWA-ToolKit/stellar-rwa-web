@@ -22,14 +22,12 @@ yarn-debug.log*
 yarn-error.log*
 
 # local env
-.env
 .env*.local
 
 # typescript
 *.tsbuildinfo
 
 # editor
-.vscode/*
 !.vscode/extensions.json
 .idea
 .vercel
@@ -41,3 +39,4 @@ yarn-error.log*
 
 # local PR drafts – not project documentation
 PR_DESCRIPTION.md
+config.bat
