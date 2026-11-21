@@ -59,6 +59,15 @@ jobs:
           export CHROME_PATH="$(node -e 'process.stdout.write(require("playwright").chromium.executablePath())')"
           npx --yes @lhci/cli@0.15.1 autorun
 
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: .lighthouseci
+          if-no-files-found: warn
+          retention-days: 7
+
       - name: Upload bundle module analysis
         if: always()
         uses: actions/upload-artifact@v4
