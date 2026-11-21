@@ -8,6 +8,18 @@ Thanks for helping improve Stellar RWA Web.
 2. Keep changes focused on one issue or improvement at a time.
 3. Run the relevant tests and type checks before opening a PR.
 
+## Review ownership
+
+Some paths are owned by specific maintainers, listed in
+[.github/CODEOWNERS](.github/CODEOWNERS). GitHub automatically requests their
+review when a PR touches a path they own, so a first-time contributor should
+expect feedback from those owners rather than from whoever happens to notice
+the PR. Please allow time for the listed reviewers to respond — review
+turnaround for an owned path depends on their availability, and assigning an
+arbitrary reviewer does not replace the CODEOWNERS request. If you are unsure
+who owns a change, mention it in the PR description and the maintainers will
+help route it.
+
 ## Local setup
 
 - Copy [.env.example](.env.example) to `.env.local`.
