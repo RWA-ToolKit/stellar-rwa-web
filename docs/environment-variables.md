@@ -1,5 +1,21 @@
 # Environment Variables
 
+> [!WARNING]
+> **Anything added here is public.** Next.js replaces every `NEXT_PUBLIC_*`
+> reference with its value at build time and ships it in the client JavaScript
+> bundle, so any visitor can read it. Never add API keys, private keys, auth
+> tokens, internal endpoints, or any other secret to `.env.example`,
+> `.env.local`, or the deployment configuration, even if it looks harmless.
+>
+> The variables below are safe only because they describe public configuration
+> (network choice, public RPC URLs, public contract IDs, optional public read
+> API). This repository currently has **no backend** (see the README), so there
+> is no server-side runtime where a secret could live. If a secret is ever
+> required, first add a server-side boundary such as a Next.js Route Handler or
+> Server Action, then store the secret in an environment variable **without**
+> the `NEXT_PUBLIC_` prefix and read it only in server code. It will not be
+> exposed to the browser.
+
 App configuration uses `NEXT_PUBLIC_*` environment variables, making these
 settings available to the browser. The complete set of app-configurable
 variables in `.env.example` is listed here; the sections below document each
