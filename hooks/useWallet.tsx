@@ -19,13 +19,13 @@ import {
   type ReactNode,
 } from "react";
 import {
-  connect as fConnect,
-  getConnectedAddress,
-  getWalletNetwork,
-  isFreighterInstalled,
-  signTx,
-  watchWallet,
-} from "@/lib/freighter";
+  DEFAULT_WALLET_ID,
+  getWalletAdapter,
+  isWalletId,
+  listWalletAdapters,
+  type WalletAdapter,
+  type WalletId,
+} from "@/lib/wallets";
 import { DEFAULT_NETWORK, networkPassphrase } from "@/lib/stellar";
 import type { WriteCtx } from "@/lib/contracts";
 import type { Network } from "@/types";
@@ -43,6 +43,12 @@ interface WalletContextValue {
   installed: boolean;
   connecting: boolean;
   error: string | null;
+  /** All wallet adapters the user can choose from. */
+  availableAdapters: WalletAdapter[];
+  /** Id of the wallet adapter currently selected (or last used). */
+  selectedAdapterId: WalletId;
+  /** Choose which wallet adapter to connect with. */
+  selectAdapter: (id: WalletId) => void;
   connect: () => Promise<void>;
   disconnect: () => void;
   setNetwork: (n: Network) => void;
@@ -54,42 +60,7 @@ interface WalletContextValue {
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 const STORAGE_KEY = "rwa.wallet.connected";
-
-/**
- * How long a persisted connection may be trusted before it is re-validated
- * against live Freighter state. A shared/public machine should not stay in an
- * apparently-connected state indefinitely, and a stale entry could mask the
- * fact that the underlying Freighter session changed.
- */
-const STORAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-interface PersistedWallet {
-  address: string;
-  timestamp: number;
-}
-
-/**
- * Parse a persisted entry. Returns `null` for anything that isn't a
- * well-formed, non-expired payload — including the legacy bare "1" flag,
- * which carries no address or timestamp and so cannot be trusted.
- */
-function parsePersisted(raw: string | null, now: number): PersistedWallet | null {
-  if (!raw) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null) return null;
-  const { address, timestamp } = parsed as Partial<PersistedWallet>;
-  if (typeof address !== "string" || !address) return null;
-  if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) return null;
-  const age = now - timestamp;
-  if (age < 0 || age > STORAGE_MAX_AGE_MS) return null;
-  return { address, timestamp };
-}
-=======
+const ADAPTER_STORAGE_KEY = "rwa.wallet.adapter";
 
 /**
  * `localStorage` access can throw a `SecurityError` rather than return null:
@@ -140,6 +111,9 @@ const DISCONNECTED_WALLET: WalletContextValue = {
   installed: false,
   connecting: false,
   error: "The wallet failed to load.",
+  availableAdapters: listWalletAdapters(),
+  selectedAdapterId: DEFAULT_WALLET_ID,
+  selectAdapter: () => {},
   connect: async () => {},
   disconnect: () => {},
   setNetwork: () => {},
@@ -202,13 +176,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [installed, setInstalled] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedAdapterId, setSelectedAdapterId] = useState<WalletId>(() => {
+    const stored = safeStorage.get(ADAPTER_STORAGE_KEY);
+    return isWalletId(stored) ? stored : DEFAULT_WALLET_ID;
+  });
   const addressRef = useRef<string | null>(null);
   useEffect(() => {
     addressRef.current = address;
   }, [address]);
 
+  const adapter = useMemo(() => getWalletAdapter(selectedAdapterId), [selectedAdapterId]);
+  const adapterRef = useRef<WalletAdapter>(adapter);
+  useEffect(() => {
+    adapterRef.current = adapter;
+  }, [adapter]);
+
   const syncNetwork = useCallback(async () => {
-    const wn = await getWalletNetwork();
+    const wn = await adapterRef.current.getWalletNetwork();
     setWalletNetwork(wn);
     if (wn) setNetworkState(wn);
   }, []);
@@ -217,30 +201,21 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const present = await isFreighterInstalled();
+      const present = await adapter.isInstalled();
       if (cancelled) return;
       setInstalled(present);
       if (!present) return;
-      // A null entry means either "never connected" or "storage is blocked";
-      // both cases simply skip session restore. A malformed or expired entry
-      // is cleared and also skips restore.
-      const raw = safeStorage.get(STORAGE_KEY);
-      if (raw) {
-        const persisted = parsePersisted(raw, Date.now());
-        if (!persisted) {
-          safeStorage.remove(STORAGE_KEY);
-          return;
-        }
-        // Always re-validate against live Freighter rather than trusting the
-        // cached flag: the session may have been revoked or switched.
-        const existing = await getConnectedAddress();
+      // A null flag means either "never connected" or "storage is blocked";
+      // both cases simply skip session restore.
+      if (safeStorage.get(STORAGE_KEY)) {
+        const existing = await adapter.getConnectedAddress();
         if (cancelled) return;
-        if (existing && existing === persisted.address) {
+        if (existing) {
           setAddress(existing);
           await syncNetwork();
         } else {
-          // Access was revoked or the account changed since we last
-          // connected — drop the stale entry so we stop probing on every load.
+          // Access was revoked in the wallet since we last connected — drop
+          // the stale flag so we stop silently probing on every load.
           safeStorage.remove(STORAGE_KEY);
         }
       }
@@ -251,7 +226,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [syncNetwork]);
+  }, [adapter, syncNetwork]);
 
   // React to account / network switches made inside the extension. Runs
   // whenever the extension is present, not just while connected, so a
@@ -262,7 +237,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // burning battery/CPU on background tabs the user isn't looking at.
   useEffect(() => {
     if (!installed) return;
-    if (typeof document === "undefined") return watchWallet(handleWatchChange);
+    if (typeof document === "undefined") return adapter.watchWallet(handleWatchChange);
 
     let stop: (() => void) | null = null;
 
@@ -273,12 +248,12 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       } else {
         // Disconnected: just observe the wallet's network without forcing
         // the freely-chosen read-only browsing network to follow it.
-        void getWalletNetwork().then(setWalletNetwork);
+        void adapterRef.current.getWalletNetwork().then(setWalletNetwork);
       }
     }
 
     function start() {
-      if (!stop) stop = watchWallet(handleWatchChange);
+      if (!stop) stop = adapter.watchWallet(handleWatchChange);
     }
 
     function pause() {
@@ -301,19 +276,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       pause();
     };
-  }, [installed, syncNetwork]);
+  }, [installed, adapter, syncNetwork]);
+
+  const selectAdapter = useCallback((id: WalletId) => {
+    if (!isWalletId(id)) return;
+    setSelectedAdapterId(id);
+    safeStorage.set(ADAPTER_STORAGE_KEY, id);
+  }, []);
 
   const connect = useCallback(async () => {
     setConnecting(true);
     setError(null);
     try {
-      const addr = await fConnect();
+      const addr = await adapterRef.current.connect();
       setAddress(addr);
-      // Persisting the session is best-effort: if storage is blocked the wallet
-      // is still connected, so a failure here must not surface as a connect
-      // error. The timestamp lets us expire the entry on a later load.
-      const persisted: PersistedWallet = { address: addr, timestamp: Date.now() };
-      safeStorage.set(STORAGE_KEY, JSON.stringify(persisted));
+      // Persisting the flag is best-effort: if storage is blocked the wallet is
+      // still connected, so a failure here must not surface as a connect error.
+      safeStorage.set(STORAGE_KEY, "1");
       await syncNetwork();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to connect wallet.");
@@ -357,7 +336,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
           ),
         );
       }
-      return signTx(xdr, networkPassphrase(network), addressRef.current);
+      return adapterRef.current.signTx(xdr, networkPassphrase(network), addressRef.current);
     },
     [network, networkUnknown, networkMismatch],
   );
@@ -383,6 +362,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     [network, sign, networkUnknown, networkMismatch],
   );
 
+  const availableAdapters = useMemo(() => listWalletAdapters(), []);
+
   const value = useMemo<WalletContextValue>(
     () => ({
       address,
@@ -392,6 +373,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       installed,
       connecting,
       error,
+      availableAdapters,
+      selectedAdapterId,
+      selectAdapter,
       connect,
       disconnect,
       setNetwork,
@@ -406,6 +390,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       installed,
       connecting,
       error,
+      availableAdapters,
+      selectedAdapterId,
+      selectAdapter,
       connect,
       disconnect,
       setNetwork,

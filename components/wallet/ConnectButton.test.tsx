@@ -64,6 +64,12 @@ const BASE_WALLET: ReturnType<typeof useWallet> = {
   setNetwork: jest.fn(),
   sign: jest.fn(),
   writeCtx: jest.fn(),
+  availableAdapters: [
+    { id: "freighter", name: "Freighter", installed: true },
+    { id: "xbull", name: "xBull", installed: true },
+  ],
+  selectedAdapterId: "freighter",
+  selectAdapter: jest.fn(),
 };
 
 function setup(overrides: Partial<ReturnType<typeof useWallet>> = {}) {
@@ -107,15 +113,46 @@ describe("ConnectButton", () => {
       ).toBeInTheDocument();
     });
 
-    it("calls connect() when clicked", () => {
+    it("opens the wallet-selection menu when clicked", () => {
       const connect = jest.fn().mockResolvedValue(undefined);
       setup({ installed: true, connect });
       fireEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+      // Selecting an adapter is required before connecting
+      expect(connect).not.toHaveBeenCalled();
+    });
+
+    it("does not show a dropdown menu before clicking", () => {
+      setup({ installed: true });
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+
+    it("lists all available wallet adapters", () => {
+      setup({ installed: true });
+      fireEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+      expect(
+        screen.getByRole("menuitem", { name: /freighter/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: /xbull/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("calls selectAdapter() and connect() when an adapter is chosen", () => {
+      const connect = jest.fn().mockResolvedValue(undefined);
+      const selectAdapter = jest.fn();
+      setup({ installed: true, connect, selectAdapter });
+      fireEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /xbull/i }));
+      expect(selectAdapter).toHaveBeenCalledWith("xbull");
       expect(connect).toHaveBeenCalledTimes(1);
     });
 
-    it("does not show a dropdown menu", () => {
-      setup({ installed: true });
+    it("closes the wallet-selection menu after choosing an adapter", () => {
+      const connect = jest.fn().mockResolvedValue(undefined);
+      setup({ installed: true, connect });
+      fireEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /freighter/i }));
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     });
   });

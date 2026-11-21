@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import type { AssetDetail } from "@/types";
 import { useHolders, type Holder } from "@/hooks/useHolders";
 import { useWallet } from "@/hooks/useWallet";
+import { downloadCsv } from "@/lib/csv";
 import { HolderList } from "./HolderList";
 
 jest.mock("@/hooks/useHolders", () => ({
@@ -12,8 +13,13 @@ jest.mock("@/hooks/useWallet", () => ({
   useWallet: jest.fn(),
 }));
 
+jest.mock("@/lib/csv", () => ({
+  downloadCsv: jest.fn(),
+}));
+
 const mockUseHolders = useHolders as jest.MockedFunction<typeof useHolders>;
 const mockUseWallet = useWallet as jest.MockedFunction<typeof useWallet>;
+const mockDownloadCsv = downloadCsv as jest.MockedFunction<typeof downloadCsv>;
 
 const asset = {
   tokenContract: "CTOKEN",
@@ -72,6 +78,34 @@ describe("HolderList", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /export csv/i })).not.toBeInTheDocument();
+  });
+
+  it("exports the holder list as CSV", () => {
+    setup([
+      { address: "GHIGHHOLDER123456789ABCDEFGHIJKL", balance: 900n },
+      { address: "GLOWWHOLDER123456789ABCDEFGHIJMN", balance: 100n },
+    ]);
+
+    render(<HolderList asset={asset} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /export csv/i }));
+
+    expect(mockDownloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, rows] = mockDownloadCsv.mock.calls[0];
+    expect(filename).toMatch(/holders.*\.csv$/i);
+    expect(rows[0]).toEqual(["Address", "Balance", "Share"]);
+    expect(rows).toHaveLength(3);
+    expect(rows[1]).toEqual([
+      "GHIGHHOLDER123456789ABCDEFGHIJKL",
+      "900",
+      "90%",
+    ]);
+    expect(rows[2]).toEqual([
+      "GLOWWHOLDER123456789ABCDEFGHIJMN",
+      "100",
+      "10%",
+    ]);
   });
 
   it("renders an ErrorState with retry when loading holders fails", () => {

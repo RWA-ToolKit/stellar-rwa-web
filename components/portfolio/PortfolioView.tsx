@@ -187,6 +187,9 @@ export function PortfolioView() {
               Connected as{" "}
               <span className="font-mono text-base-100/60">{truncateAddress(address)}</span>
             </p>
+            <Link href="/portfolio/history" className="btn-secondary py-1.5 text-xs">
+              Transaction history
+            </Link>
             <button
               type="button"
               onClick={() => exportHoldingsCsv(data.holdings)}

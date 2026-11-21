@@ -9,6 +9,7 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import type { AssetDetail, Network } from "@/types";
 
 const ROWS_PER_PAGE = 25;
@@ -83,10 +84,33 @@ export function HolderList({ asset, onCount, refreshKey }: HolderListProps) {
     metadata.totalSupply,
   );
 
+  const handleExportCsv = () => {
+    if (holders.length === 0) return;
+    const csv = toCsv(
+      ["Address", "Balance", "Share (%)"],
+      holders.map((holder, index) => [
+        holder.address,
+        holder.balance,
+        shares[index] ?? "0.00",
+      ]),
+    );
+    downloadCsv(`${metadata.symbol}-holders.csv`, csv);
+  };
+
   // Address / balance / share is genuinely tabular data, so a real table gives
   // assistive tech column headers instead of a bare list of rows.
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={handleExportCsv}
+          disabled={holders.length === 0}
+          className="rounded-lg border border-white/10 px-4 py-2 text-sm font-medium transition-colors hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Export CSV
+        </button>
+      </div>
       <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         <table className="w-full min-w-full sm:w-full text-left text-sm">
           <caption className="sr-only">Token holders with balance and share of supply{needsPagination ? ` (showing ${displayedHolders.length} of ${holders.length})` : ''}</caption>
