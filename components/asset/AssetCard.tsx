@@ -7,6 +7,7 @@ import { assetHref, formatUsdCents, truncateAddress } from "@/lib/format";
 import { getDisplayText } from "@/lib/display";
 import { AssetTypeBadge } from "./AssetTypeBadge";
 import { useWallet } from "@/hooks/useWallet";
+import { useFavorites } from "@/hooks/useFavorites";
 import { prefetchAssetMetadata } from "@/lib/assetCache";
 
 interface AssetCardProps {
@@ -23,6 +24,15 @@ interface AssetCardProps {
 function AssetCardComponent({ asset, holders, supply, headingLevel = 3 }: AssetCardProps) {
   const Heading = `h${headingLevel}` as const;
   const { network } = useWallet();
+  const { isFavorite, toggle } = useFavorites();
+  const favorite = isFavorite(asset.id);
+
+  const handleToggleFavorite = (event: React.MouseEvent<HTMLButtonElement>) => {
+    // Prevent the surrounding card link from navigating.
+    event.preventDefault();
+    event.stopPropagation();
+    toggle(asset.id);
+  };
 
   const prefetchMetadata = () => {
     void prefetchAssetMetadata(network, asset.tokenContract).catch(
@@ -44,9 +54,25 @@ function AssetCardComponent({ asset, holders, supply, headingLevel = 3 }: AssetC
     >
       <div className="flex items-start justify-between gap-3">
         <AssetTypeBadge type={asset.assetType} />
-        {!asset.active && (
-          <span className="chip bg-white/5 text-base-100/55">Inactive</span>
-        )}
+        <div className="flex items-center gap-2">
+          {!asset.active && (
+            <span className="chip bg-white/5 text-base-100/55">Inactive</span>
+          )}
+          <button
+            type="button"
+            onClick={handleToggleFavorite}
+            aria-pressed={favorite}
+            aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+            title={favorite ? "Remove from favorites" : "Add to favorites"}
+            className={`rounded-full p-1 text-lg leading-none transition-colors ${
+              favorite
+                ? "text-gold-300 hover:text-gold-200"
+                : "text-base-100/40 hover:text-base-100/70"
+            }`}
+          >
+            <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
+          </button>
+        </div>
       </div>
 
       <div>

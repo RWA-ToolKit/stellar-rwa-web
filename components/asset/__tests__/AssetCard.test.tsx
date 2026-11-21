@@ -11,6 +11,28 @@ import React from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { AssetEntry } from "@/types";
 
+// In-memory localStorage so the favorites hook can persist across renders.
+const localStorageMock = (() => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: jest.fn((key: string) => store[key] ?? null),
+    setItem: jest.fn((key: string, value: string) => {
+      store[key] = value;
+    }),
+    removeItem: jest.fn((key: string) => {
+      delete store[key];
+    }),
+    clear: jest.fn(() => {
+      store = {};
+    }),
+  };
+})();
+
+Object.defineProperty(window, "localStorage", {
+  value: localStorageMock,
+  writable: true,
+});
+
 // Render Next.js Link as a plain <a> — no router needed.
 jest.mock("next/link", () => {
   const MockLink = ({
@@ -62,7 +84,10 @@ function makeAsset(overrides: Partial<AssetEntry> = {}): AssetEntry {
 // ── tests ──────────────────────────────────────────────────────────────────
 
 describe("AssetCard", () => {
-  afterEach(() => jest.clearAllMocks());
+  afterEach(() => {
+    jest.clearAllMocks();
+    localStorageMock.clear();
+  });
 
   it("renders the asset name", () => {
     render(<AssetCard asset={makeAsset()} />);
@@ -144,5 +169,69 @@ describe("AssetCard", () => {
   it("renders the Commodity type badge for a commodity asset", () => {
     render(<AssetCard asset={makeAsset({ assetType: "commodity" })} />);
     expect(screen.getByText("Commodity")).toBeInTheDocument();
+  });
+
+  describe("favorite toggle", () => {
+    it("renders a favorite button with an accessible label", () => {
+      render(<AssetCard asset={makeAsset()} />);
+      expect(
+        screen.getByRole("button", { name: /add .* to favorites/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("reflects isFavorite via aria-pressed", () => {
+      const { rerender } = render(
+        <AssetCard asset={makeAsset()} isFavorite={false} />,
+      );
+      expect(
+        screen.getByRole("button", { name: /favorites/i }),
+      ).toHaveAttribute("aria-pressed", "false");
+
+      rerender(<AssetCard asset={makeAsset()} isFavorite={true} />);
+      expect(
+        screen.getByRole("button", { name: /favorites/i }),
+      ).toHaveAttribute("aria-pressed", "true");
+    });
+
+    it("calls the toggle handler on click without triggering navigation", () => {
+      const onToggleFavorite = jest.fn();
+      render(
+        <AssetCard
+          asset={makeAsset({ id: 9n })}
+          isFavorite={false}
+          onToggleFavorite={onToggleFavorite}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /favorites/i }));
+
+      expect(onToggleFavorite).toHaveBeenCalledTimes(1);
+      expect(onToggleFavorite).toHaveBeenCalledWith(9n);
+      // The click must not bubble up to the wrapping link.
+      expect(window.location.pathname).not.toBe("/asset/9");
+    });
+
+    it("persists favorites to localStorage through the useFavorites hook", () => {
+      const onToggleFavorite = jest.fn();
+      render(
+        <AssetCard
+          asset={makeAsset({ id: 3n })}
+          isFavorite={false}
+          onToggleFavorite={onToggleFavorite}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /favorites/i }));
+
+      expect(onToggleFavorite).toHaveBeenCalledWith(3n);
+      expect(localStorageMock.setItem).toHaveBeenCalled();
+    });
+
+    it("does not render the favorite button when no toggle handler is provided", () => {
+      render(<AssetCard asset={makeAsset()} />);
+      expect(
+        screen.queryByRole("button", { name: /favorites/i }),
+      ).not.toBeInTheDocument();
+    });
   });
 });

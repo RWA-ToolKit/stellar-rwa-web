@@ -9,7 +9,7 @@
  */
 
 import React from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { AssetDetail } from "@/types";
 import { truncateAddress } from "@/lib/format";
 
@@ -103,5 +103,27 @@ describe("AssetHeader", () => {
     render(<AssetHeader asset={asset} network="testnet" />);
 
     expect(screen.getByText("Unnamed asset")).toBeInTheDocument();
+  });
+
+  it("renders a Share button that copies the canonical asset URL", async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+
+    const asset = makeAsset();
+    render(<AssetHeader asset={asset} network="testnet" />);
+
+    const shareButton = screen.getByRole("button", { name: /share/i });
+    expect(shareButton).toBeInTheDocument();
+
+    fireEvent.click(shareButton);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(
+        `${window.location.origin}/asset/${asset.id}`,
+      );
+    });
   });
 });
