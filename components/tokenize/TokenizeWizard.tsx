@@ -30,6 +30,70 @@ export function TokenizeWizard() {
   const [formData, setFormData] = useState<Partial<Pick<TokenizeFormData, "name" | "assetType" | "valuation">>>({});
   const [done, setDone] = useState<DoneState | null>(null);
 
+  /**
+   * Render exactly one step. Inactive steps are unmounted rather than hidden
+   * with CSS, so their effects and subscriptions stop when the user moves on.
+   * All progress lives in the wizard state above and is passed down as props,
+   * so unmounting a step never loses form data.
+   */
+  function renderActiveStep() {
+    switch (step) {
+      case 1:
+        return (
+          <Step1TokenContract
+            onValidated={(result) => {
+              setValidated(result);
+              setStep(2);
+            }}
+          />
+        );
+      case 2:
+        if (!validated) return null;
+        return (
+          <Step2AssetDetails
+            validated={validated}
+            initial={formData}
+            onBack={() => setStep(1)}
+            onNext={(data) => {
+              setFormData(data);
+              setStep(3);
+            }}
+          />
+        );
+      case 3:
+        if (!validated || !formData.name || !formData.assetType || formData.valuation === undefined) return null;
+        return (
+          <Step3Confirm
+            validated={validated}
+            formData={{
+              name: formData.name,
+              assetType: formData.assetType,
+              valuation: formData.valuation,
+            }}
+            onBack={() => setStep(2)}
+            onRegistered={(assetId, txHash) => {
+              setDone({ assetId, txHash });
+              setStep(4);
+            }}
+          />
+        );
+      case 4:
+        if (!validated || !done || !formData.name || !formData.assetType || formData.valuation === undefined) return null;
+        return (
+          <Step4Done
+            validated={validated}
+            name={formData.name}
+            assetType={formData.assetType}
+            valuation={formData.valuation}
+            assetId={done.assetId}
+            txHash={done.txHash}
+          />
+        );
+      default:
+        return null;
+    }
+  }
+
   // Wallet gate — must connect before starting
   if (!address) {
     return (
@@ -55,54 +119,7 @@ export function TokenizeWizard() {
   return (
     <div className="mx-auto max-w-2xl">
       <StepIndicator steps={STEPS} current={step} />
-
-      {step === 1 && (
-        <Step1TokenContract
-          onValidated={(result) => {
-            setValidated(result);
-            setStep(2);
-          }}
-        />
-      )}
-
-      {step === 2 && validated && (
-        <Step2AssetDetails
-          validated={validated}
-          initial={formData}
-          onBack={() => setStep(1)}
-          onNext={(data) => {
-            setFormData(data);
-            setStep(3);
-          }}
-        />
-      )}
-
-      {step === 3 && validated && formData.name && formData.assetType && formData.valuation !== undefined && (
-        <Step3Confirm
-          validated={validated}
-          formData={{
-            name: formData.name,
-            assetType: formData.assetType,
-            valuation: formData.valuation,
-          }}
-          onBack={() => setStep(2)}
-          onRegistered={(assetId, txHash) => {
-            setDone({ assetId, txHash });
-            setStep(4);
-          }}
-        />
-      )}
-
-      {step === 4 && validated && done && formData.name && formData.assetType && formData.valuation !== undefined && (
-        <Step4Done
-          validated={validated}
-          name={formData.name}
-          assetType={formData.assetType}
-          valuation={formData.valuation}
-          assetId={done.assetId}
-          txHash={done.txHash}
-        />
-      )}
+      {renderActiveStep()}
     </div>
   );
 }
