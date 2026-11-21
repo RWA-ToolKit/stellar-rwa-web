@@ -7,6 +7,10 @@
  * promise is removed on the next timer turn, and no response is kept for
  * later reads. If a request is still pending after 5 seconds, a new call
  * starts another request; the original request is not cancelled.
+ *
+ * The map is capped at MAX_CACHE_ENTRIES. When full, the least recently used
+ * key is evicted, so browsing many distinct assets cannot grow it without
+ * bound. A cache hit refreshes the key's recency.
  */
 
 type CacheKey = string;
@@ -17,6 +21,7 @@ type CacheEntry<T> = {
 
 const inFlightRequests = new Map<CacheKey, CacheEntry<unknown>>();
 const CACHE_DURATION_MS = 5000;
+const MAX_CACHE_ENTRIES = 100;
 
 /**
  * Execute a factory function once, sharing its promise with calls that use
@@ -33,6 +38,9 @@ export function dedupeRequest<T>(
     // The map stores Promise<unknown> since it's shared across callers with
     // different T; callers are responsible for using a key whose cached
     // value actually matches the T they ask for.
+    // Refresh recency (Map preserves insertion order) for LRU eviction.
+    inFlightRequests.delete(key);
+    inFlightRequests.set(key, cached);
     return cached.promise as Promise<T>;
   }
 
@@ -44,6 +52,14 @@ export function dedupeRequest<T>(
       }
     }, 0);
   });
+
+  // Replace any expired entry for this key before enforcing the cap, so an
+  // expired duplicate does not cause an unrelated key to be evicted.
+  if (inFlightRequests.has(key)) inFlightRequests.delete(key);
+  if (inFlightRequests.size >= MAX_CACHE_ENTRIES) {
+    const leastRecentlyUsed = inFlightRequests.keys().next().value;
+    if (leastRecentlyUsed !== undefined) inFlightRequests.delete(leastRecentlyUsed);
+  }
 
   inFlightRequests.set(key, { promise, timestamp: Date.now() });
   return promise;

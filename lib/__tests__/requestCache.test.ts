@@ -179,3 +179,48 @@ describe("clearRequestCache", () => {
     await expect(p1).resolves.toBe("after-clear");
   });
 });
+
+// ─── max-size LRU eviction ─────────────────────────────────────────────────────
+
+describe("requestCache max size", () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+    clearRequestCache();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    clearRequestCache();
+  });
+
+  it("evicts the least recently used entry when the cap is reached", () => {
+    const factory = jest.fn().mockReturnValue(new Promise(() => {}));
+
+    // Fill the cache to its 100-entry cap.
+    for (let i = 0; i < 100; i++) dedupeRequest(`key-${i}`, factory);
+    expect(factory).toHaveBeenCalledTimes(100);
+
+    // Touch key-0, making key-1 the least recently used.
+    dedupeRequest("key-0", factory);
+    expect(factory).toHaveBeenCalledTimes(100); // still served from cache
+
+    // A new key evicts key-1, not the recently used key-0.
+    dedupeRequest("key-100", factory);
+    expect(factory).toHaveBeenCalledTimes(101);
+    dedupeRequest("key-1", factory);
+    expect(factory).toHaveBeenCalledTimes(102); // evicted → new request
+    dedupeRequest("key-0", factory);
+    expect(factory).toHaveBeenCalledTimes(102); // retained → no new request
+  });
+
+  it("never grows beyond the cap after many distinct keys", () => {
+    const factory = jest.fn().mockReturnValue(new Promise(() => {}));
+
+    for (let i = 0; i < 250; i++) dedupeRequest(`bulk-${i}`, factory);
+    expect(factory).toHaveBeenCalledTimes(250);
+
+    // Early keys were evicted, so asking for one starts a fresh request.
+    dedupeRequest("bulk-0", factory);
+    expect(factory).toHaveBeenCalledTimes(251);
+  });
+});
