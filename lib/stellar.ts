@@ -303,7 +303,12 @@ export async function invokeContract(
     withFailover(network, (rpcServer) => rpcServer.simulateTransaction(built)),
   );
   if (rpc.Api.isSimulationError(sim)) {
-    throw new ContractError(parseContractError(sim.error), sim.error, isAuthError(sim.error));
+    throw new ContractError(
+      parseContractError(sim.error),
+      sim.error,
+      isAuthError(sim.error),
+      "simulate",
+    );
   }
   const prepared = rpc.assembleTransaction(built, sim).build();
 
@@ -320,6 +325,8 @@ export async function invokeContract(
     throw new ContractError(
       "The network rejected the transaction.",
       JSON.stringify(sent.errorResult ?? sent),
+      false,
+      "submit",
     );
   }
 
@@ -333,6 +340,8 @@ export async function invokeContract(
     throw new ContractError(
       "The network is congested and could not accept the transaction right now. Please try again in a moment.",
       `sendTransaction returned TRY_AGAIN_LATER for hash ${sent.hash}`,
+      false,
+      "submit",
     );
   }
 
@@ -346,6 +355,8 @@ export async function invokeContract(
     throw new ContractError(
       `Unexpected submission status: ${sent.status}.`,
       JSON.stringify(sent),
+      false,
+      "submit",
     );
   }
 
@@ -355,6 +366,8 @@ export async function invokeContract(
     throw new ContractError(
       "The transaction failed on-chain.",
       JSON.stringify(final),
+      false,
+      "submit",
     );
   }
 
@@ -410,15 +423,29 @@ function sleep(ms: number): Promise<void> {
  * render `message` and keep `detail` behind a collapsed "details" affordance
  * or the console, never inline by default.
  */
+/**
+ * Which phase of a transaction a failure occurred in. `"simulate"` means the
+ * transaction was never signed or submitted (safe to retry); `"submit"` means
+ * it may have reached the network (check the explorer before retrying).
+ */
+export type TxPhase = "simulate" | "submit";
+
 export class ContractError extends Error {
   detail?: string;
   isAuth: boolean;
+  phase?: TxPhase;
 
-  constructor(message: string, detail?: string, isAuth: boolean = false) {
+  constructor(
+    message: string,
+    detail?: string,
+    isAuth: boolean = false,
+    phase?: TxPhase,
+  ) {
     super(message);
     this.name = "ContractError";
     if (detail !== undefined) this.detail = detail;
     this.isAuth = isAuth;
+    if (phase !== undefined) this.phase = phase;
   }
 }
 
@@ -452,6 +479,8 @@ export class TransactionTimeoutError extends ContractError {
     super(
       "Transaction confirmation timed out. The transaction may still land — check the explorer.",
       hash,
+      false,
+      "submit",
     );
     this.name = "TransactionTimeoutError";
     this.hash = hash;

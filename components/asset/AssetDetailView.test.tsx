@@ -226,4 +226,30 @@ describe("AssetDetailView", () => {
     fireEvent.click(screen.getByRole("button", { name: /try again/i }));
     expect(refetch).toHaveBeenCalledTimes(1);
   });
+
+  // #823: issuer-supplied descriptions must stay inert text on the detail page.
+  it("renders the issuer-supplied description as inert text", () => {
+    setup();
+    const payload =
+      '<script>window.__assetDescXss = true</script><img src=x onerror="window.__assetDescXss = true">A property';
+    mockUseAsset.mockReturnValue({
+      data: {
+        ...asset,
+        metadata: { ...asset.metadata, assetDescription: payload },
+      },
+      loading: false,
+      error: null,
+      notFound: false,
+      updatedAt: Date.now(),
+      refetch: jest.fn(),
+    });
+
+    const { container } = render(<AssetDetailView id={1n} />);
+
+    expect(container.querySelector("script, img")).toBeNull();
+    expect(
+      (window as Window & { __assetDescXss?: boolean }).__assetDescXss,
+    ).toBeUndefined();
+    expect(screen.getByText(/window\.__assetDescXss = true/)).toBeInTheDocument();
+  });
 });

@@ -6,6 +6,9 @@ import { formatStroopsToXLM } from "@/lib/format";
 import type { TxPhase, TxErrorType } from "@/types";
 import { Spinner } from "./Spinner";
 
+/** Which phase of the transaction lifecycle produced the error. */
+export type TxErrorPhase = "simulate" | "submit";
+
 const PHASE_LABEL: Record<Exclude<TxPhase, "idle">, string> = {
   building: "Preparing transaction…",
   signing: "Awaiting signature in Freighter…",
@@ -21,6 +24,12 @@ interface TxProgressProps {
   hash: string | null;
   error: string | null;
   errorType?: TxErrorType;
+  /**
+   * Which phase failed. "simulate" means the transaction was never signed or
+   * submitted (no fee spent); "submit" means it may have reached the network,
+   * so the user should check the explorer before retrying.
+   */
+  errorPhase?: TxErrorPhase;
   /** Estimated network fee in stroops from simulation. */
   estimatedFee?: bigint | null;
   /** Called when the user dismisses a success/error result. */
@@ -53,6 +62,7 @@ export function TxProgress({
   hash,
   error,
   errorType = "generic",
+  errorPhase,
   estimatedFee,
   onDismiss,
   onRetry,
@@ -101,6 +111,20 @@ export function TxProgress({
       ? error || "You are not authorized to perform this action."
       : error ?? "The transaction did not complete.";
 
+    // Issue #831: Make it obvious whether the transaction was ever submitted.
+    const phaseHeading =
+      errorPhase === "simulate"
+        ? "Simulation failed — transaction was not submitted"
+        : errorPhase === "submit"
+          ? "Submission failed — transaction may have been sent"
+          : null;
+    const phaseNote =
+      errorPhase === "simulate"
+        ? "Nothing was signed and no network fee was spent. You can safely adjust and try again."
+        : errorPhase === "submit"
+          ? "The transaction may have reached the network. Check the explorer before retrying to avoid paying fees twice."
+          : null;
+
     return (
       <div
         role="alert"
@@ -117,7 +141,27 @@ export function TxProgress({
             <path d="M12 8v4M12 16h.01" strokeLinecap="round" />
           </svg>
           <div>
+            {phaseHeading && (
+              <p className="font-medium" data-testid="tx-error-phase-heading">
+                {phaseHeading}
+              </p>
+            )}
             <span>{displayError}</span>
+            {phaseNote && (
+              <p className="mt-1 text-xs opacity-80" data-testid="tx-error-phase-note">
+                {phaseNote}
+              </p>
+            )}
+            {errorPhase === "submit" && hash && (
+              <a
+                href={explorerTxUrl(network, hash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-block text-xs underline decoration-current/40 underline-offset-2 hover:decoration-current"
+              >
+                Check transaction on Stellar Expert ↗
+              </a>
+            )}
             {retryable && onRetry && (
               <button
                 onClick={onRetry}

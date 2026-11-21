@@ -5,6 +5,7 @@
   ],
   "ignorePatterns": [".next/", "node_modules/", "next-env.d.ts", "**/__tests__/**", "e2e/**"],
   "rules": {
-    "react/jsx-no-target-blank": "error"
+    "react/jsx-no-target-blank": "error",
+    "react-hooks/exhaustive-deps": "error"
   }
 }

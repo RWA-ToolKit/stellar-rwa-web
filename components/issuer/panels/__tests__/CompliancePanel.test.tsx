@@ -319,6 +319,51 @@ describe("CompliancePanel — AddToAllowlistCard expiry-ledger validation (#322)
     expect(screen.queryByText(/already in the past/i)).not.toBeInTheDocument();
   });
 
+  it("shows accurate per-status counts in the compliance status widget", async () => {
+    mockUseAllowlist.mockReturnValue({
+      data: [
+        { address: "GAPPROVED1", status: "Approved", jurisdiction: "US" },
+        { address: "GAPPROVED2", status: "Approved", jurisdiction: "DE" },
+        { address: "GAPPROVED3", status: "Approved", jurisdiction: "KE" },
+        { address: "GPENDING1", status: "Pending", jurisdiction: "US" },
+        { address: "GPENDING2", status: "Pending", jurisdiction: "DE" },
+        { address: "GREVOKED1", status: "Revoked", jurisdiction: "US" },
+      ],
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    render(<CompliancePanel asset={makeAsset()} />);
+
+    const widget = screen.getByTestId("compliance-status-widget");
+    expect(widget).toBeInTheDocument();
+    expect(widget).toHaveTextContent(/approved/i);
+    expect(widget).toHaveTextContent(/pending/i);
+    expect(widget).toHaveTextContent(/revoked/i);
+
+    expect(screen.getByTestId("compliance-status-count-approved")).toHaveTextContent("3");
+    expect(screen.getByTestId("compliance-status-count-pending")).toHaveTextContent("2");
+    expect(screen.getByTestId("compliance-status-count-revoked")).toHaveTextContent("1");
+  });
+
+  it("shows zero counts in the compliance status widget for an empty allowlist", async () => {
+    mockUseAllowlist.mockReturnValue({
+      data: [],
+      loading: false,
+      error: null,
+      refetch: jest.fn(),
+    });
+
+    render(<CompliancePanel asset={makeAsset()} />);
+
+    const widget = screen.getByTestId("compliance-status-widget");
+    expect(widget).toBeInTheDocument();
+    expect(screen.getByTestId("compliance-status-count-approved")).toHaveTextContent("0");
+    expect(screen.getByTestId("compliance-status-count-pending")).toHaveTextContent("0");
+    expect(screen.getByTestId("compliance-status-count-revoked")).toHaveTextContent("0");
+  });
+
   it("confirms removal with the full address and immediate transfer impact", async () => {
     const address = "G1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890ABCDEFGH";
     mockUseAllowlist.mockReturnValue({
