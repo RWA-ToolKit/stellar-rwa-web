@@ -9,6 +9,7 @@ import {
   truncateAddress,
   ledgerToApproxDate as approxDate,
 } from "@/lib/format";
+import { downloadCsv, toCsv } from "@/lib/csv";
 import { ClaimButton } from "./ClaimButton";
 
 interface DistributionCardProps {
@@ -30,6 +31,40 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
   const inactive = cancelled || reclaimed;
   const when =
     currentLedger !== null ? approxDate(d.createdAt, currentLedger) : null;
+
+  const status = cancelled
+    ? "Cancelled"
+    : reclaimed
+      ? "Reclaimed"
+      : d.completed
+        ? "Complete"
+        : "Active";
+
+  function handleExportCsv() {
+    const csv = toCsv(
+      [
+        "Distribution ID",
+        "Total Amount",
+        "Distributed",
+        "Claimed Percentage",
+        "Status",
+        "Claim Deadline",
+        "Payment Token",
+      ],
+      [
+        [
+          d.id.toString(),
+          formatTokenAmount(d.totalAmount, d.paymentTokenDecimals),
+          formatTokenAmount(displayedDistributed, d.paymentTokenDecimals),
+          `${pct.toFixed(1)}%`,
+          status,
+          deadline > 0 ? deadline.toString() : "",
+          d.paymentToken,
+        ],
+      ],
+    );
+    downloadCsv(`distribution-${d.id.toString()}.csv`, csv);
+  }
 
   return (
     <div className={`card p-5${inactive ? " opacity-75" : ""}`}>
@@ -83,6 +118,13 @@ export function DistributionCard({ distribution, currentLedger, onClaimed }: Dis
           <p className="text-lg font-bold text-gold-300">
             {formatTokenAmount(d.totalAmount, d.paymentTokenDecimals)}
           </p>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            className="mt-2 rounded-md border border-white/10 px-2.5 py-1 text-xs text-base-100/70 transition-colors hover:border-white/20 hover:text-base-100"
+          >
+            Export CSV
+          </button>
         </div>
       </div>
 

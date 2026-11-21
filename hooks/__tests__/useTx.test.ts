@@ -6,6 +6,7 @@ import type { WriteCtx } from "@/lib/contracts";
 import type { TxPhase } from "@/types";
 import { LockedWalletError, UserRejectedError } from "@/lib/freighter";
 import { TransactionTimeoutError } from "@/lib/stellar";
+import { ContractError } from "@/lib/contractErrors";
 
 // ─── mocks ────────────────────────────────────────────────────────────────────
 
@@ -178,6 +179,51 @@ describe("useTx", () => {
       expect.stringContaining("locked"),
       "locked-wallet",
     );
+  });
+
+  it("distinguishes simulate-phase failures from submit-phase failures", async () => {
+    const simulateHook = renderHook(() => useTx());
+
+    await act(async () => {
+      const res = await simulateHook.result.current.run(async () => {
+        throw new ContractError("simulate", "HostError: contract trapped");
+      });
+      expect(res).toBeNull();
+    });
+
+    const simulateError = simulateHook.result.current.error;
+    const simulatePhase = simulateHook.result.current.errorPhase;
+    const simulateToast = mockAddToast.mock.calls[0][0];
+
+    expect(simulatePhase).toBe("simulate");
+    expect(simulateError).toMatch(/simulat/i);
+    expect(simulateError).toContain("HostError: contract trapped");
+    expect(simulateToast.description).toBe(simulateError);
+
+    mockAddToast.mockClear();
+
+    const submitHook = renderHook(() => useTx());
+
+    await act(async () => {
+      const res = await submitHook.result.current.run(async () => {
+        throw new ContractError("submit", "HostError: contract trapped");
+      });
+      expect(res).toBeNull();
+    });
+
+    const submitError = submitHook.result.current.error;
+    const submitPhase = submitHook.result.current.errorPhase;
+    const submitToast = mockAddToast.mock.calls[0][0];
+
+    expect(submitPhase).toBe("submit");
+    expect(submitError).toMatch(/submit/i);
+    expect(submitError).toContain("HostError: contract trapped");
+    expect(submitToast.description).toBe(submitError);
+
+    // The two phases must render visibly distinct messages.
+    expect(simulateError).not.toBe(submitError);
+    expect(simulatePhase).not.toBe(submitPhase);
+    expect(simulateToast.description).not.toBe(submitToast.description);
   });
 
   it("detects transaction timeout and sets phase to 'timeout' with hash preserved", async () => {

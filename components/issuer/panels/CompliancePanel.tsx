@@ -5,7 +5,7 @@ import { StrKey } from "@stellar/stellar-sdk";
 import type { AssetDetail } from "@/types";
 import { compliance } from "@/lib/contracts";
 import { useTx } from "@/hooks/useTx";
-import { useAllowlist } from "@/hooks/useCompliance";
+import { useAllowlist, countAllowlistByStatus } from "@/hooks/useCompliance";
 import { useWallet } from "@/hooks/useWallet";
 import { getLatestLedger } from "@/lib/stellar";
 import { ActionCard } from "@/components/issuer/ActionCard";
@@ -33,12 +33,14 @@ interface CompliancePanelProps {
 /** KYC allowlist management: add/suspend/remove addresses, block/unblock jurisdictions. */
 export function CompliancePanel({ asset, onChanged, isAdmin = true }: CompliancePanelProps) {
   const complianceId = asset.metadata.complianceContract;
+  const { data, loading, error } = useAllowlist(complianceId);
 
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-base-100/50">
         <strong>Required role:</strong> compliance contract <code className="font-mono text-base-100/60">admin</code>
       </div>
+      <ComplianceStatusSummary records={data} loading={loading} error={error} />
       <AddToAllowlistCard
         complianceId={complianceId}
         {...(onChanged !== undefined ? { onChanged } : {})}
@@ -54,6 +56,57 @@ export function CompliancePanel({ asset, onChanged, isAdmin = true }: Compliance
         {...(onChanged !== undefined ? { onChanged } : {})}
         isAdmin={isAdmin}
       />
+    </div>
+  );
+}
+
+// ---- Status summary ----
+
+function ComplianceStatusSummary({
+  records,
+  loading,
+  error,
+}: {
+  records: { status: string }[] | null | undefined;
+  loading: boolean;
+  error: string | null | undefined;
+}) {
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2 text-xs text-base-100/55">
+        <Spinner size={12} /> Loading compliance summary…
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+        Couldn&apos;t load compliance summary.
+      </div>
+    );
+  }
+
+  const counts = countAllowlistByStatus(records ?? []);
+
+  return (
+    <div
+      className="grid grid-cols-3 gap-2"
+      role="group"
+      aria-label="Allowlist status summary"
+    >
+      <StatusStat label="Pending" value={counts.pending} tone="text-amber-300" />
+      <StatusStat label="Approved" value={counts.approved} tone="text-brand-300" />
+      <StatusStat label="Revoked" value={counts.revoked} tone="text-red-400" />
+    </div>
+  );
+}
+
+function StatusStat({ label, value, tone }: { label: string; value: number; tone: string }) {
+  return (
+    <div className="rounded-lg border border-white/5 bg-white/[0.02] px-3 py-2">
+      <div className={`text-lg font-semibold leading-tight ${tone}`}>{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-base-100/50">{label}</div>
     </div>
   );
 }

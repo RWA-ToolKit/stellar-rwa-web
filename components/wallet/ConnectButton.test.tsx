@@ -15,8 +15,8 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { ConnectButton } from "./ConnectButton";
+import { act, render, screen, fireEvent } from "@testing-library/react";
+import { ConnectButton, FAILED_CONNECT_COOLDOWN_MS } from "./ConnectButton";
 
 // ── mock useWallet ────────────────────────────────────────────────────────
 
@@ -64,6 +64,12 @@ const BASE_WALLET: ReturnType<typeof useWallet> = {
   setNetwork: jest.fn(),
   sign: jest.fn(),
   writeCtx: jest.fn(),
+  availableAdapters: [
+    { id: "freighter", name: "Freighter", installed: true },
+    { id: "xbull", name: "xBull", installed: true },
+  ],
+  selectedAdapterId: "freighter",
+  selectAdapter: jest.fn(),
 };
 
 function setup(overrides: Partial<ReturnType<typeof useWallet>> = {}) {
@@ -107,15 +113,46 @@ describe("ConnectButton", () => {
       ).toBeInTheDocument();
     });
 
-    it("calls connect() when clicked", () => {
+    it("opens the wallet-selection menu when clicked", () => {
       const connect = jest.fn().mockResolvedValue(undefined);
       setup({ installed: true, connect });
       fireEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+      // Selecting an adapter is required before connecting
+      expect(connect).not.toHaveBeenCalled();
+    });
+
+    it("does not show a dropdown menu before clicking", () => {
+      setup({ installed: true });
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+
+    it("lists all available wallet adapters", () => {
+      setup({ installed: true });
+      fireEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+      expect(
+        screen.getByRole("menuitem", { name: /freighter/i }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("menuitem", { name: /xbull/i }),
+      ).toBeInTheDocument();
+    });
+
+    it("calls selectAdapter() and connect() when an adapter is chosen", () => {
+      const connect = jest.fn().mockResolvedValue(undefined);
+      const selectAdapter = jest.fn();
+      setup({ installed: true, connect, selectAdapter });
+      fireEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /xbull/i }));
+      expect(selectAdapter).toHaveBeenCalledWith("xbull");
       expect(connect).toHaveBeenCalledTimes(1);
     });
 
-    it("does not show a dropdown menu", () => {
-      setup({ installed: true });
+    it("closes the wallet-selection menu after choosing an adapter", () => {
+      const connect = jest.fn().mockResolvedValue(undefined);
+      setup({ installed: true, connect });
+      fireEvent.click(screen.getByRole("button", { name: /connect wallet/i }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /freighter/i }));
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     });
   });
@@ -218,6 +255,54 @@ describe("ConnectButton", () => {
       expect(screen.getByRole("menu")).toBeInTheDocument();
       fireEvent.click(screen.getByRole("button", { name: /GABC…CDEF/i }));
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    });
+  });
+
+  // ── failed-connect backoff (#824) ────────────────────────────────────
+  describe("failed connection retry backoff", () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it("blocks repeated attempts after a failure until the cooldown expires", async () => {
+      const connect = jest.fn().mockRejectedValue(new Error("Freighter rejected"));
+      const { rerender } = setup({ installed: true, connect });
+      const connectButton = () =>
+        screen.getByRole("button", { name: /connect wallet/i });
+
+      await act(async () => {
+        fireEvent.click(connectButton());
+      });
+      expect(connect).toHaveBeenCalledTimes(1);
+
+      // useWallet surfaces the failure as an error, showing the "Try again" link.
+      mockUseWallet.mockReturnValue({
+        ...BASE_WALLET,
+        connect,
+        error: "Freighter rejected",
+      });
+      rerender(<ConnectButton />);
+
+      expect(connectButton()).toBeDisabled();
+      const retry = screen.getByRole("button", { name: /try again/i });
+      expect(retry).toBeDisabled();
+
+      fireEvent.click(retry);
+      fireEvent.click(retry);
+      fireEvent.click(connectButton());
+      expect(connect).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        jest.advanceTimersByTime(FAILED_CONNECT_COOLDOWN_MS - 1);
+      });
+      fireEvent.click(retry);
+      expect(connect).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        jest.advanceTimersByTime(1);
+      });
+      expect(retry).not.toBeDisabled();
+      fireEvent.click(retry);
+      expect(connect).toHaveBeenCalledTimes(2);
     });
   });
 

@@ -41,6 +41,41 @@ export const CONTRACT_ERROR_CODES: Record<number, string> = {
 const AUTH_ERROR_CODE = 3;
 
 /**
+ * The phase of a transaction lifecycle in which a failure occurred.
+ *
+ * - `simulate`: the transaction was only simulated; nothing was signed or
+ *   submitted, so no fees were spent and retrying is safe.
+ * - `submit`: the transaction was signed and sent to the network; it may have
+ *   been included in a ledger, so retrying could double-spend fees.
+ */
+export type TxFailurePhase = "simulate" | "submit";
+
+/** User-facing copy for a simulate-phase failure (nothing was submitted). */
+export const SIMULATE_PHASE_MESSAGE =
+  "Simulation failed — the transaction was not submitted or signed.";
+
+/** User-facing copy for a submit-phase failure (may have been submitted). */
+export const SUBMIT_PHASE_MESSAGE =
+  "Submission failed — the transaction may have been submitted; check the explorer before retrying.";
+
+/**
+ * Build a user-facing message that makes clear which transaction phase failed.
+ *
+ * The phase label is always prefixed so simulate-phase and submit-phase
+ * failures render visibly distinct copy, even when the underlying error text
+ * is identical. The parsed contract error (if any) is appended as detail.
+ *
+ * @param phase The phase in which the failure occurred
+ * @param raw The raw error string from the SDK / Soroban RPC
+ * @returns A phase-labelled, user-friendly error message
+ */
+export function describeTxFailure(phase: TxFailurePhase, raw: string): string {
+  const label = phase === "simulate" ? SIMULATE_PHASE_MESSAGE : SUBMIT_PHASE_MESSAGE;
+  const detail = parseContractError(raw);
+  return `${label} ${detail}`;
+}
+
+/**
  * Whether a raw Soroban error string is an authorisation failure, so callers
  * can present it differently from other contract errors.
  *

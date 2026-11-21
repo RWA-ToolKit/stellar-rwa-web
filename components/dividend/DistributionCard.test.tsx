@@ -66,6 +66,15 @@ jest.mock("@/lib/format", () => {
 });
 
 import { DistributionCard } from "./DistributionCard";
+import { downloadCsv } from "@/lib/csv";
+
+// ── mock CSV download helper ───────────────────────────────────────────────
+
+jest.mock("@/lib/csv", () => ({
+  downloadCsv: jest.fn(),
+}));
+
+const mockDownloadCsv = downloadCsv as jest.MockedFunction<typeof downloadCsv>;
 
 // ── factory ────────────────────────────────────────────────────────────────
 
@@ -321,5 +330,70 @@ describe("DistributionCard", () => {
       />,
     );
     expect(screen.getByText(/2 days ago/i)).toBeInTheDocument();
+  });
+
+  // ── CSV export ───────────────────────────────────────────────────────────
+  it("renders an Export CSV button", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution()}
+        currentLedger={null}
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /export csv/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("calls the CSV download helper with the expected distribution fields on click", () => {
+    render(
+      <DistributionCard
+        distribution={makeDistribution({
+          id: 42n,
+          assetToken: "CASSET1234",
+          paymentToken: "CPAYMENT5678",
+          totalAmount: 1000_0000000n,
+          distributed: 250_0000000n,
+          paymentTokenDecimals: 7,
+          createdAt: 50000,
+          completed: true,
+          deadline: 60000,
+        })}
+        currentLedger={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /export csv/i }));
+
+    expect(mockDownloadCsv).toHaveBeenCalledTimes(1);
+    const [filename, rows] = mockDownloadCsv.mock.calls[0];
+    expect(filename).toMatch(/distribution.*42.*\.csv/i);
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+
+    const header = rows[0];
+    expect(header).toEqual(
+      expect.arrayContaining([
+        "Distribution ID",
+        "Asset Token",
+        "Payment Token",
+        "Total Amount",
+        "Distributed",
+        "Claimed %",
+        "Status",
+        "Created At Ledger",
+        "Claim Deadline",
+      ]),
+    );
+
+    const dataRow = rows[1];
+    expect(dataRow[header.indexOf("Distribution ID")]).toBe("42");
+    expect(dataRow[header.indexOf("Asset Token")]).toBe("CASSET1234");
+    expect(dataRow[header.indexOf("Payment Token")]).toBe("CPAYMENT5678");
+    expect(dataRow[header.indexOf("Total Amount")]).toBe("1000");
+    expect(dataRow[header.indexOf("Distributed")]).toBe("250");
+    expect(dataRow[header.indexOf("Claimed %")]).toBe("25.0%");
+    expect(dataRow[header.indexOf("Status")]).toBe("Complete");
+    expect(dataRow[header.indexOf("Created At Ledger")]).toBe("50000");
+    expect(dataRow[header.indexOf("Claim Deadline")]).toBe("60000");
   });
 });
