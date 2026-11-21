@@ -34,6 +34,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # Fails when a NEXT_PUBLIC_* variable is read in app/, components/,
+      # hooks/ or lib/ but is missing from .env.example (see issue #838).
+      - name: Check .env.example is in sync
+        run: npm run check:env
+
       - name: Build
         run: npm run build
         env:
